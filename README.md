@@ -27,11 +27,11 @@ Teaching 40 facts about a fictional person to the lambda 8B ternary MoE. Recall 
 
 | method | held-out recall | general-text damage | patch | inference overhead |
 |---|---|---|---|---|
-| **FSA ternary, Bop writer (τ 0.7) + local output penalty** | **100%** | **+0.0015 ± 0.0017** | **740k slots (0.9–2.5 MB)** | **none by construction** (serving benchmark in progress) |
-| FSA ternary, Bop writer (τ 0.7), two runs | 100% / 100% | +0.027 ± 0.004 / +0.024 ± 0.004 | 812k / 670k slots (0.8–2.7 MB) | none by construction |
+| **FSA ternary, Bop writer (τ 0.7) + local output penalty** | **100%** | **+0.0015 ± 0.0017** | **740k slots (0.9–2.5 MB)** | **none, measured** (see serving below) |
+| FSA ternary, Bop writer (τ 0.7), two runs | 100% / 100% | +0.027 ± 0.004 / +0.024 ± 0.004 | 812k / 670k slots (0.8–2.7 MB) | none (same kernel) |
 | FSA fp4 slots + local output penalty | 96.3% | +0.005 ± 0.002 | 21M fp4 slots (18–80 MB) | needs fp4 slot support |
-| FSA ternary, learn-then-prune (AdamW, weight decay 0.3) | 91% | +0.025 ± 0.003 | 542k slots (0.6–1.8 MB) | none by construction |
-| FSA ternary, learn-then-prune (AdamW, weight decay 0.5) | 88.7% | +0.013 ± 0.003 | 523k slots (0.6–1.8 MB) | none by construction |
+| FSA ternary, learn-then-prune (AdamW, weight decay 0.3) | 91% | +0.025 ± 0.003 | 542k slots (0.6–1.8 MB) | none (same kernel) |
+| FSA ternary, learn-then-prune (AdamW, weight decay 0.5) | 88.7% | +0.013 ± 0.003 | 523k slots (0.6–1.8 MB) | none (same kernel) |
 | *LoRA r16 + output penalty (baseline)* | *97.5%* | *+0.0005 ± 0.002* | *22M params (44 MB bf16)* | *extra matmul per token* |
 
 <p align="center">
@@ -51,10 +51,20 @@ being added). Every FSA row has bit-exact revoke. What these say:
   ~2.5% perplexity) is the open problem now. The two Bop rows are the same configuration run twice; they differ only
   through GPU nondeterminism. Stronger decay on the Adam writer reaches +0.013 at 88.7% recall.
 - **fp4 slots with a smooth penalty** come closest to LoRA on both axes at once, at the cost of leaving the ternary format.
-- **Where each method stands today:** FSA has full recall, a much smaller patch and, by construction, no extra
-  inference work (the packed-kernel benchmark is in progress); with the local penalty, its general-text damage is now within noise of LoRA's (one run; seeds pending). The
+- **Where each method stands today:** FSA has full recall, a much smaller patch and no measured
+  inference cost (serving benchmark below); with the local penalty, its general-text damage is now within noise of LoRA's (one run; seeds pending). The
   task FSA was built for, concepts accumulated across sessions, is the EP-1 experiment in
   [`experiments/epigenesis/`](experiments/epigenesis/).
+
+## Serving: does a patch cost anything at inference?
+
+Measured on the released lambda GGUF with the patch written into the packed pair8 experts
+([`experiments/serving/`](experiments/serving/README.md)): decode and prefill speed, file size and peak memory are
+unchanged within noise on Mac Metal, Mac CPU and a Snapdragon 8 Elite phone (patched/base decode 0.98–1.005×, ranges
+crossing 1.0), and revoking the patch restores the original file byte for byte. Applying a 670k-slot patch takes ~46 ms
+in memory; today's runtime repacks weights at load, so switching users means patching the file and reloading (~2 s)
+until a live hook is added. An unmerged LoRA in this runtime would cost an estimated 0.5–1.5% per token plus 44 MB per
+adapter and new code in every backend; merging it would turn 64 MB of packed experts into 906 MB of bf16.
 
 ## Best algorithms so far
 
