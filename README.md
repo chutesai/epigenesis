@@ -139,8 +139,14 @@ ternary patches above, versus 44 MB for a bf16 LoRA at the same layers), and a m
 
 ## Limitations
 
-- **Damage.** The ternary writers still cost +0.025 to +0.027 nats on general text, against ~0 for a penalized LoRA.
-  Closing that gap is the current work.
+- **Damage is measured on one run.** Bop + the local penalty reads +0.0015 ± 0.0017 nats, within noise of a penalized
+  LoRA (+0.0005); without the penalty the ternary writers cost +0.024 to +0.027. The honest reading is "no detectable
+  damage at this sample size", not "damage-free". Seeds and a larger evaluation pool are in progress.
+- **Recall is teacher-forced.** Held-out recall checks each answer token given the correct preceding ones; free-running
+  generation (produce the answer unaided and stop) is being added and can be harder.
+- **Multi-tenant serving.** An FSA patch lives inside the weights, so one copy of the weights serves one user's patch at
+  a time. LoRA adapters can be batched across many users on one shared base. FSA fits single-tenant and on-device use;
+  serving many users at once needs per-user weight copies or patch swapping between batches (cost being measured).
 - **One task so far.** The real-model results are 40 facts about one fictional person. Whether slots accumulate
   *concepts* across many sessions without accumulating interference is the open question EP-1 tests.
 - **Revoke scope.** Zeroing the slots restores the base exactly. Removing one session's influence after later sessions

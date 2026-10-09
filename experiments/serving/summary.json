@@ -1,0 +1,910 @@
+{
+ "model": {
+  "gguf": "parallax-lambda-790B-t9.gguf",
+  "sha256": "489cd1d23f6c36ac394dc558fc266b26b14f5fb29b68ef9cbea0bb93b0354ef4",
+  "bytes": 2133006592,
+  "phone_gguf": "parallax-lambda-790B-t9-q8_0.gguf",
+  "phone_sha256": "7fd765fa5cf7dfcabbd4000191f752c5a763edc651ce65cd7141735fc8b28697",
+  "phone_bytes": 1656608512
+ },
+ "free_slots_layers_14_15": {
+  "tensors": [
+   {
+    "tensor": "moe.14.up.codes",
+    "weights": 113246208,
+    "nonzero": 38289412,
+    "free_slots": 16648720
+   },
+   {
+    "tensor": "moe.14.down.codes",
+    "weights": 113246208,
+    "nonzero": 38222781,
+    "free_slots": 16705519
+   },
+   {
+    "tensor": "moe.15.up.codes",
+    "weights": 113246208,
+    "nonzero": 38270803,
+    "free_slots": 16658463
+   },
+   {
+    "tensor": "moe.15.down.codes",
+    "weights": 113246208,
+    "nonzero": 38151405,
+    "free_slots": 16755425
+   }
+  ],
+  "free_slots": 66768127,
+  "weights": 452984832,
+  "free_fraction": 0.14739594415382104
+ },
+ "patches": {
+  "670k": {
+   "slots": 670000,
+   "kind": "synthetic, uniform over free slots of MoE layers 14-15 (up+down, all 128 experts each), random signs, seed 0",
+   "npz_bytes": 2050347,
+   "changed_gguf_bytes": 985445,
+   "rewritten_9byte_groups": 641204,
+   "patched_sha256": "302bd1f8bdaa8cf68a3d6ece9220566042b2087b95caa26fbdb7839749ce541d",
+   "verify": {
+    "changed_bytes": 985445,
+    "tensors": [
+     {
+      "tensor": "moe.14.up.codes",
+      "slots": 166526,
+      "nonzero_before": 38289412,
+      "nonzero_after": 38455938
+     },
+     {
+      "tensor": "moe.14.down.codes",
+      "slots": 168227,
+      "nonzero_before": 38222781,
+      "nonzero_after": 38391008
+     },
+     {
+      "tensor": "moe.15.up.codes",
+      "slots": 167077,
+      "nonzero_before": 38270803,
+      "nonzero_after": 38437880
+     },
+     {
+      "tensor": "moe.15.down.codes",
+      "slots": 168170,
+      "nonzero_before": 38151405,
+      "nonzero_after": 38319575
+     }
+    ],
+    "ok": true
+   }
+  },
+  "3M": {
+   "slots": 3000000,
+   "kind": "synthetic, same sampling, seed 2",
+   "npz_bytes": 7279121,
+   "changed_gguf_bytes": 4326642,
+   "rewritten_9byte_groups": 2470526,
+   "patched_sha256": "5e8d8f9b22a3f43ee9dece41f6f934b5d28ad1de1234b21f5fca5d82fd0cf950",
+   "verify": {
+    "changed_bytes": 4326642,
+    "tensors": [
+     {
+      "tensor": "moe.14.up.codes",
+      "slots": 747507,
+      "nonzero_before": 38289412,
+      "nonzero_after": 39036919
+     },
+     {
+      "tensor": "moe.14.down.codes",
+      "slots": 750898,
+      "nonzero_before": 38222781,
+      "nonzero_after": 38973679
+     },
+     {
+      "tensor": "moe.15.up.codes",
+      "slots": 749203,
+      "nonzero_before": 38270803,
+      "nonzero_after": 39020006
+     },
+     {
+      "tensor": "moe.15.down.codes",
+      "slots": 752392,
+      "nonzero_before": 38151405,
+      "nonzero_after": 38903797
+     }
+    ],
+    "ok": true
+   }
+  },
+  "670k_B": {
+   "slots": 670000,
+   "kind": "second synthetic patch for the switch cycle, seed 1",
+   "npz_bytes": 2049330
+  }
+ },
+ "revoke_roundtrip": {
+  "after_revoke_sha256": {
+   "670k": "489cd1d23f6c36ac394dc558fc266b26b14f5fb29b68ef9cbea0bb93b0354ef4",
+   "3M": "489cd1d23f6c36ac394dc558fc266b26b14f5fb29b68ef9cbea0bb93b0354ef4"
+  },
+  "identical_to_base": true
+ },
+ "refusals_tested": [
+  "apply onto an already-patched file",
+  "revoke on an unpatched file",
+  "slot in an inactive pair (file left byte-identical)",
+  "verify with the wrong patch"
+ ],
+ "held_out_nll_512_tokens": {
+  "base": 3.023096,
+  "p670k": 3.025905,
+  "p3M": 3.026575,
+  "note": "random-sign synthetic patches; shows the filled slots are live, says nothing about learned patches"
+ },
+ "mac": {
+  "hardware": "Apple M5 Max (6+12 CPU cores), 128 GB, AC power",
+  "runs": "5 rounds, model order rotated each round, one process per run",
+  "synthetic": "--benchmark 128 --benchmark-depth 512 --prefill-batch 128 --repetitions 3 (random tokens, fixed seed)",
+  "text": "512 held-out tokens, greedy 128 tokens, --prefill-batch 128",
+  "cpu_threads": 8,
+  "tables": {
+   "cpu-lut8/synthetic": {
+    "base": {
+     "decode_tok_s": {
+      "n": 15,
+      "median": 102.196,
+      "min": 98.385,
+      "max": 104.203
+     },
+     "prefill_tok_s": {
+      "n": 15,
+      "median": 370.588,
+      "min": 361.106,
+      "max": 388.061
+     }
+    },
+    "p670k": {
+     "decode_tok_s": {
+      "n": 15,
+      "median": 101.997,
+      "min": 96.132,
+      "max": 104.382
+     },
+     "prefill_tok_s": {
+      "n": 15,
+      "median": 373.696,
+      "min": 366.181,
+      "max": 387.856
+     },
+     "decode_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 1.005,
+      "min": 0.975,
+      "max": 1.022
+     },
+     "prefill_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 1.002,
+      "min": 0.974,
+      "max": 1.045
+     }
+    },
+    "p3M": {
+     "decode_tok_s": {
+      "n": 15,
+      "median": 101.232,
+      "min": 97.811,
+      "max": 103.709
+     },
+     "prefill_tok_s": {
+      "n": 15,
+      "median": 369.132,
+      "min": 365.44,
+      "max": 386.392
+     },
+     "decode_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 0.99,
+      "min": 0.976,
+      "max": 1.004
+     },
+     "prefill_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 1.009,
+      "min": 0.957,
+      "max": 1.021
+     }
+    }
+   },
+   "cpu-lut8/text": {
+    "base": {
+     "decode_tok_s": {
+      "n": 5,
+      "median": 101.917,
+      "min": 98.396,
+      "max": 102.426
+     },
+     "prefill_tok_s": {
+      "n": 5,
+      "median": 367.321,
+      "min": 356.025,
+      "max": 371.891
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 3531735040,
+      "min": 3531161600,
+      "max": 3532718080
+     },
+     "greedy_tokens_identical_across_rounds": true
+    },
+    "p670k": {
+     "decode_tok_s": {
+      "n": 5,
+      "median": 101.424,
+      "min": 98.222,
+      "max": 103.041
+     },
+     "prefill_tok_s": {
+      "n": 5,
+      "median": 367.687,
+      "min": 361.466,
+      "max": 373.798
+     },
+     "decode_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 0.997,
+      "min": 0.986,
+      "max": 1.011
+     },
+     "prefill_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 1.005,
+      "min": 0.989,
+      "max": 1.018
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 3531554816,
+      "min": 3531177984,
+      "max": 3531784192
+     },
+     "greedy_tokens_identical_across_rounds": true
+    },
+    "p3M": {
+     "decode_tok_s": {
+      "n": 5,
+      "median": 100.102,
+      "min": 99.264,
+      "max": 101.212
+     },
+     "prefill_tok_s": {
+      "n": 5,
+      "median": 369.241,
+      "min": 362.536,
+      "max": 375.53
+     },
+     "decode_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 0.982,
+      "min": 0.975,
+      "max": 1.017
+     },
+     "prefill_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 1.0,
+      "min": 0.996,
+      "max": 1.022
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 3531800576,
+      "min": 3531571200,
+      "max": 3532390400
+     },
+     "greedy_tokens_identical_across_rounds": true
+    }
+   },
+   "cpu-lut8/load": {
+    "base": {
+     "process_wall_s": {
+      "n": 5,
+      "median": 2.228,
+      "min": 2.15,
+      "max": 2.269
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 3414179840,
+      "min": 3413622784,
+      "max": 3414327296
+     }
+    },
+    "p670k": {
+     "process_wall_s": {
+      "n": 5,
+      "median": 2.196,
+      "min": 2.176,
+      "max": 2.259
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 3414245376,
+      "min": 3413983232,
+      "max": 3414851584
+     }
+    },
+    "p3M": {
+     "process_wall_s": {
+      "n": 5,
+      "median": 2.235,
+      "min": 2.161,
+      "max": 2.26
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 3414261760,
+      "min": 3413671936,
+      "max": 3414917120
+     }
+    }
+   },
+   "cpu-lut/synthetic": {
+    "base": {
+     "decode_tok_s": {
+      "n": 15,
+      "median": 66.017,
+      "min": 64.379,
+      "max": 67.017
+     },
+     "prefill_tok_s": {
+      "n": 15,
+      "median": 148.009,
+      "min": 145.743,
+      "max": 149.118
+     }
+    },
+    "p670k": {
+     "decode_tok_s": {
+      "n": 15,
+      "median": 66.106,
+      "min": 63.626,
+      "max": 67.146
+     },
+     "prefill_tok_s": {
+      "n": 15,
+      "median": 148.038,
+      "min": 144.777,
+      "max": 148.967
+     },
+     "decode_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 1.006,
+      "min": 0.984,
+      "max": 1.015
+     },
+     "prefill_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 1.004,
+      "min": 0.985,
+      "max": 1.007
+     }
+    },
+    "p3M": {
+     "decode_tok_s": {
+      "n": 15,
+      "median": 66.036,
+      "min": 64.827,
+      "max": 67.059
+     },
+     "prefill_tok_s": {
+      "n": 15,
+      "median": 148.415,
+      "min": 147.561,
+      "max": 149.024
+     },
+     "decode_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 0.998,
+      "min": 0.989,
+      "max": 1.013
+     },
+     "prefill_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 0.999,
+      "min": 0.996,
+      "max": 1.012
+     }
+    }
+   },
+   "cpu-lut/text": {
+    "base": {
+     "decode_tok_s": {
+      "n": 5,
+      "median": 66.108,
+      "min": 65.812,
+      "max": 66.636
+     },
+     "prefill_tok_s": {
+      "n": 5,
+      "median": 148.289,
+      "min": 147.477,
+      "max": 149.386
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 3518169088,
+      "min": 3517300736,
+      "max": 3518644224
+     },
+     "greedy_tokens_identical_across_rounds": true
+    },
+    "p670k": {
+     "decode_tok_s": {
+      "n": 5,
+      "median": 66.066,
+      "min": 64.566,
+      "max": 66.505
+     },
+     "prefill_tok_s": {
+      "n": 5,
+      "median": 148.591,
+      "min": 148.177,
+      "max": 149.125
+     },
+     "decode_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 0.998,
+      "min": 0.977,
+      "max": 1.004
+     },
+     "prefill_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 1.003,
+      "min": 0.998,
+      "max": 1.006
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 3517431808,
+      "min": 3517202432,
+      "max": 3517939712
+     },
+     "greedy_tokens_identical_across_rounds": true
+    },
+    "p3M": {
+     "decode_tok_s": {
+      "n": 5,
+      "median": 65.594,
+      "min": 65.161,
+      "max": 66.946
+     },
+     "prefill_tok_s": {
+      "n": 5,
+      "median": 148.49,
+      "min": 148.311,
+      "max": 149.112
+     },
+     "decode_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 0.993,
+      "min": 0.978,
+      "max": 1.017
+     },
+     "prefill_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 1.003,
+      "min": 0.994,
+      "max": 1.01
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 3517415424,
+      "min": 3517120512,
+      "max": 3517448192
+     },
+     "greedy_tokens_identical_across_rounds": true
+    }
+   },
+   "cpu-lut/load": {
+    "base": {
+     "process_wall_s": {
+      "n": 5,
+      "median": 2.166,
+      "min": 2.159,
+      "max": 2.194
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 3414687744,
+      "min": 3414261760,
+      "max": 3415146496
+     }
+    },
+    "p670k": {
+     "process_wall_s": {
+      "n": 5,
+      "median": 2.163,
+      "min": 2.143,
+      "max": 2.227
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 3414573056,
+      "min": 3414310912,
+      "max": 3415277568
+     }
+    },
+    "p3M": {
+     "process_wall_s": {
+      "n": 5,
+      "median": 2.196,
+      "min": 2.168,
+      "max": 2.217
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 3414179840,
+      "min": 3414147072,
+      "max": 3415064576
+     }
+    }
+   },
+   "metal-lut9/synthetic": {
+    "base": {
+     "decode_tok_s": {
+      "n": 15,
+      "median": 174.787,
+      "min": 165.604,
+      "max": 177.509
+     },
+     "prefill_tok_s": {
+      "n": 15,
+      "median": 1075.056,
+      "min": 1059.055,
+      "max": 1081.805
+     }
+    },
+    "p670k": {
+     "decode_tok_s": {
+      "n": 15,
+      "median": 172.262,
+      "min": 166.2,
+      "max": 177.452
+     },
+     "prefill_tok_s": {
+      "n": 15,
+      "median": 1074.919,
+      "min": 1058.797,
+      "max": 1081.661
+     },
+     "decode_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 0.999,
+      "min": 0.96,
+      "max": 1.006
+     },
+     "prefill_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 0.999,
+      "min": 0.997,
+      "max": 1.001
+     }
+    },
+    "p3M": {
+     "decode_tok_s": {
+      "n": 15,
+      "median": 175.142,
+      "min": 166.139,
+      "max": 177.647
+     },
+     "prefill_tok_s": {
+      "n": 15,
+      "median": 1075.671,
+      "min": 1056.278,
+      "max": 1081.665
+     },
+     "decode_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 0.999,
+      "min": 0.973,
+      "max": 1.032
+     },
+     "prefill_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 1.001,
+      "min": 0.997,
+      "max": 1.003
+     }
+    }
+   },
+   "metal-lut9/text": {
+    "base": {
+     "decode_tok_s": {
+      "n": 5,
+      "median": 172.461,
+      "min": 167.583,
+      "max": 176.793
+     },
+     "prefill_tok_s": {
+      "n": 5,
+      "median": 990.594,
+      "min": 988.608,
+      "max": 999.106
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 2954510336,
+      "min": 2954428416,
+      "max": 2954543104
+     },
+     "greedy_tokens_identical_across_rounds": true
+    },
+    "p670k": {
+     "decode_tok_s": {
+      "n": 5,
+      "median": 171.153,
+      "min": 165.026,
+      "max": 175.864
+     },
+     "prefill_tok_s": {
+      "n": 5,
+      "median": 989.26,
+      "min": 988.46,
+      "max": 992.082
+     },
+     "decode_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 0.992,
+      "min": 0.985,
+      "max": 1.001
+     },
+     "prefill_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 0.999,
+      "min": 0.993,
+      "max": 1.0
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 2954412032,
+      "min": 2954264576,
+      "max": 2954625024
+     },
+     "greedy_tokens_identical_across_rounds": true
+    },
+    "p3M": {
+     "decode_tok_s": {
+      "n": 5,
+      "median": 174.045,
+      "min": 169.926,
+      "max": 176.627
+     },
+     "prefill_tok_s": {
+      "n": 5,
+      "median": 989.062,
+      "min": 987.145,
+      "max": 990.14
+     },
+     "decode_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 1.0,
+      "min": 0.961,
+      "max": 1.039
+     },
+     "prefill_paired_ratio_vs_base": {
+      "n": 5,
+      "median": 0.998,
+      "min": 0.991,
+      "max": 1.0
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 2954428416,
+      "min": 2954412032,
+      "max": 2954739712
+     },
+     "greedy_tokens_identical_across_rounds": true
+    }
+   },
+   "metal-lut9/load": {
+    "base": {
+     "process_wall_s": {
+      "n": 5,
+      "median": 2.055,
+      "min": 2.032,
+      "max": 2.066
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 2787360768,
+      "min": 2787229696,
+      "max": 2787377152
+     }
+    },
+    "p670k": {
+     "process_wall_s": {
+      "n": 5,
+      "median": 2.057,
+      "min": 2.038,
+      "max": 2.071
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 2787295232,
+      "min": 2787246080,
+      "max": 2787295232
+     }
+    },
+    "p3M": {
+     "process_wall_s": {
+      "n": 5,
+      "median": 2.07,
+      "min": 2.066,
+      "max": 2.072
+     },
+     "peak_rss_bytes": {
+      "n": 5,
+      "median": 2787278848,
+      "min": 2787262464,
+      "max": 2787311616
+     }
+    }
+   }
+  }
+ },
+ "phone": {
+  "hardware": "Snapdragon 8 Elite (SM8750) reference handset, 6 threads pinned to cpu7..2, Q8_0 trunk, --experts lut8",
+  "runs": "6 rounds, order rotated, cooldown gate 65 C, --benchmark 64 --benchmark-depth 512 --prefill-batch 128 --repetitions 2",
+  "tables": {
+   "base": {
+    "decode_tok_s": {
+     "n": 12,
+     "median": 57.049,
+     "min": 54.208,
+     "max": 58.444
+    },
+    "prefill_tok_s": {
+     "n": 12,
+     "median": 209.133,
+     "min": 195.478,
+     "max": 226.472
+    },
+    "cpu_temp_start_C": {
+     "n": 6,
+     "median": 64.75,
+     "min": 64.6,
+     "max": 66.9
+    },
+    "cpu_temp_end_C": {
+     "n": 6,
+     "median": 87.45,
+     "min": 82.2,
+     "max": 98.0
+    }
+   },
+   "p670k": {
+    "decode_tok_s": {
+     "n": 12,
+     "median": 56.846,
+     "min": 54.677,
+     "max": 58.708
+    },
+    "prefill_tok_s": {
+     "n": 12,
+     "median": 200.005,
+     "min": 194.605,
+     "max": 238.573
+    },
+    "cpu_temp_start_C": {
+     "n": 6,
+     "median": 64.6,
+     "min": 54.9,
+     "max": 66.5
+    },
+    "cpu_temp_end_C": {
+     "n": 6,
+     "median": 82.6,
+     "min": 80.3,
+     "max": 91.9
+    },
+    "decode_paired_ratio_vs_base": {
+     "n": 6,
+     "median": 1.002,
+     "min": 0.974,
+     "max": 1.034
+    },
+    "prefill_paired_ratio_vs_base": {
+     "n": 6,
+     "median": 0.996,
+     "min": 0.91,
+     "max": 1.053
+    }
+   },
+   "p3M": {
+    "decode_tok_s": {
+     "n": 12,
+     "median": 56.333,
+     "min": 54.165,
+     "max": 57.697
+    },
+    "prefill_tok_s": {
+     "n": 12,
+     "median": 199.65,
+     "min": 195.262,
+     "max": 230.686
+    },
+    "cpu_temp_start_C": {
+     "n": 6,
+     "median": 64.6,
+     "min": 63.4,
+     "max": 65.7
+    },
+    "cpu_temp_end_C": {
+     "n": 6,
+     "median": 81.9,
+     "min": 80.7,
+     "max": 93.0
+    },
+    "decode_paired_ratio_vs_base": {
+     "n": 6,
+     "median": 0.982,
+     "min": 0.952,
+     "max": 1.032
+    },
+    "prefill_paired_ratio_vs_base": {
+     "n": 6,
+     "median": 1.0,
+     "min": 0.908,
+     "max": 1.017
+    }
+   }
+  }
+ },
+ "patch_apply_seconds": {
+  "note": "numpy reference implementation on the M5 Max; RAM = expert code tensors held in memory in GGUF layout; mmap = GGUF file mapped read-write and flushed",
+  "670k": {
+   "index_670k_patch": 0.05374560400377959,
+   "ram": {
+    "apply_A": 0.04593904200010002,
+    "revoke_A": 0.045123209012672305,
+    "apply_B": 0.045535583049058914,
+    "revoke_B": 0.045497040962800384
+   },
+   "mmap_file": {
+    "apply_A": 0.11095979204401374,
+    "revoke_A": 0.07612333283759654,
+    "apply_B": 0.07576641719788313,
+    "revoke_B": 0.07555633317679167
+   }
+  },
+  "3M": {
+   "index_3M_patch_plus_670k": 0.565650959033519,
+   "ram": {
+    "apply_A": 0.18084358400665224,
+    "revoke_A": 0.18044483405537903,
+    "apply_B": 0.04621104197576642,
+    "revoke_B": 0.04593983408994973
+   },
+   "mmap_file": {
+    "apply_A": 0.25248329201713204,
+    "revoke_A": 0.210786874871701,
+    "apply_B": 0.07791020791046321,
+    "revoke_B": 0.0778515839483589
+   }
+  }
+ },
+ "lora_r16_layers_14_15_analytic": {
+  "supported_by_runtime": false,
+  "params_total": 22020096,
+  "bytes_bf16": 44040192,
+  "params_read_per_token": 2064384,
+  "bytes_read_per_token_bf16": 4128768,
+  "flops_per_token": 4128768,
+  "base_dense_weight_bytes_per_token": 1048129536,
+  "base_dense_flops_per_token": 1038692352,
+  "base_routed_code_bytes_per_token_lut8": 169869312,
+  "base_graph_operations": 935,
+  "extra_graph_operations_min": 8,
+  "merged_lora_dense_bytes_bf16": 905969664
+ }
+}

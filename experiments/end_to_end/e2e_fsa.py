@@ -931,7 +931,9 @@ def main():
     # v11
     ap.add_argument("--gen-max-new", type=int, default=0, help="generated tokens per prompt (0 = longest answer + k + 2)")
     ap.add_argument("--gen-stop-k", type=int, default=2, help="clean stop: terminator/EOS within k tokens after the answer")
-    ap.add_argument("--gen-bs", type=int, default=16)
+    ap.add_argument("--gen-bs", type=int, default=1,
+                    help="eval batch size. 1 (default) = the single-sequence protocol of v1-v10; on the 8B, batch "
+                         "composition alone changes logits through bf16 rounding -> routing flips")
     ap.add_argument("--people", type=int, default=1)
     ap.add_argument("--facts-per-person", type=int, default=len(ATTRS))
     ap.add_argument("--shared-attrs", type=int, default=0,
