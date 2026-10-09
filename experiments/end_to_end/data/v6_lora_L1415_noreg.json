@@ -1,0 +1,219 @@
+{
+ "method": "lora",
+ "fmt": "ternary",
+ "drift_lambda": 0.0,
+ "wd": 0.0,
+ "answer_only": true,
+ "down_only": false,
+ "n_experts": 0,
+ "budget": 0,
+ "optim": "adam",
+ "selection": null,
+ "layers": [
+  14,
+  15
+ ],
+ "rank": 16,
+ "steps": 300,
+ "lr": 0.0003,
+ "seed": 0,
+ "n_facts": 40,
+ "reserve_slots": 0,
+ "flipped": 0,
+ "energy": 0.0,
+ "lora_params": 22020096,
+ "patch_bytes": 88080384.0,
+ "base": {
+  "held": {
+   "nll": 2.8898843126987526
+  },
+  "train": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.285047885775566
+  },
+  "test": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.455847732722759
+  }
+ },
+ "patched": {
+  "held": {
+   "nll": 3.8122356974681995,
+   "kl": 0.9078676346930039,
+   "top1": 0.6078277886497064
+  },
+  "big": {
+   "dnll": 0.9361057281494141,
+   "dnll_se": 0.030228085815906525
+  },
+  "train": {
+   "exact_match": 1.0,
+   "answer_logprob": -0.0012082472244704452
+  },
+  "test": {
+   "exact_match": 0.975,
+   "answer_logprob": -0.014998017081870785
+  }
+ },
+ "local_lambda": 0.0,
+ "revoked": {
+  "logits_bit_exact": true,
+  "test": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.455847732722759
+  }
+ },
+ "trajectory": [
+  {
+   "step": 50,
+   "val_em": 0.0375,
+   "val_lp": -3.394999972730875,
+   "val_dnll": 0.11500716209411621,
+   "nnz": 0,
+   "energy": 0.0
+  },
+  {
+   "step": 100,
+   "val_em": 0.9,
+   "val_lp": -0.2048393954988569,
+   "val_dnll": 0.8121433258056641,
+   "nnz": 0,
+   "energy": 0.0
+  },
+  {
+   "step": 150,
+   "val_em": 0.9875,
+   "val_lp": -0.032062501751534,
+   "val_dnll": 0.8411035537719727,
+   "nnz": 0,
+   "energy": 0.0
+  },
+  {
+   "step": 200,
+   "val_em": 1.0,
+   "val_lp": -0.02277821063571537,
+   "val_dnll": 0.8430886268615723,
+   "nnz": 0,
+   "energy": 0.0
+  },
+  {
+   "step": 250,
+   "val_em": 1.0,
+   "val_lp": -0.01679814644594444,
+   "val_dnll": 0.8501601219177246,
+   "nnz": 0,
+   "energy": 0.0
+  },
+  {
+   "step": 300,
+   "val_em": 1.0,
+   "val_lp": -0.016843349815280816,
+   "val_dnll": 0.8529269695281982,
+   "nnz": 0,
+   "energy": 0.0
+  }
+ ],
+ "pareto": {
+  "0.3": {
+   "step": 100,
+   "val_em": 0.9,
+   "val_lp": -0.2048393954988569,
+   "val_dnll": 0.8121433258056641,
+   "nnz": 0,
+   "energy": 0.0,
+   "big": {
+    "dnll": 0.8955219984054565,
+    "dnll_se": 0.029267264530062675
+   },
+   "test": {
+    "exact_match": 0.925,
+    "answer_logprob": -0.13538373215560567
+   }
+  },
+  "0.4": {
+   "step": 100,
+   "val_em": 0.9,
+   "val_lp": -0.2048393954988569,
+   "val_dnll": 0.8121433258056641,
+   "nnz": 0,
+   "energy": 0.0,
+   "big": {
+    "dnll": 0.8955219984054565,
+    "dnll_se": 0.029267264530062675
+   },
+   "test": {
+    "exact_match": 0.925,
+    "answer_logprob": -0.13538373215560567
+   }
+  },
+  "0.5": {
+   "step": 100,
+   "val_em": 0.9,
+   "val_lp": -0.2048393954988569,
+   "val_dnll": 0.8121433258056641,
+   "nnz": 0,
+   "energy": 0.0,
+   "big": {
+    "dnll": 0.8955219984054565,
+    "dnll_se": 0.029267264530062675
+   },
+   "test": {
+    "exact_match": 0.925,
+    "answer_logprob": -0.13538373215560567
+   }
+  },
+  "0.6": {
+   "step": 100,
+   "val_em": 0.9,
+   "val_lp": -0.2048393954988569,
+   "val_dnll": 0.8121433258056641,
+   "nnz": 0,
+   "energy": 0.0,
+   "big": {
+    "dnll": 0.8955219984054565,
+    "dnll_se": 0.029267264530062675
+   },
+   "test": {
+    "exact_match": 0.925,
+    "answer_logprob": -0.13538373215560567
+   }
+  },
+  "0.7": {
+   "step": 100,
+   "val_em": 0.9,
+   "val_lp": -0.2048393954988569,
+   "val_dnll": 0.8121433258056641,
+   "nnz": 0,
+   "energy": 0.0,
+   "big": {
+    "dnll": 0.8955219984054565,
+    "dnll_se": 0.029267264530062675
+   },
+   "test": {
+    "exact_match": 0.925,
+    "answer_logprob": -0.13538373215560567
+   }
+  },
+  "0.8": {
+   "step": 100,
+   "val_em": 0.9,
+   "val_lp": -0.2048393954988569,
+   "val_dnll": 0.8121433258056641,
+   "nnz": 0,
+   "energy": 0.0,
+   "big": {
+    "dnll": 0.8955219984054565,
+    "dnll_se": 0.029267264530062675
+   },
+   "test": {
+    "exact_match": 0.925,
+    "answer_logprob": -0.13538373215560567
+   }
+  }
+ },
+ "support_score": "absgrad",
+ "cost_rel": 1.0,
+ "cost_lambda": null,
+ "fp4_step": 0.25,
+ "aug": true
+}

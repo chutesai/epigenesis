@@ -25,23 +25,62 @@
 
 ## Status on the real 8B model (2026-10-09)
 
-Teaching 40 facts about a fictional person to the lambda 8B ternary MoE, measured on held-out phrasings (including Q/A) and on damage to general text (ΔNLL on 20k held-out tokens):
+Teaching 40 facts about a fictional person to the lambda 8B ternary MoE. Recall is measured on held-out phrasings
+(including Q/A forms never seen in training); damage is ΔNLL on 20k held-out general-text tokens (± paired SE).
 
 | method | held-out recall | general-text damage | patch | inference overhead |
 |---|---|---|---|---|
-| LoRA r16 + output penalty (best baseline) | 97.5% | +0.0005 | 22M fp32 params (~88 MB) | extra matmul per token |
-| **FSA, ternary, learn-then-prune** | **91%** | **+0.025** | **542k ternary slots (~110 KB)** | **none: same packed kernel** |
+| LoRA r16 + output penalty (best baseline) | 97.5% | +0.0005 ± 0.002 | 22M params (44 MB bf16) | extra matmul per token |
+| **FSA ternary, Bop writer (τ 0.7)** | **100%** | +0.027 ± 0.004 | **812k slots (0.9–2.7 MB)** | **none: same packed kernel** |
+| FSA ternary, learn-then-prune (AdamW, wd 0.3) | 91% | +0.025 ± 0.003 | 542k slots (0.6–1.8 MB) | none |
+| FSA fp4 slots + local output penalty | 96.3% | +0.005 ± 0.002 | 21M fp4 slots (18–80 MB) | needs fp4 slot support |
 
-- FSA is close to LoRA on recall, with a patch ~800× smaller, in the deployed format, at zero inference overhead, and
-  bit-exact revoke. It is not ahead on quality: ~6 points less recall and ~2.5% higher general-text perplexity.
-- Weight decay on the fp32 masters prunes the patch from ~20M slots to ~0.5M during training while recall holds; the
-  damage was still falling when training stopped.
-- A continuous-valued patch on the same slot mask did *not* beat LoRA at matched placement, so on fact memorization the
-  low-rank adapter is the better fit regardless of ternary. The case for FSA is the format and cost, and the
-  open question is whether it pulls ahead on the task it was built for: concepts accumulated across sessions
-  (the EP-1 experiment in [`experiments/epigenesis/`](experiments/epigenesis/)).
-- A one-weight change in this model already moves KL-to-base to ~0.02 (routing near-ties), so damage is measured as
-  ΔNLL, not KL. Details and every run in [`E2E_FINDINGS.md`](experiments/end_to_end/E2E_FINDINGS.md).
+<p align="center">
+  <img src="figures/fig_e2e_frontier.png" width="760" alt="Held-out recall versus general-text damage for every comparable run on the real 8B model.">
+  <br>
+  <img src="figures/fig_e2e_storage.png" width="640" alt="Held-out recall versus patch size for FSA and LoRA.">
+</p>
+
+Patch sizes count slot positions as well as values: the low figure entropy-codes the positions, the high one stores a
+26-bit index per slot. Every FSA row has bit-exact revoke. What these say:
+- **The ternary Bop writer recalls every held-out fact**, more than LoRA, from a patch 15–50× smaller than a bf16 LoRA at zero
+  inference overhead. It pays for it in general-text damage (+0.027 nats, ~2.7% perplexity), which is the open problem now.
+- **fp4 slots with a smooth penalty** come closest to LoRA on both axes at once, at the cost of leaving the ternary format.
+- On this fact task LoRA remains the lower-damage method. The task FSA was built for is concepts accumulated across
+  sessions; that is the EP-1 experiment in [`experiments/epigenesis/`](experiments/epigenesis/).
+
+## Best algorithms so far
+
+**Writers (how slots get filled):**
+1. **Bop, latent-free ternary** (Helwegen et al. 2019, extended to {−1, 0, +1}). Each free slot keeps an exponential
+   moving average of its gradient; a slot is born (0 → ±1) or dies (±1 → 0) only when that average is consistent and
+   exceeds a threshold τ, and the average resets on every change. τ directly sets the flip rate, so a small gradient
+   never turns into a full ±α step. Best ternary result so far.
+2. **Learn-then-prune.** fp32 masters + straight-through ternary, AdamW with weight decay on the masters. The model
+   learns everything early (~50 steps), then decay pulls weakly supported masters back through the threshold: the
+   patch shrank from ~20M to 0.5M slots while recall held.
+3. **fp4 slots + local output penalty** (non-ternary option): the penalty is the relative energy of the patch's direct
+   output change on general text, Σ‖x·ΔWᵀ‖² / Σ‖x·Wᵀ‖², which unlike KL is immune to routing chaos.
+
+**Ingredients that mattered for every method:**
+- Loss on the answer tokens only. Whole-sentence loss trained models to recite template boilerplate and caused most of
+  the early damage.
+- Diverse training phrasings including Q/A forms (12 formats, 3 sampled per fact per step). This closed the
+  validation→test gap for both FSA and LoRA.
+- A broad footprint: all experts of the patched layers, up and down projections. Small footprints starved capacity.
+- Damage measured as ΔNLL on a large held-out pool, checkpoints chosen on separate validation text. Any single weight
+  change in this model already moves KL-to-base to ~0.02 through routing near-ties, so KL cannot measure damage.
+
+<p align="center">
+  <img src="figures/fig_e2e_trajectory.png" width="820" alt="Validation recall, damage and filled slots over training for learn-then-prune, Bop and LoRA.">
+  <br>
+  <img src="figures/fig_chaos_floor.png" width="760" alt="KL to the base model from random flips and from a single-weight perturbation.">
+</p>
+
+**What did not work:** KL penalties (they fight the routing-chaos floor and only cost recall); ternary + smooth penalty +
+decay (recall peaks, then gets pruned away); tiny-magnitude fp4 (changes below bf16 resolution never learn); patch-only
+block scales (no better than plain ternary); continuous values on the slot mask at a single late layer (did not beat
+LoRA at the same placement).
 
 ## Why "epigenetic"
 

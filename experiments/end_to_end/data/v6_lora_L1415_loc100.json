@@ -1,0 +1,219 @@
+{
+ "method": "lora",
+ "fmt": "ternary",
+ "drift_lambda": 0.0,
+ "wd": 0.0,
+ "answer_only": true,
+ "down_only": false,
+ "n_experts": 0,
+ "budget": 0,
+ "optim": "adam",
+ "selection": null,
+ "layers": [
+  14,
+  15
+ ],
+ "rank": 16,
+ "steps": 300,
+ "lr": 0.0003,
+ "seed": 0,
+ "n_facts": 40,
+ "reserve_slots": 0,
+ "flipped": 0,
+ "energy": 0.0,
+ "lora_params": 22020096,
+ "patch_bytes": 88080384.0,
+ "base": {
+  "held": {
+   "nll": 2.8898843126987526
+  },
+  "train": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.285047885775566
+  },
+  "test": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.455847732722759
+  }
+ },
+ "patched": {
+  "held": {
+   "nll": 2.886772738044276,
+   "kl": 0.028574405677631178,
+   "top1": 0.9318982387475538
+  },
+  "big": {
+   "dnll": 0.0004814922867808491,
+   "dnll_se": 0.0018372944323346019
+  },
+  "train": {
+   "exact_match": 1.0,
+   "answer_logprob": -0.004875240665569436
+  },
+  "test": {
+   "exact_match": 0.975,
+   "answer_logprob": -0.055162776578799824
+  }
+ },
+ "local_lambda": 100.0,
+ "revoked": {
+  "logits_bit_exact": true,
+  "test": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.455847732722759
+  }
+ },
+ "trajectory": [
+  {
+   "step": 50,
+   "val_em": 0.0,
+   "val_lp": -3.6776174336671827,
+   "val_dnll": -0.004247426986694336,
+   "nnz": 0,
+   "energy": 0.0
+  },
+  {
+   "step": 100,
+   "val_em": 0.7375,
+   "val_lp": -0.6484067443932873,
+   "val_dnll": -0.005606889724731445,
+   "nnz": 0,
+   "energy": 0.0
+  },
+  {
+   "step": 150,
+   "val_em": 0.975,
+   "val_lp": -0.09560377858106221,
+   "val_dnll": -0.004242420196533203,
+   "nnz": 0,
+   "energy": 0.0
+  },
+  {
+   "step": 200,
+   "val_em": 0.975,
+   "val_lp": -0.08048089533258462,
+   "val_dnll": -0.0029201507568359375,
+   "nnz": 0,
+   "energy": 0.0
+  },
+  {
+   "step": 250,
+   "val_em": 0.9625,
+   "val_lp": -0.08803474281103263,
+   "val_dnll": -0.0005831718444824219,
+   "nnz": 0,
+   "energy": 0.0
+  },
+  {
+   "step": 300,
+   "val_em": 0.975,
+   "val_lp": -0.062363418884888236,
+   "val_dnll": -0.003906726837158203,
+   "nnz": 0,
+   "energy": 0.0
+  }
+ ],
+ "pareto": {
+  "0.3": {
+   "step": 100,
+   "val_em": 0.7375,
+   "val_lp": -0.6484067443932873,
+   "val_dnll": -0.005606889724731445,
+   "nnz": 0,
+   "energy": 0.0,
+   "big": {
+    "dnll": 0.006084156222641468,
+    "dnll_se": 0.002307599177584052
+   },
+   "test": {
+    "exact_match": 0.7,
+    "answer_logprob": -0.6269008644012501
+   }
+  },
+  "0.4": {
+   "step": 100,
+   "val_em": 0.7375,
+   "val_lp": -0.6484067443932873,
+   "val_dnll": -0.005606889724731445,
+   "nnz": 0,
+   "energy": 0.0,
+   "big": {
+    "dnll": 0.006084156222641468,
+    "dnll_se": 0.002307599177584052
+   },
+   "test": {
+    "exact_match": 0.7,
+    "answer_logprob": -0.6269008644012501
+   }
+  },
+  "0.5": {
+   "step": 100,
+   "val_em": 0.7375,
+   "val_lp": -0.6484067443932873,
+   "val_dnll": -0.005606889724731445,
+   "nnz": 0,
+   "energy": 0.0,
+   "big": {
+    "dnll": 0.006084156222641468,
+    "dnll_se": 0.002307599177584052
+   },
+   "test": {
+    "exact_match": 0.7,
+    "answer_logprob": -0.6269008644012501
+   }
+  },
+  "0.6": {
+   "step": 100,
+   "val_em": 0.7375,
+   "val_lp": -0.6484067443932873,
+   "val_dnll": -0.005606889724731445,
+   "nnz": 0,
+   "energy": 0.0,
+   "big": {
+    "dnll": 0.006084156222641468,
+    "dnll_se": 0.002307599177584052
+   },
+   "test": {
+    "exact_match": 0.7,
+    "answer_logprob": -0.6269008644012501
+   }
+  },
+  "0.7": {
+   "step": 100,
+   "val_em": 0.7375,
+   "val_lp": -0.6484067443932873,
+   "val_dnll": -0.005606889724731445,
+   "nnz": 0,
+   "energy": 0.0,
+   "big": {
+    "dnll": 0.006084156222641468,
+    "dnll_se": 0.002307599177584052
+   },
+   "test": {
+    "exact_match": 0.7,
+    "answer_logprob": -0.6269008644012501
+   }
+  },
+  "0.8": {
+   "step": 150,
+   "val_em": 0.975,
+   "val_lp": -0.09560377858106221,
+   "val_dnll": -0.004242420196533203,
+   "nnz": 0,
+   "energy": 0.0,
+   "big": {
+    "dnll": 0.002872210694476962,
+    "dnll_se": 0.0016403371701017022
+   },
+   "test": {
+    "exact_match": 0.95,
+    "answer_logprob": -0.07319804865401239
+   }
+  }
+ },
+ "support_score": "absgrad",
+ "cost_rel": 1.0,
+ "cost_lambda": null,
+ "fp4_step": 0.25,
+ "aug": true
+}

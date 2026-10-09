@@ -39,6 +39,15 @@
 !/figures/fig4_soft.pdf
 !/figures/make_figs.py
 !/figures/make_figs2.py
+!/figures/make_e2e_figs.py
+!/figures/fig_e2e_frontier.png
+!/figures/fig_e2e_frontier.pdf
+!/figures/fig_e2e_storage.png
+!/figures/fig_e2e_storage.pdf
+!/figures/fig_chaos_floor.png
+!/figures/fig_chaos_floor.pdf
+!/figures/fig_e2e_trajectory.png
+!/figures/fig_e2e_trajectory.pdf
 
 !/experiments/
 /experiments/*
@@ -68,6 +77,21 @@
 /experiments/end_to_end/*
 !/experiments/end_to_end/E2E_FINDINGS.md
 !/experiments/end_to_end/e2e_fsa.py
+!/experiments/end_to_end/data/
+/experiments/end_to_end/data/*
+!/experiments/end_to_end/data/v6_lora_L1415_loc100.json
+!/experiments/end_to_end/data/v6_lora_L1415_noreg.json
+!/experiments/end_to_end/data/v6_lora_L28dn_loc100.json
+!/experiments/end_to_end/data/v7_fsa_all_bop_t07.json
+!/experiments/end_to_end/data/v7_fsa_all_bop_t09.json
+!/experiments/end_to_end/data/v6_fsa_all_wd03.json
+!/experiments/end_to_end/data/v6_fsa_all_wd01.json
+!/experiments/end_to_end/data/v7_fsa_all_wd03_block.json
+!/experiments/end_to_end/data/v6_fsa_L28_netcost.json
+!/experiments/end_to_end/data/v7_fsa_all_fp4_loc10_aug.json
+!/experiments/end_to_end/data/v6_fsa_L28_bf16.json
+!/experiments/end_to_end/data/floor_diag.json
+!/experiments/end_to_end/data/eps_diag.txt
 
 # never, anywhere
 __pycache__/
@@ -81,3 +105,19 @@ __pycache__/
 *.synctex.gz
 
 ROADMAP.md
+
+# EP-1 epigenesis harness (synthetic user, self-study, consolidation, evaluation); outputs stay local
+!/experiments/epigenesis/
+/experiments/epigenesis/*
+!/experiments/epigenesis/DESIGN.md
+!/experiments/epigenesis/EP1_PREREG.md
+!/experiments/epigenesis/epi_common.py
+!/experiments/epigenesis/epi_gpu.py
+!/experiments/epigenesis/make_user.py
+!/experiments/epigenesis/selfstudy.py
+!/experiments/epigenesis/consolidate.py
+!/experiments/epigenesis/evaluate.py
+!/experiments/epigenesis/run_ep1.sh
+!/experiments/epigenesis/tests/
+/experiments/epigenesis/tests/*
+!/experiments/epigenesis/tests/*.py

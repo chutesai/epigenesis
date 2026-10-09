@@ -125,7 +125,7 @@ on eviction.
 - **Augmented Q/A formats closed the validation→test gap for both methods.**
 - **LoRA with the penalty wins the fact task outright**: ~98% recall at no measurable damage.
 - **Learn-then-prune is the best ternary recipe so far**: 91% held-out recall from a 542k-slot ternary patch
-  (~110 KB) at +0.025 damage, bit-exact revoke, no penalty at all. Damage was still falling at step 300
+  (0.6–1.8 MB including slot positions) at +0.025 damage, bit-exact revoke, no penalty at all. Damage was still falling at step 300
   (+0.028 at step 250), so longer pruning may close more of the gap to LoRA.
 - **Continuous slots at L28 lost to LoRA at the same placement** (49%/+0.047 vs 38%/+0.001). The free-slot mask is
   less damage-efficient than a low-rank adapter for fact memorization at that placement, independent of ternary.
