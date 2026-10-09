@@ -277,17 +277,30 @@ def support_scores(mods, mode, cost_lambda, den):
 
 def refresh_support(mods, K, scores=None, opt=None):
     """Global hard ceiling: keep at most K slots with the largest POSITIVE score; evicted masters reset to 0."""
-    sc = torch.cat([(s_ if scores is not None else m.score.float() * m.mask).flatten()
-                    for m, s_ in zip(mods, scores if scores is not None else [None] * len(mods))])
-    K = min(K, int((sc > 0).sum()))
-    sel = torch.zeros(sc.numel(), dtype=torch.bool, device=sc.device)
-    if K > 0:
-        sel[torch.topk(sc, K).indices] = True               # exact indices: ties cannot exceed K
-    off = 0
-    for m in mods:
-        n = m.mask.numel()
-        new = sel[off:off + n].view_as(m.mask) & m.mask
-        off += n
+    # chunked exact global top-K: per-module top-k candidates, then one top-K over the candidates
+    # (never materializes all slot scores at once; ~3.4 GB for two full layers otherwise)
+    get = (lambda i, m: scores[i]) if scores is not None else (lambda i, m: m.score.float() * m.mask)
+    cand_v, cand_i = [], []
+    for i, m in enumerate(mods):
+        sc = get(i, m).flatten()
+        npos = int((sc > 0).sum())
+        if npos:
+            v, ix = torch.topk(sc, min(K, npos))
+            cand_v.append(v)
+            cand_i.append(torch.stack([torch.full_like(ix, i), ix], 1))
+        del sc
+    keep = {}
+    if cand_v:
+        v = torch.cat(cand_v)
+        ii = torch.cat(cand_i)
+        top = torch.topk(v, min(K, v.numel())).indices      # exact indices: ties cannot exceed K
+        for mi in ii[top, 0].unique().tolist():
+            keep[mi] = ii[top][ii[top, 0] == mi, 1]
+    for i, m in enumerate(mods):
+        new = torch.zeros(m.mask.numel(), dtype=torch.bool, device=m.mask.device)
+        if i in keep:
+            new[keep[i]] = True
+        new = new.view_as(m.mask) & m.mask
         ev = m.support & ~new
         with torch.no_grad():
             m.M[ev] = 0
@@ -695,12 +708,21 @@ def main():
         if a.budget and mods and (step % 10 == 0) and step <= a.budget_freeze:
             if a.support_score == "netcost":
                 if cost_lambda is None:                       # calibrate once: gain and cost on comparable scales
-                    gain = torch.cat([(m.score.float().abs() * m.mask).flatten() for m in mods])
-                    cost = torch.cat([(((torch.exp(m.logb.detach()).repeat_interleave(m.block, dim=1)
-                                         if m.logb is not None else m.alpha.float()) ** 2)
-                                       * m.col_energy[None, :] / den_total * m.mask).flatten() for m in mods])
-                    npos = int((gain > 0).sum())
+                    gv, cv = [], []                     # per-module top candidates (chunked, as above)
+                    for m in mods:
+                        g_ = (m.score.float().abs() * m.mask).flatten()
+                        npos_m = int((g_ > 0).sum())
+                        if not npos_m:
+                            continue
+                        v_, ix_ = torch.topk(g_, min(a.budget, npos_m))
+                        sc_ = (torch.exp(m.logb.detach()).repeat_interleave(m.block, dim=1)
+                               if m.logb is not None else m.alpha.float().expand_as(m.M))
+                        c_ = ((sc_ ** 2) * m.col_energy[None, :] / den_total).flatten()[ix_]
+                        gv.append(v_); cv.append(c_)
+                        del g_
+                    npos = sum(x.numel() for x in gv)
                     if npos > 0:
+                        gain = torch.cat(gv); cost = torch.cat(cv)
                         top = torch.topk(gain, min(a.budget, npos)).indices
                         lam_ = a.cost_rel * float(gain[top].median() / cost[top].median().clamp_min(1e-30))
                         if math.isfinite(lam_) and lam_ > 0:

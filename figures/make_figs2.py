@@ -29,7 +29,7 @@ if fsa:
     fig, ax = plt.subplots(figsize=(5.2, 3.6))
     ax.plot(xk(fsa), yk(fsa), "o-", color=BLUE, lw=2.3, ms=7)
     pk = max(fsa, key=lambda r: r["KB_after"])
-    ax.annotate(f"ceiling ≈ {pk['KB_after']/1000:.0f} kbits", (pk["n_b"]/1000, pk["KB_after"]/1000),
+    ax.annotate(f"observed max ≈ {pk['KB_after']/1000:.0f} kbits", (pk["n_b"]/1000, pk["KB_after"]/1000),
                 textcoords="offset points", xytext=(-10, 10), color=BLUE, fontsize=9)
     ax.set_xlabel("new facts poured into the reserve  (thousands)")
     ax.set_ylabel("new knowledge acquired  (kbits)")
@@ -46,7 +46,7 @@ if fsa:
         r = load(fn)
         if r: axL.plot(xk(r), yk(r), "s--", color=c, lw=1.8, ms=4, label=f"LoRA {lbl}")
     axL.set_xscale("log"); axL.set_xlabel("new facts  (thousands)"); axL.set_ylabel("knowledge acquired  (kbits)")
-    axL.set_title("Capacity — LoRA scales with rank; FSA is reserve-capped", fontsize=10.5, loc="left")
+    axL.set_title("Capacity — LoRA scales with rank;\nFSA reaches an observed maximum", fontsize=10.5, loc="left")
     axL.legend(frameon=False, fontsize=8.5, loc="upper left")
 
     # Honest: count BOTH methods in the representation ACTUALLY trained (fp32). The ranking reverses.

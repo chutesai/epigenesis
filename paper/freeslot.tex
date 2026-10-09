@@ -1,7 +1,6 @@
 \documentclass[11pt]{article}
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb}
-\DeclareMathSizes{10}{10}{8}{6}
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{xcolor}
@@ -24,7 +23,7 @@
 \vspace{-1.5em}
 
 \begin{center}
-\fbox{\parbox{0.93\textwidth}{\small\textbf{AI-assisted draft.} Generated with AI assistance and revised through repeated
+\fbox{\parbox{0.93\textwidth}{\small\textbf{AI-assisted draft.} revised through repeated
 adversarial review; the experiments were run and checked by the authors. The synthetic sections are a
 \textbf{dense fp32 mechanism study}; the real-model section evaluates ternary patches on a real 8B
 ternary MoE on a 40-fact task (single seed). The pre-registered multi-session epigenesis experiment is
@@ -70,7 +69,7 @@ validated multi-session learning.
 positions, values, scales, and inference format. (2) A synthetic mechanism study: exact masked retention,
 a measured reserve maximum, a degrading soft variant, and an indicative, uncontrolled fp32 LoRA
 comparison that favors LoRA. (3) Real 8B results: legal ternary patches, latent-free and learn-then-prune
-writers, a routing-related KL floor, and a recall--damage--storage comparison. (4) A revocable-patch
+writers, a KL floor (plausibly from routing near-ties; a hypothesis), and a recall--damage--storage comparison. (4) A revocable-patch
 contract and a pre-registered, still untested multi-session concept experiment (\S\ref{sec:direction}).
 
 \section{Background and related work}
@@ -122,12 +121,12 @@ base-input outputs unchanged, and run unmasked. This is Learning-without-Forgett
 disjoint support, with full base-input replay---a substantial rehearsal resource we note explicitly.
 
 \subsection{Honest accounting}
-FSA adds \textbf{zero new logical parameters}: the element count is unchanged. The real ternary
-experiment fills only zeros inside active pairs, so a merged patch uses the same packed tensors and
+Plain ternary FSA adds \textbf{zero new logical parameters}: the element count is unchanged.
+It fills only zeros inside active pairs, so a merged patch uses the same packed tensors and
 adds no tensors or inference compute. This claim depends on preserving pair occupancy and the serving
 format; opening new pairs or using a separate patch can add work. The packed serving path was not
 benchmarked (\S\ref{sec:real}). Storage is not free: revocation needs positions and signs in a stored
-diff, or the original pack. Learned scales add storage too. A full per-domain mask would cost one bit
+diff, or the original pack. The learned-block-scale arm adds parameters and storage and is outside these packed-format claims. A full per-domain mask would cost one bit
 per weight; sparse position coding avoids that cost for sparse patches. Frozen row scales constrain
 each ternary slot to $\{-\alpha,0,+\alpha\}$, a capacity restriction. Actual position-inclusive patch
 sizes are reported in \S\ref{sec:real}; hypothetical trit-only accounting is insufficient.
@@ -151,33 +150,18 @@ decline we plot.
 
 \section{Experiments}
 \label{sec:synthetic}
+\begin{samepage}
 Synthetic knowledge-capacity assay: disjoint random fact sets $A\to B$ (key$\to$label, $V{=}1024$, so each
 fact is $10$ bits of arbitrary lookup), $K = N\log_2 V - \sum\text{CE}/\ln 2$. A $917$k-parameter MLP
 ($\rho{=}0.5$) is loaded with 128k base facts (base recall only $0.744$---``saturated'' is relative), then
 adapted. \textbf{The reserve is a dense fp32 mask}: this is why everything here is a mechanism
 demonstration. Single seed; LoRA uses a fixed scale $2.0$ (not the standard $\alpha/r$ of \citet{lora}) with
 its learning rate tuned down per load to compensate; it also uses AdamW \citep{adamw} weight decay $0.01$ (vs FSA's $0$) and sees a
-dense base (recall $\approx\!0.64$) while FSA sees a $50\%$-masked base (recall $0.744$)---so the comparison
-is indicative, not controlled.
-
-\begin{figure}[t]\centering
-\includegraphics[width=0.48\textwidth]{../figures/fig1_retention.pdf}\hfill
-\includegraphics[width=0.48\textwidth]{../figures/fig2_reserve.pdf}
-\caption{\textbf{Left:} masked base retention stays $1.000$ (by construction) while full fine-tuning
-destroys the base. \textbf{Right:} the reserve memorizes up to $\approx 490.6$ kbits, then \emph{declines}
-to $256.5$ kbits at $256$k facts---a maximum under this training budget (fewer exposures per fact as the
-count grows can contribute), not a proven intrinsic ceiling.}
-\label{fig:core}
-\end{figure}
-
-\begin{figure}[t]\centering
-\includegraphics[width=0.95\textwidth]{../figures/fig3_vs_lora.pdf}
-\caption{\textbf{FSA vs.\ tuned LoRA.} Left: LoRA's capacity scales with rank and \emph{exceeds} FSA's
-reserve maximum at $r\ge 256$. Right: counted in the representation actually trained (fp32), LoRA is
-\emph{more} storage-efficient ($\kappa\!\approx\!0.057$ at $r{=}64$ vs FSA $\approx\!0.033$). These are dense fp32 mechanism results; the position-inclusive ternary
-patch comparison on a real model is separate (\S\ref{sec:real}).}
-\label{fig:lora}
-\end{figure}
+dense base. Full fine-tuning and rank-16 LoRA start with base recall about $0.999$--$1.000$;
+LoRA ranks 64, 256, and 1024 start at about $0.64$. FSA sees a $50\%$-masked base with recall
+$0.744$, so the comparison is indicative, not controlled.
+\par
+\end{samepage}
 
 \textbf{Retention and reserve (Fig.~\ref{fig:core}).} Masked retention is exactly $1.000$; full fine-tuning
 goes below random. The reserve fills to $490.6$ kbits and then declines.
@@ -185,6 +169,26 @@ goes below random. The reserve fills to $490.6$ kbits and then declines.
 \textbf{LoRA (Fig.~\ref{fig:lora}).} With its learning rate tuned, LoRA learns facts well and at $r\ge256$ acquires
 \emph{more} than FSA's maximum; counted honestly in fp32 it is also \emph{more} storage-efficient. The smaller ternary patches measured in \S\ref{sec:real} do not change this
 fp32 result. Dividing fp32 knowledge by hypothetical trit storage would not be a valid comparison.
+
+\begin{figure}[ht]\centering
+\includegraphics[width=0.48\textwidth]{../figures/fig1_retention.pdf}\hfill
+\includegraphics[width=0.48\textwidth]{../figures/fig2_reserve.pdf}
+\caption{\textbf{Left:} masked base retention stays $1.000$ (by construction) while full fine-tuning
+destroys the base. Full-fine-tuning retention is clipped at $-0.3$ for display; at 32k facts its
+value is $-1.63$. \textbf{Right:} the reserve memorizes up to $\approx 490.6$ kbits, then \emph{declines}
+to $256.5$ kbits at $256$k facts---a maximum under this training budget (fewer exposures per fact as the
+count grows can contribute), not a proven intrinsic ceiling.}
+\label{fig:core}
+\end{figure}
+
+\begin{figure}[ht]\centering
+\includegraphics[width=0.95\textwidth,trim=0 21bp 0 0,clip]{../figures/fig3_vs_lora.pdf}
+\caption{\textbf{FSA vs.\ tuned LoRA.} Left: LoRA's capacity scales with rank and \emph{exceeds} FSA's
+reserve maximum at $r\ge 256$. Right: counted in the representation actually trained (fp32), LoRA is
+\emph{more} storage-efficient ($\kappa\!\approx\!0.057$ at $r{=}64$ vs FSA $\approx\!0.033$). These are uncontrolled dense fp32 mechanism results with different base recalls; the position-inclusive ternary
+patch comparison on a real model is separate (\S\ref{sec:real}).}
+\label{fig:lora}
+\end{figure}
 
 \textbf{Soft variant (Fig.~\ref{fig:soft}).} Run unmasked, retention \emph{degrades} with load
 ($0.98 \to 0.78$ at $8$k facts $\to 0.12$ at $32$k), bought with full base-input replay. We describe this as
@@ -206,17 +210,21 @@ Each routed expert has a $2304\!\times\!384$ up projection, squared ReLU, and a
 $384\!\times\!2304$ down projection, stored as \texttt{pair8} trits times frozen per-row scales.
 We patch layers 14--15, all 128 experts, both projections: a broad footprint with 66,807,179 free slots
 inside already-active pairs. Base support, scales, pair occupancy, router, and all other parameters
-remain frozen. Ternary births take value $\pm\alpha$ for row scale $\alpha$. The fp4 variant uses an
-E2M1 four-bit float grid times $\alpha$, with step $0.25\alpha$ and cap $1.5\alpha$; it leaves the
-ternary codebook. Evaluation decodes experts to bf16. Legal ternary patches could use the same packed
+remain frozen. Plain ternary births take value $\pm\alpha$ for row scale $\alpha$. The block-scale
+arm keeps ternary signs but multiplies them by learned magnitudes, one per row and 16 input columns,
+initialized at $0.5\alpha$. Its values leave $\{-\alpha,0,+\alpha\}$; the packed-format and
+no-new-parameter claims do not cover this arm. The fp4 variant uses magnitudes
+$\{0,0.125,0.25,0.375,0.5,0.75,1,1.5\}\alpha$ (the E2M1 grid scaled by $0.25\alpha$),
+with minimum nonzero magnitude $0.125\alpha$ and cap $1.5\alpha$; it leaves the ternary codebook. Evaluation decodes experts to bf16. Legal ternary patches could use the same packed
 kernel, but that serving path was not benchmarked.
 
 The task has 40 synthetic facts about a fictional person (favorite cheese, boat's name, house number).
 Training lasts 300 steps with answer-token-only loss: three of 12 phrasing templates are sampled per
 fact per step, comprising three plain sentences and nine augmented forms, including
 ``Question:/Answer:'' and ``User:/Assistant:''. Two further phrasings and $16\!\times\!512$ general-text
-windows provide validation monitoring and checkpoint selection. Test recall is exact-match greedy
-recall on two phrasings never used in training or validation: ``Q: What is X's attr? A:'' and
+windows provide validation monitoring and checkpoint selection. Test recall is scored under teacher forcing: given the prompt, the model's greedy (argmax) prediction
+must match every answer token; termination and extra generated text are not tested. Recall is measured
+on two phrasings never used in training or validation: ``Q: What is X's attr? A:'' and
 ``A little-known fact about X: her attr is''. The Q/A form is held out verbatim but resembles trained
 question/answer formats. There are 80 test items; one item is 1.25 percentage points, and the unpatched
 model gets 0/80. Damage is mean per-token $\Delta$NLL relative to the base on 40 disjoint 512-token
@@ -224,8 +232,8 @@ WikiText windows (about 20k tokens), with paired standard error (SE) over window
 All results are single-seed; Table~\ref{tab:real} reports step 300.
 
 \subsection{A chaos floor for KL}
-Random, untrained ternary flips produce a KL floor while held-out NLL stays within $\pm0.005$ of the
-base in every case (Table~\ref{tab:chaos}). A single layer-15 zero in one expert's down projection
+Random, untrained ternary flips produce a KL floor while held-out NLL stays within about 0.01 nats
+of the base (range $-0.010$ to $+0.005$ relative to base NLL 2.890; Table~\ref{tab:chaos}). A single layer-15 zero in one expert's down projection
 illustrates the bf16 threshold: changes at most $0.01\alpha$ round away; a full trit changes about 6\%
 of top-1 tokens. Two different single flips disagree with each other by KL 0.027, as much as either
 with the base, and divergence is flat across sequence position. These observations suggest a different
@@ -235,7 +243,7 @@ propagated through recurrent state, are a plausible driver, not a proven explana
 \begin{table}[t]\centering\small
 \begin{tabular}{lrrr}\toprule
 Random flips & Layer 2 KL & Layer 15 KL & Layer 28 KL\\\midrule
-1 & 0.027 & 0.022 & 0.007\\
+1 & 0.027 & 0.023 & 0.007\\
 1,000 & 0.027 & 0.023 & 0.015\\
 1,000,000 & 0.028 & 0.026 & 0.023\\\bottomrule
 \end{tabular}\qquad
@@ -245,14 +253,15 @@ $\varepsilon\le0.01$ & 0 & 1.000\\
 $\varepsilon=0.1$ & 0.0105 & 0.978\\
 $\varepsilon=1$ & 0.0238 & 0.939\\\bottomrule
 \end{tabular}
-\caption{Untrained perturbations (single seed). Left: random free-slot flips. Right: one layer-15
+\caption{Untrained perturbations (single seed). Top: random free-slot flips in down projections. Bottom: one layer-15
 weight changed by $\varepsilon\alpha$; small changes are absorbed by bf16 rounding.}
 \label{tab:chaos}
 \end{table}
 \begin{figure}[t]\centering
-\includegraphics[width=0.90\textwidth,trim=0 26 0 0,clip]{../figures/fig_chaos_floor.pdf}
+\includegraphics[width=0.90\textwidth]{../figures/fig_chaos_floor.pdf}
 \caption{KL against the number of random ternary flips in free down-projection slots at layers 2,
-15, and 28 (left), and against a single-weight change relative to its row scale (right). NLL remains within $\pm0.005$ of base for the random flips.}
+15, and 28 (left), and against a single-weight change relative to its row scale (right). Held-out NLL remains within about 0.01 nats of base
+(range $-0.010$ to $+0.005$ relative to 2.890) for the random flips.}
 \label{fig:chaos}
 \end{figure}
 
@@ -271,7 +280,7 @@ Ternary Bop, $\tau=0.7$ & 100\% (80/80) & $+0.0266\pm0.0035$ & 812,420\\
 Ternary Bop, $\tau=0.9$ & 100\% (80/80) & $+0.0314\pm0.0033$ & 588,673\\
 Ternary learn-then-prune, decay 0.3 & 91.25\% (73/80) & $+0.0250\pm0.0032$ & 542,205\\
 Ternary learn-then-prune, decay 0.1 & 93.75\% (75/80) & $+0.0667\pm0.0035$ & 1,857,504\\
-Ternary + block scales (16), decay 0.3 & 87.5\% (70/80) & $+0.0282\pm0.0031$ & 1,125,769\\
+Signs + learned block scales (16), decay 0.3 & 87.5\% (70/80) & $+0.0282\pm0.0031$ & 1,125,769\\
 Fp4 + local penalty $\lambda=10$, decay 0.1 & 96.25\% (77/80) & $+0.0050\pm0.0015$ & 21,265,606\\
 LoRA $r=16$ + local penalty $\lambda=100$ & 97.5\% (78/80) & $+0.0005\pm0.0018$ & 22,020,096\\
 LoRA $r=16$, unregularized & 97.5\% (78/80) & $+0.936\pm0.030$ & 22,020,096\\\bottomrule
@@ -294,9 +303,12 @@ LoRA's point estimate, although that estimate is near zero. Fp4 is closest to Lo
 is far more damaging ($+0.94$) than any FSA run. Plain ternary writers achieve their moderate damage
 without a penalty term; the ternary magnitude pin bounds how far a slot can move.
 
-\begin{figure}[t]\centering
+\begin{figure}[!t]\centering
 \includegraphics[width=0.85\textwidth]{../figures/fig_e2e_frontier.pdf}
-\caption{Held-out recall against general-text $\Delta$NLL (log horizontal axis, SE bars).
+\caption{Held-out recall against general-text $\Delta$NLL (log horizontal axis, paired-SE bars).
+Error bars extending below zero are truncated on the log axis; LoRA + penalty's interval includes zero. Protocol as
+in Table~\ref{tab:real}: answer-only loss, 12 augmented formats, recall on two held-out phrasings
+(one Q/A), $\Delta$NLL on 40 disjoint 512-token WikiText windows.
 Besides Table~\ref{tab:real}, late-layer arms use layer 28, down only, with a 2M-slot budget:
 gain-minus-cost ternary selection gives 60\%/$+0.064$, continuous bf16 slots 48.75\%/$+0.047$,
 and same-placement regularized LoRA 37.5\%/$+0.0014$. All are single-seed.}
@@ -313,20 +325,22 @@ Fp4 + penalty, 21.3M slots & 18 MB & 80 MB\\
 Block-scale run, 1,125,769 slots & 1.2 MB + block scales & 3.8 MB + block scales\\\bottomrule
 \end{tabular}
 \caption{Position-inclusive storage estimates. Ternary indexed storage uses a 26-bit index per slot
-plus its sign. Block scales (one per 16 slots) add about 113 MB in fp32 as implemented, larger than
+plus its sign. Block scales (one per row and 16 input columns) add about 113 MB in fp32 as implemented, larger than
 the adapter. LoRA has 22,020,096 parameters: 44 MB in bf16, 88 MB in fp32 as trained.}
 \label{tab:storage}
 \end{table}
 \begin{figure}[t]\centering
 \includegraphics[width=0.85\textwidth]{../figures/fig_e2e_storage.pdf}
-\caption{Recall against patch size: FSA counts entropy-coded positions and values; LoRA counts bf16
-parameters. The plot excludes the block-scale run's learned scales, which as implemented exceed the
-adapter's size.}
+\caption{Recall against patch size. Sizes count slot positions, not only values: FSA is entropy-coded
+positions plus values; LoRA counts bf16 parameters. The plot includes the learned fp32 block scales,
+bringing that run to about 114 MB, larger than the adapter.}
 \label{fig:storage}
 \end{figure}
 
-Plain ternary patches are about 15--50 times smaller than the 44 MB bf16 adapter, depending on position
-coding (Table~\ref{tab:storage}); fp4 at 18--80 MB is not a small patch. Merged ternary FSA adds no
+Bop $\tau=0.7$ is about 15--50 times smaller (16--49 times using unrounded estimates) than the
+44 MB bf16 adapter, depending on position coding (Table~\ref{tab:storage}). Across the plain ternary
+patches the ratios range about 7--69 times, with learn-then-prune decay 0.1 giving the lowest ratio
+and decay 0.3 the highest; fp4 at 18--80 MB is not a small patch. Merged plain ternary FSA adds no
 parameters, tensors, or compute, retaining legal packed values; revocation requires the diff or original
 pack. Unmerged LoRA adds a low-rank matrix multiplication per patched expert; merged LoRA requires
 dense bf16 expert weights and forfeits the ternary packed format. On this fact task, regularized LoRA
@@ -335,8 +349,10 @@ patch, unchanged inference structure, and exact revoke. Multi-session concepts r
 
 On isolated decoded experts with a synthetic random-fact probe, the ternary reserve learned about
 500 facts per expert at about 100\% accuracy and revoked bit-exactly, but realized only 0.03--0.07
-knowledge bits per slot versus 1.1--1.4 for float slots. Its 8--20 times lower weight-level output
-interference than LoRA at matched knowledge did not carry over to end-to-end general-text damage:
+knowledge bits per slot versus 1.1--1.4 for float slots. In a separate comparison at about 2,000 facts,
+the full ternary reserve (all structural zeros, requiring a sidecar outside the codebook) had 8--20
+times lower weight-level interference than LoRA $r{=}16$/$r{=}64$ under the same drift penalty at
+matched knowledge. That metric is isolated output drift, distinct from end-to-end general-text damage;
 on the full model, LoRA with a penalty is better.
 
 \subsection{Writers}
@@ -351,8 +367,8 @@ If $q_j\ne0$, $|m_j|>\tau$, and $\operatorname{sign}(m_j)=q_j$, death sets $q_j\
 the gradient says the current sign hurts. Reset $m_j$ to zero after each change. Thresholds are 0.7 or
 0.9 times the RMS of the first answer-loss gradient over free slots, with no penalty or decay. The
 threshold controls flips: small gradients need not become full $\pm\alpha$ steps, unlike Adam's
-per-coordinate normalization, which can turn persistent small gradients into full flips. Nearly all
-births occur within 50 steps (812,077 of the final 812,420 at $\tau=0.7$). Higher $\tau$ uses fewer
+per-coordinate normalization, which can turn persistent small gradients into full flips. The
+slots are filled early: 812,077 slots were filled at step 50 (812,420 at step 300) at $\tau=0.7$. Higher $\tau$ uses fewer
 slots (589k) at slightly higher damage, so it is not a simple damage dial.
 
 \textbf{Learn-then-prune.} Each free slot has an fp32 master $w_j$ in row-scale units. Forward uses
@@ -361,25 +377,36 @@ $q_j=\operatorname{sign}(w_j)\mathrm{I}(|w_j|>0.5)$; where $\mathrm{I}$ is the i
 The model learns early: at step 50 validation recall is 97.5\%, with 20.3M filled slots and validation
 $\Delta$NLL $+2.2$. Decay pulls weakly supported masters under threshold: 3.2M slots at step 100,
 1.1M at 150, and 0.54M at 300. Validation damage falls to about $+0.02$ and validation recall stays
-100\%; test recall is separately 91.25\%. Damage was still falling; longer pruning may help (untested).
+100\%; test recall is separately 91.25\%. Held-out damage fell from $+0.0282$ at step 250 to
+$+0.0250$ at step 300, while validation damage rose slightly ($+0.016 \to +0.018$).
+Whether longer pruning helps is untested.
 
+\begin{samepage}
 \textbf{Fp4 slots and local output penalty.} Four-bit float slots times $\alpha$ use AdamW decay 0.1
 and add the general-text penalty
 \[
 \lambda\frac{\sum_{l,t}\|x_t\Delta W_l^T\|^2}{\sum_{l,t}\|x_tW_l^T\|^2},\qquad\lambda=10,
 \]
 where $l$ ranges over patched linear projections, $t$ over general-text tokens, $x_t$ is the input to
-that projection, $W_l$ is its frozen base weight, and $\Delta W_l$ is the patch. This smooth local
-penalty measures direct output change relative to base output energy without looking beyond the
-patched linear, so downstream routing chaos cannot reach it. The best LoRA run uses the same penalty
+that projection, $W_l$ is its frozen base weight, and $\Delta W_l$ is the patch. The denominator,
+base-weight output energy on the current inputs, is treated as a constant normalizer and is not
+differentiated. This smooth local
+penalty compares each patched projection's direct output change rather than final logits,
+so it avoids the chaos floor's whole-model divergence. Its inputs still come from the patched forward
+pass: earlier patched layers can change later inputs and routing. The best LoRA run uses the same penalty
 with $\lambda=100$. For ternary slots it is ineffective: gradient is zero at zero, yet one birth costs a
 full $\alpha^2\mathbb{E}[x^2]$; at the strength LoRA needs, it stops ternary learning entirely.
+\par
+\end{samepage}
 
-\begin{figure}[t]\centering
+\begin{figure}[!t]\centering
 \includegraphics[width=0.90\textwidth]{../figures/fig_e2e_trajectory.pdf}
 \caption{Validation recall, validation $\Delta$NLL (symmetric log scale), and filled slots (millions,
-log scale) across training for learn-then-prune, Bop $\tau=0.7$, and regularized LoRA.
-Validation trajectories differ from the held-out test endpoints in Table~\ref{tab:real}.}
+log scale) across training. The recall and damage panels show learn-then-prune, Bop $\tau=0.7$,
+and regularized LoRA; the filled-slot panel shows only the two FSA writers.
+Bop's filled-slot count is set by its threshold early and then stays flat, while learn-then-prune
+fills many slots first and sheds them over training. Validation trajectories differ from the held-out
+test endpoints in Table~\ref{tab:real}.}
 \label{fig:trajectory}
 \end{figure}
 
@@ -391,15 +418,17 @@ starved capacity (19--29\% recall). Damage uses a large held-out pool, with chec
 separate validation pool.
 
 \textbf{What did not work.} KL penalties fight the chaos floor and cost recall. Ternary slots with
-smooth penalty and decay peak in recall, then are pruned away. Tiny fp4 values below bf16 resolution
-at the base scale never learn (0\%). Patch-only learned block scales are no better than plain ternary
+smooth penalty and decay peak in recall, then are pruned away. Tiny fp4 slots in late layer 28,
+down only, with a 2M-slot budget and grid magnitudes starting at $0.03125\alpha$, fill about 2.0M
+slots but yield 0\% recall at $+0.0067$ damage: the patch changed the model but learned none of
+the tested answers. Patch-only learned block scales are no better than plain ternary
 (87.5\%/$+0.028$) and add substantial storage. Single-late-layer continuous bf16 slots give
 48.75\%/$+0.047$, versus same-placement LoRA's 37.5\%/$+0.0014$: a recall--damage trade, not an
 overall improvement over LoRA. Gain-minus-cost ternary slot selection there gives 60\%/$+0.064$.
 
 \endgroup
 
-\section{A proposed direction (untested): multi-session personal learning}
+\section{A proposed direction (untested): multi-session learning}
 \label{sec:direction}
 The ternary reserve now carries facts on a real model (\S\ref{sec:real}). A revocable domain patch
 is therefore demonstrated for this task: enable the slice for its domain; disable it to recover the base.
@@ -420,11 +449,21 @@ experiment offers smaller patches at greater damage, not a general personalizati
 
 The pre-registered EP-1 experiment is in progress and explicitly \textbf{untested}: five sessions with
 a synthetic user containing 40 policies, recurrent facts, and one-off ``lure'' facts, consolidating
-self-study into free ternary slots. Success criteria fixed in advance are concept gain of at least
-10 percentage points over the unpatched model on held-out probes, lure recall no more than 5 points
-above it, mean general-text $\Delta$NLL at most $+0.01$ nats, retention across sessions, and exact revoke.
-The comparator is regularized LoRA at the same placement; thresholds for ``match'' and ``beat'' LoRA
-were fixed before the run. One seed is a pilot. Neither multi-session concept learning nor on-device
+self-study into free ternary slots. An identifiability gate requires the in-context ceiling to beat
+the unpatched model by at least 10 concept points on development probes; otherwise nothing is scored.
+Success criteria fixed in advance require, after session 5, concept gain of at least 10 percentage
+points over the unpatched model on held-out probes, lure recall no more than 5 points above it, and
+mean general-text $\Delta$NLL at most $+0.01$ nats with a paired 95\% damage interval excluding
+$+0.05$. Final concept accuracy must retain at least 80\% of the best earlier session's accuracy,
+with no upward ratchet in lure recall (monotone non-decreasing with a net increase).
+
+The pre-registered revoke criterion requires every patched weight tensor to be bitwise equal to the
+base and format-legal, logits on 32 fixed prompts within $10^{-2}$ of the base, and concept/lure
+metrics back to the base within noise. Exact logit equality is reported separately; it was observed
+when switching patches off in the fact experiment (\S\ref{sec:real}). The comparator is regularized
+LoRA at the same placement. ``Match LoRA'' means within 3 concept points and no more than $+0.005$
+extra damage, with the lure constraint held and revoke passing; ``beat LoRA'' means at least 5 more
+concept points with damage no worse than LoRA. One seed is a pilot. Neither multi-session concept learning nor on-device
 training is established: optimizer state can be large even when a final patch is small. A broader
 evaluation should include local retrieval and per-user adapters on personalization benchmarks
 \citep{lamp}, with unlearning measured \citep{sisa,tofu}.

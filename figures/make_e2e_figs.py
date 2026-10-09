@@ -92,6 +92,9 @@ def storage():
             p = n / S
             h = -(p * math.log2(p) + (1 - p) * math.log2(1 - p)) if 0 < p < 1 else 0
             mb = (S * h + n * vb) / 8 / 1e6  # entropy-coded positions + values
+            if d.get("patch_scale") == "block":
+                block_scales = (d["patch_bytes"] * 8 - S * math.log2(3)) / 32
+                mb += 32 * block_scales / 8 / 1e6  # learned fp32 block scales
         rows.append((name, label, c, m, mb, y, x))
     fig, ax = plt.subplots(figsize=(7.2, 4.4))
     soff = {"v7_fsa_all_bop_t09": (6, 6), "v7_fsa_all_bop_t07": (6, -11), "v6_lora_L1415_loc100": (-6, 8),
@@ -119,7 +122,7 @@ def chaos_floor():
         a.plot([k for k, _ in pts], [v for _, v in pts], "-o", color=cols[layer], ms=4, label=f"MoE layer {layer}")
     a.set_xscale("log")
     a.set_ylim(0, 0.032)
-    a.set_xlabel("random ternary flips in free slots (down_proj)")
+    a.set_xlabel("random ternary flips in free down-projection slots")
     a.set_ylabel("KL to the unpatched model (nats/token)")
     a.set_title("One flip already costs most of the KL", loc="left", fontsize=10)
     a.legend(frameon=False, fontsize=8)

@@ -25,7 +25,7 @@ if fsa and ft:
     ax.plot([r["n_b"] / 1000 for r in ft], [max(r["retention_mask"], -0.3) for r in ft], "s--", color=C["fullft"], lw=2.2, ms=7, label="full fine-tune")
     ax.axhline(1.0, color="#9ca3af", lw=0.8, ls=":"); ax.text(xb[-1], 1.01, "perfect", color="#6b7280", fontsize=8, ha="right")
     ax.axhline(0.0, color="#9ca3af", lw=0.8, ls=":"); ax.text(xb[-1], 0.02, "random (base destroyed)", color="#6b7280", fontsize=8, ha="right")
-    ax.set_xlabel("new knowledge poured into the reserve  (thousands of facts)")
+    ax.set_xlabel("new facts in the reserve (thousands)")
     ax.set_ylabel("base knowledge retained  (fraction)")
     ax.set_title("Base is SATURATED, then we adapt", fontsize=11, loc="left")
     ax.set_ylim(-0.35, 1.12); ax.legend(frameon=False, loc="center right")
@@ -38,7 +38,7 @@ if fsa:
     ax.plot([r["n_b"] / 1000 for r in fsa], [r["KB_after"] / 1000 for r in fsa], "o-", color=C["fsa"], lw=2.2, ms=7)
     ax.set_xlabel("new facts presented to the reserve  (thousands)")
     ax.set_ylabel("new knowledge acquired  (kbits)")
-    ax.set_title("Reserve capacity (free-slot ceiling)", fontsize=11, loc="left")
+    ax.set_title("Reserve capacity (observed maximum)", fontsize=11, loc="left")
     fig.tight_layout(); fig.savefig("fig2_reserve.pdf"); fig.savefig("fig2_reserve.png", dpi=160)
     print("fig2_reserve written")
 

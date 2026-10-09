@@ -46,8 +46,10 @@ Patch sizes count slot positions as well as values: the low figure entropy-codes
 - **The ternary Bop writer recalls every held-out fact**, more than LoRA, from a patch 15–50× smaller than a bf16 LoRA at zero
   inference overhead. It pays for it in general-text damage (+0.027 nats, ~2.7% perplexity), which is the open problem now.
 - **fp4 slots with a smooth penalty** come closest to LoRA on both axes at once, at the cost of leaving the ternary format.
-- On this fact task LoRA remains the lower-damage method. The task FSA was built for is concepts accumulated across
-  sessions; that is the EP-1 experiment in [`experiments/epigenesis/`](experiments/epigenesis/).
+- **Where each method stands today:** FSA has the higher recall, the much smaller patch and no inference cost; LoRA has
+  the lower general-text damage. Bop plus the local penalty is aimed at closing that last gap (runs in progress). The
+  task FSA was built for, concepts accumulated across sessions, is the EP-1 experiment in
+  [`experiments/epigenesis/`](experiments/epigenesis/).
 
 ## Best algorithms so far
 
@@ -88,7 +90,7 @@ Epigenetic changes alter how a genome is expressed without changing the DNA, and
 
 ## The one-line idea
 
-**`pair8`'s format rule** forces at least half of every block's weights to zero (ternary alone doesn't). Those zeros can instead hold a new skill: **freeze the learned weights, write new knowledge only into the zero slots, and keep a mask marking which slots belong to which skill.** The *masked* base is preserved exactly and the logical tensor shape is unchanged — but filling zeros **costs storage** (added bytes once a block's 2-of-4 codebook is full), so this is a **trade against compression, not free capacity**, and (per our own numbers) a cost-structure story rather than a win over LoRA.
+**`pair8`'s format rule** forces at least half of every block's weights to zero (ternary alone doesn't). Those zeros can instead hold new knowledge: **freeze the learned weights, write new knowledge only into the zero slots, and record which slots were written.** The base is preserved exactly and the logical tensor shape is unchanged. Filling zeros does **cost storage** (the patch has to record which slots it filled, see the sizes above), so it is a trade against compression, not free capacity.
 
 This is [PackNet](https://arxiv.org/abs/1711.05769) (train → prune → freeze → train the freed weights) — except the pruning is already done *by the quantization format*, in a known structural pattern, on a model that is already small.
 
@@ -118,7 +120,7 @@ Those guaranteed zeros are a **reserve.** Reusing them is cheap in two narrow se
 | extra **compute (FLOPs)** | **0** *on a dense GEMM* | **kernel-conditional** — a pair-sparse kernel (the point of the format) does *more* work once zeros are filled |
 | extra **storage** | **not free** — ~`1.58` bits/filled weight (a pre-assigned ternary pair) + addresses + mask | filling zeros *de-compresses* the file; it's a compression↔capacity **dial** |
 
-Two honest limits: (1) at ρ=0.5 a block already using its 2-of-4 pairs has **no in-codebook room** for more — the full reserve requires a **sidecar** (patches that leave `pair8`), so the writable reserve is *not* a free `(1−ρ)·N`. (2) Whether a filled reserve beats a LoRA adapter per bit-of-knowledge is **empirical** — and [our numbers say LoRA wins](#results), so this is a cost-structure story, not a slogan.
+Two honest limits: (1) at ρ=0.5 a block already using its 2-of-4 pairs has **no in-codebook room** for more — the full reserve requires a **sidecar** (patches that leave `pair8`), so the writable reserve is *not* a free `(1−ρ)·N`. (2) Whether a filled reserve beats a LoRA adapter is **empirical**: in the toy fp32 study below LoRA stored more, while on the real 8B model ternary FSA has the higher recall and the smaller patch but more damage (see [the real-model status](#status-on-the-real-8b-model-2026-10-09)).
 
 ## How Free-Slot Adaptation (FSA) works
 
@@ -150,7 +152,11 @@ Inference:   base      → reserves OFF, use W on S₀ only.      # the base is 
 
 **Mask cost.** 1 bit / weight / domain for an arbitrary slice, or **~0** if `R_d` follows a fixed structural rule (domain *d* owns a fixed subset of the inactive pairs). *T* domains ⇒ ≤ *T* bits/weight. For a small domain the 1-bit mask can *dominate* the knowledge it gates, so the structural rule is what keeps FSA storage-competitive — this is part of what fig 3 measures.
 
-## Results
+## Earlier synthetic mechanism study (toy MLP, dense fp32)
+
+Everything from here down to "Reproduce" is the **first, pre-real-model study**: a 917k-parameter MLP with **dense fp32
+weights** and a random 50% mask, used to isolate the freezing mechanism. Its LoRA comparison is about that toy setup,
+not about ternary FSA on the real model, which is reported above.
 
 Synthetic knowledge-capacity assay (disjoint fact sets A→B; `K = retained bits = N·log₂V − ΣCE/ln2`), base **saturated** with 128k facts, then adapted. Dense weights + a fixed mask isolate the *mechanism*.
 
@@ -177,7 +183,7 @@ Synthetic knowledge-capacity assay (disjoint fact sets A→B; `K = retained bits
   <img src="figures/fig3_vs_lora.png" width="860" alt="FSA vs tuned LoRA: capacity and storage efficiency">
 </p>
 
-The honest picture: **LoRA is more capable** (at r≥256, tuned, it out-acquires FSA's ~490 kbit maximum) **and, counted in the representation we actually train (fp32), more storage-efficient** (κ≈0.057 at r=64 vs FSA ≈0.033). A ternary-reserve advantage is only a **prediction** contingent on [Gate 0](ROADMAP.md), and whether it holds is **genuinely open** — the format assay measures *from-scratch* QAT, not a *frozen-base* reserve, so it can't forecast this, and even a pessimistic ternary yield needn't fall below LoRA. We retract an earlier "~10× storage win," which divided fp32 knowledge by hypothetical trit storage (a unit conversion, flagged by both reviewers). Full numbers in [`results/RESULTS.md`](results/RESULTS.md).
+In this toy, fp32 setting, **tuned LoRA stored more** (at r≥256 it out-acquires the reserve's ~490 kbit maximum) **and was more storage-efficient counted in fp32** (κ≈0.057 at r=64 vs ≈0.033). This toy result does not carry over to the real model, where the reserve is ternary and the comparison is above. A ternary-reserve advantage is only a **prediction** contingent on [Gate 0](ROADMAP.md), and whether it holds is **genuinely open** — the format assay measures *from-scratch* QAT, not a *frozen-base* reserve, so it can't forecast this, and even a pessimistic ternary yield needn't fall below LoRA. We retract an earlier "~10× storage win," which divided fp32 knowledge by hypothetical trit storage (a unit conversion, flagged by both reviewers). Full numbers in [`results/RESULTS.md`](results/RESULTS.md).
 
 > *(An earlier run also showed LoRA "collapsing" at larger N — an LR-instability artifact; LoRA's effective LR must scale down with fact-load. Re-tuned here.)*
 
@@ -213,7 +219,7 @@ Both are modes in [`src/freeslot.py`](src/freeslot.py) (`soft`, `softfreeze`); f
 | structure | cross-weight **low-rank** residual | in-weight **sparse** reserve |
 | base at inference | frozen; residual **always on** | frozen; reserve **masked per domain** (base always present) |
 | exact zero-forgetting | only if residual disabled for base | **yes**, with the base mask |
-| strongest at | global / stylistic shift | localized / factual knowledge |
+| measured on the real 8B (facts) | 97.5% recall, +0.0005 damage, 44 MB | **100% recall** (Bop), +0.027 damage, 0.9–2.7 MB |
 
 **They are in principle stackable** — LoRA for low-rank cross-weight adaptation *plus* FSA for sparse in-weight capacity — but we have **not** tested the stack yet.
 
@@ -222,7 +228,7 @@ Both are modes in [`src/freeslot.py`](src/freeslot.py) (`soft`, `softfreeze`); f
 - **Free:** new parameters (0), extra compute/FLOPs (0), extra tensors/kernels (0), base forgetting under the mask (0).
 - **Not free:** **storage** — filling zeros de-compresses the file (~1.088 bits/weight written + mask); it's a *compression↔capacity dial*. And you need **task-ID** at inference for the hard-mask variant.
 - **Bounded:** reserve capacity (κ-limited, degrades if overfilled).
-- **Being measured, not assumed:** whether FSA beats LoRA per bit-of-knowledge (fig 3); real-model validation (synthetic assay so far).
+- **Being measured, not assumed:** closing FSA's general-text damage gap to LoRA (Bop + local penalty, in progress); concept accumulation across sessions (EP-1).
 
 ## Reproduce
 
