@@ -1,0 +1,21 @@
+[
+ {
+  "key": "moe0.expert0",
+  "n_b": 2000,
+  "KB": 19999.99988184794,
+  "accB": 1.0,
+  "interference": 90.90876007080078,
+  "relnorm_up": 4.97396183013916,
+  "relnorm_down": 1.2814265489578247,
+  "revoke_exact": true,
+  "reserve_slots": 1141599,
+  "reserve_filled": 0,
+  "extra_storage_bits": 5505024.0,
+  "extra_storage_KB": 672.0,
+  "drift_lambda": 0.0,
+  "phi": "relu2",
+  "seed": 0,
+  "method": "lora_r64a16",
+  "secs": 41.14697241783142
+ }
+]

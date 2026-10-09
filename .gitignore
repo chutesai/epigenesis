@@ -1,0 +1,83 @@
+# Whitelist: only the public file set is tracked. Everything else (scratch runs, unlinked figures,
+# review transcripts, caches) stays local. To publish a new file, add an explicit "!" line below.
+/*
+
+!/.gitignore
+!/README.md
+!/LICENSE
+!/requirements.txt
+!/ROADMAP.md
+
+!/results/
+/results/*
+!/results/RESULTS.md
+
+!/src/
+/src/*
+!/src/freeslot.py
+!/src/gate0.py
+!/src/kappa_binary.py
+
+!/paper/
+/paper/*
+!/paper/freeslot.tex
+!/paper/refs.bib
+!/paper/freeslot.pdf
+
+# figures linked from the README / paper, and the scripts that regenerate them
+!/figures/
+/figures/*
+!/figures/epigenetic-llm.jpg
+!/figures/freeslot_html_render.png
+!/figures/fig1_retention.png
+!/figures/fig1_retention.pdf
+!/figures/fig2_reserve.png
+!/figures/fig2_reserve.pdf
+!/figures/fig3_vs_lora.png
+!/figures/fig3_vs_lora.pdf
+!/figures/fig4_soft.png
+!/figures/fig4_soft.pdf
+!/figures/make_figs.py
+!/figures/make_figs2.py
+
+!/experiments/
+/experiments/*
+
+# data behind fig1 (make_figs.py)
+!/experiments/saturate_then_adapt/
+/experiments/saturate_then_adapt/*
+!/experiments/saturate_then_adapt/*.json
+
+# data behind fig2-4 (make_figs2.py) and the linked PackNet baseline
+!/experiments/capacity/
+/experiments/capacity/*
+!/experiments/capacity/*.json
+
+# real lambda experts: findings, harness, decoder, the linked controlled-Pareto figure and its data
+!/experiments/real_lambda/
+/experiments/real_lambda/*
+!/experiments/real_lambda/FINDINGS.md
+!/experiments/real_lambda/real_fsa.py
+!/experiments/real_lambda/decode_dump.py
+!/experiments/real_lambda/make_pareto2_fig.py
+!/experiments/real_lambda/fig_controlled_pareto.png
+!/experiments/real_lambda/pz_*.json
+
+# end-to-end living-model experiments on the full 8B
+!/experiments/end_to_end/
+/experiments/end_to_end/*
+!/experiments/end_to_end/E2E_FINDINGS.md
+!/experiments/end_to_end/e2e_fsa.py
+
+# never, anywhere
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.ipynb_checkpoints/
+.DS_Store
+*.aux
+*.log
+*.out
+*.synctex.gz
+
+ROADMAP.md

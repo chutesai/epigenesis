@@ -1,0 +1,261 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!55!black,citecolor=blue!45!black,urlcolor=blue!55!black]{hyperref}
+\usepackage{natbib}
+\usepackage{titlesec}
+\titlespacing*{\section}{0pt}{1.1em}{0.5em}
+\titlespacing*{\subsection}{0pt}{0.8em}{0.3em}
+
+\newcommand{\Sz}{\mathcal{S}_0}
+\newcommand{\Zz}{\mathcal{Z}_0}
+\newcommand{\Rd}{\mathcal{R}_d}
+
+\title{\vspace{-2em}\textbf{Epigenetic Language Models: Lifelong Learning by\\ Intercalating Knowledge into Structural Zeros}\\[0.3em]\large A mechanism study of Free-Slot Adaptation}
+\author{Parallax / Chutes.ai}
+\date{\today}
+
+\begin{document}
+\maketitle
+\vspace{-1.5em}
+
+\begin{center}
+\fbox{\parbox{0.93\textwidth}{\small\textbf{AI-assisted draft.} Generated with AI assistance and revised through repeated
+adversarial review; the experiments were run and checked by the authors. It is a \emph{mechanism
+study}: all results are a \textbf{dense fp32} synthetic-assay demonstration of a freezing mechanism.
+\texttt{pair8}/ternary never enters the adaptation loop, and no real model is evaluated in this paper. The personal-model use
+case (\S\ref{sec:direction}) is an \emph{untested proposal}, not a result. Code:
+\texttt{github.com/chutesai/epigenesis}.}}
+\end{center}
+
+\begin{abstract}
+We call a model \emph{epigenetic} if what it learns after deployment never edits its base weights: acquired
+knowledge lives in a separate sparse layer that can be removed, restoring the original model exactly.
+A \texttt{pair8}-quantized network holds at least half of its weights at structural zero. We study whether
+those zeros can serve as a continual-learning \emph{reserve}: freeze the learned weights, write new
+knowledge only into the zero slots, and recover the old behavior with a per-slice mask. This is exactly
+\citet{packnet}, placed in a format whose zeros are already addressable. On a synthetic knowledge-capacity
+assay we quantify the \emph{mechanism} (dense fp32, random mask): the masked base is preserved exactly (by
+construction), the reserve memorizes random facts up to a measured maximum and then declines, a
+mask-free ``soft'' variant degrades rather than stays flat, and---counted in the representation we actually
+train---tuned LoRA is \emph{both more capable and more storage-efficient}. The contribution is therefore a
+careful, honest characterization of the mechanism and its accounting, plus a scoped proposal: a
+\emph{revocable domain patch} inside a quantized model, whose natural application---a private, continually
+adapting model---we motivate but do not claim to have built. We state precisely what is untested and the
+single experiment (ternary reserve through the real quantizer) that would resolve whether a storage
+advantage exists---an outcome we argue is genuinely open, not forecastable from the format assay.
+\end{abstract}
+
+\section{Introduction}
+Adding knowledge to a trained model usually means adding parameters---a LoRA adapter \citep{lora}, an extra
+expert, or a full fine-tune that risks forgetting. We ask a narrower question: an extreme-quantized model
+has already paid for a pool of weight slots held at zero; can those zeros double as a place to put new
+knowledge?
+
+\textbf{Free-Slot Adaptation (FSA).} Store a model in format $\Phi$ (here \texttt{pair8}: ternary weights,
+at most two of every four aligned pairs non-zero). Let $\Sz$ be the non-zero support and $\Zz$ the zero
+reserve. To learn a new domain $d$: freeze $\Sz$ and shared parameters, train a disjoint slice
+$\Rd \subseteq \Zz$, and store a mask $M_d$. At inference the base uses $\Sz$; domain $d$ uses
+$\Sz \cup \Rd$. The mechanism is \citet{packnet}'s; the only new element is that the free weights come from
+the compression format rather than a pruning pass.
+
+\textbf{What we claim, and what we do not.} We claim a clean characterization of this mechanism on a
+synthetic assay: it preserves the masked base exactly, it memorizes a bounded amount of new material, and
+its cost is a \emph{trade against compression}, not free capacity. We do \emph{not} claim it beats
+parameter-efficient adaptation---our own tuned-LoRA results show the opposite---nor that it is validated on
+a real model or in the ternary format it is motivated by. We are explicit about this throughout, because an
+earlier draft overstated it and adversarial review corrected us.
+
+\textbf{Contributions.} (1) The framing of quantization zeros as a continual-learning reserve, with honest
+accounting of what is free (logical parameter count, dense-kernel FLOPs) and what is not (storage, which
+trades against compression; the mask; the scales). (2) A synthetic assay isolating the mechanism: exact
+masked retention, a measured reserve ceiling and interference regime, a mask-free soft variant, and a
+indicative (uncontrolled) LoRA comparison that we report even though it is unfavorable. (3) A scoped proposal---a revocable
+domain patch inside a quantized model---and an honest discussion of where it could matter (a private,
+continually-learning model) and where retrieval already wins. (4) The gating experiment (ternary reserve
+through the real quantizer) whose outcome is open.
+
+\section{Background and related work}
+\textbf{Mask-based continual learning.} PackNet \citep{packnet} freezes kept weights and trains freed ones,
+recovering a task by its mask; Piggyback \citep{piggyback} \emph{learns masks over fixed weights} (it does
+not refill zeros); HAT \citep{hat} uses hard task-attention and reports \emph{reduced}, not zero,
+forgetting; Supermasks \citep{supermasks} make the mask itself the trainable object; Progressive Networks
+\citep{progressivenn} add and could drop columns. FSA is PackNet with the free support supplied by the
+quantization format. \textbf{Quantized continual learning.} Ada-QPackNet \citep{adaqpacknet} and
+TinySubNets \citep{tinysubnets} already combine PackNet-style capacity reuse with quantization; SPDF
+\citep{spdf} reopens zeroed pretrained weights for dense fine-tuning. These sharply narrow our novelty; our
+distinct element is a reserve \emph{pre-addressed by the deployed format} and composed by union.
+\textbf{Parameter-efficient and continual adapters.} LoRA \citep{lora}, QLoRA \citep{qlora}, QA-LoRA
+\citep{qalora}; \citet{loralearnsless} find LoRA learns and forgets less than full fine-tuning (a possible
+rank explanation, not a theorem); O-LoRA \citep{olora} does continual learning in orthogonal LoRA
+subspaces. \textbf{Sparse / composable adaptation.} Diff pruning \citep{diffpruning} and composable sparse
+fine-tuning \citep{composablesft}; union of \emph{disjoint} sparse supports is the easy case of the latter.
+\textbf{Editing, memory, unlearning.} MEMIT \citep{memit} edits facts in place and can override; FSA adds paths that can
+suppress or correct outputs while enabled but cannot edit a base weight; GRACE \citep{grace} and WISE \citep{wise} keep deletable, routed side-memory for sequential edits
+while freezing the base; SISA \citep{sisa} is exact unlearning by shard isolation; TOFU \citep{tofu}
+benchmarks fictitious-fact forgetting. \textbf{Personalization and retrieval.} OPPU \citep{oppu} attaches a
+per-user PEFT module (removed by user identity, not per record); LaMP \citep{lamp} is a personalization
+benchmark with retrieval baselines; RAG \citep{rag} and kNN-LM \citep{knnlm} store facts externally and
+delete them by dropping a record---the baseline any ``delete a fact'' claim must beat.
+\textbf{Low-bit models.} BitNet b1.58 \citep{bitnet158,bitnet2b4t} and LittleBit \citep{littlebit}; our
+assay methodology follows knowledge-capacity scaling \citep{knowcap}.
+
+\section{Method}
+\subsection{Format and reserve}
+In \texttt{pair8}, weights form aligned blocks of eight (four pairs); each weight is ternary times a scale,
+and at most two pairs per block are non-zero. A block thus has $417$ reachable states
+($1 + 4\!\cdot\!8 + \binom{4}{2}8^2$), i.e. $\log_2 417/8 \approx 1.088$ bits/weight asymptotically
+($1.125$ at a fixed $9$ bits/block), and is $\ge 50\%$ zero \emph{by construction} (ternary alone
+guarantees no such fraction). \textbf{Caveat on the reserve size.} At a density that already uses both
+allowed pairs in a block, that block has \emph{no in-codebook room} for a third pair. So the writable
+reserve is not the full $(1-\rho)N$; either the base must leave pairs unused, or a patch must leave the
+\texttt{pair8} codebook and live in a \emph{sidecar} of \texttt{(block, pair, trit, scale)} entries that the
+kernel applies or skips. A pre-assigned ternary reserve pair costs $\approx \log_2 3 = 1.58$ bits/weight,
+not $1.088$ (that figure is the joint entropy spread over the forced zeros, not the marginal price of a
+filled slot).
+
+\subsection{Adaptation and the soft variant}
+\textbf{Hard FSA, domain $d$:} freeze $W[\Sz]$, all shared parameters, and---crucially for the real
+format---the discrete pair occupancy and the per-row scales; train only $W[\Rd]$ ($\Rd \cap \Sz = \varnothing$)
+with the base live; store $M_d$. Inference: base $\to \Sz$; domain $\to \Sz\cup\Rd$ (needs a task ID).
+\textbf{Soft FSA} removes the task ID: freeze the base, train the reserve with a KL penalty keeping
+base-input outputs unchanged, and run unmasked. This is Learning-without-Forgetting \citep{lwf} on a frozen
+disjoint support, with full base-input replay---a substantial rehearsal resource we note explicitly.
+
+\subsection{Honest accounting}
+FSA adds \textbf{zero new logical parameters} (same element count) and \textbf{zero extra FLOPs on a dense
+GEMM}---but the latter is kernel-conditional: a pair-sparse kernel (the kind the format exists to enable)
+does \emph{more} work once zeros are filled. It is \textbf{not free in storage}: the deployable form is a
+frozen base pack plus a sidecar (new stored state) whose cost is the trits written ($\approx 1.58$
+bits/weight), their addresses, and any scale overrides, plus the mask ($1$ bit/weight/domain, or
+$\approx 0$ only with a fixed structural/hash rule---a $1$-bit mask over $100$B weights is $12.5$\,GB).
+At densities that already use the two allowed pairs in a block, the codebook is full, so a filled patch is \emph{added bytes} on a packed base (a sidecar), not a reallocation of the base's own compression budget. Freezing the shared scales is also a
+\emph{capacity cut}: a reserve trit can only take values $\{-\alpha, 0, +\alpha\}$ for the base row's
+per-row absmean scale $\alpha$.
+
+\section{Theory}
+\textbf{Base invariance (by construction, narrow).} Restrict the forward to $M_0$. If adaptation changes
+only $W[\Rd]$ with $\Rd\cap\Sz=\varnothing$ and freezes all shared state, the masked base output is
+unchanged---an invariance of freezing, which is why measured ``retention $=1.000$'' is a unit test that the
+mask was applied (it would hold even if the reserve learned nothing). \emph{Three subtleties:} (i) it is the
+\emph{masked} base; with the reserve enabled, the base behavior is not preserved (we measure strongly
+negative unmasked retention). (ii) In the real \texttt{pair8} format the decoded weight is
+$\alpha\cdot\text{trit}$ and the quantizer recomputes the pair occupancy and scale each forward; invariance
+then requires freezing \emph{three} objects---the masters, the occupancy, and the scales---not just the
+masters. (iii) The soft variant is outside this argument entirely.
+
+\textbf{Reserve capacity is accounting, not a law.} We do not vary $\rho$ or the per-slot cost, so the curve
+is a memorization curve, not a test of a capacity expression. We therefore report
+$K_{\text{reserve}} \approx \kappa_{\text{adapt}}\,B_{\text{patch}}$ with $B_{\text{patch}}$ the measured patch
+\emph{bits} and $\kappa_{\text{adapt}}$ an \emph{observed} knowledge-bits-per-stored-bit efficiency
+conditional on base, support, scales, and training budget---and note it has no term for the interference
+decline we plot.
+
+\section{Experiments}
+Synthetic knowledge-capacity assay: disjoint random fact sets $A\to B$ (key$\to$label, $V{=}1024$, so each
+fact is $10$ bits of arbitrary lookup), $K = N\log_2 V - \sum\text{CE}/\ln 2$. A $917$k-parameter MLP
+($\rho{=}0.5$) is loaded with 128k base facts (base recall only $0.744$---``saturated'' is relative), then
+adapted. \textbf{The reserve is a dense fp32 mask}: this is why everything here is a mechanism
+demonstration. Single seed; LoRA uses a fixed scale $2.0$ (not the standard $\alpha/r$ of \citet{lora}) with
+its LR tuned down per load to compensate; it also uses AdamW weight decay $0.01$ (vs FSA's $0$) and sees a
+dense base (recall $\approx\!0.64$) while FSA sees a $50\%$-masked base (recall $0.744$)---so the comparison
+is indicative, not controlled.
+
+\begin{figure}[t]\centering
+\includegraphics[width=0.48\textwidth]{../figures/fig1_retention.pdf}\hfill
+\includegraphics[width=0.48\textwidth]{../figures/fig2_reserve.pdf}
+\caption{\textbf{Left:} masked base retention stays $1.000$ (by construction) while full fine-tuning
+destroys the base. \textbf{Right:} the reserve memorizes up to $\approx 490.6$ kbits, then \emph{declines}
+to $256.5$ kbits at $256$k facts---a maximum under this training budget (fewer exposures per fact as the
+count grows can contribute), not a proven intrinsic ceiling.}
+\label{fig:core}
+\end{figure}
+
+\begin{figure}[t]\centering
+\includegraphics[width=0.95\textwidth]{../figures/fig3_vs_lora.pdf}
+\caption{\textbf{FSA vs.\ tuned LoRA.} Left: LoRA's capacity scales with rank and \emph{exceeds} FSA's
+reserve maximum at $r\ge 256$. Right: counted in the representation actually trained (fp32), LoRA is
+\emph{more} storage-efficient ($\kappa\!\approx\!0.057$ at $r{=}64$ vs FSA $\approx\!0.033$). A ternary-reserve
+advantage is a \emph{prediction} contingent on the untested Gate~0, whose outcome is genuinely open (the
+format assay measures from-scratch QAT, not a frozen-base reserve).}
+\label{fig:lora}
+\end{figure}
+
+\textbf{Retention and reserve (Fig.~\ref{fig:core}).} Masked retention is exactly $1.000$; full fine-tuning
+goes below random. The reserve fills to $490.6$ kbits and then declines.
+
+\textbf{LoRA (Fig.~\ref{fig:lora}).} With its LR tuned, LoRA learns facts well and at $r\ge256$ acquires
+\emph{more} than FSA's maximum; counted honestly in fp32 it is also \emph{more} storage-efficient. The
+distinction FSA might eventually offer---fewer bits via trits---is a Gate-0 question, still open. We retract
+the earlier ``$\sim$$10\times$'' claim, which divided fp32 knowledge by hypothetical
+trit storage.
+
+\textbf{Soft variant (Fig.~\ref{fig:soft}).} Run unmasked, retention \emph{degrades} with load
+($0.98 \to 0.78$ at $8$k facts $\to 0.12$ at $32$k), bought with full base-input replay. We describe this as
+degradation, not ``graceful'' suitability. The $\lambda$ weight is a plain retention/acquisition dial.
+
+\begin{figure}[t]\centering
+\includegraphics[width=0.52\textwidth]{../figures/fig4_soft.pdf}
+\caption{The mask-free soft variant degrades with load (with full base-input replay). It has no addressable
+slice to delete.}
+\label{fig:soft}
+\end{figure}
+
+\section{A proposed direction (untested): a revocable patch, and a personal model}
+\label{sec:direction}
+What survives review is narrow: if the ternary mechanism works (Gate~0), a quantized model could carry a
+\textbf{revocable domain patch}---task ID in, slice on; drop the slice and the \emph{masked} base returns.
+A precise statement avoids the overclaims of our earlier draft:
+
+\begin{quote}\small
+\textbf{Patch-revocation contract.} Deleting an isolated patch exactly removes \emph{that patch's parameter
+contribution}. Equivalence to a model trained without its data additionally requires that no retained patch
+or training state depended on it. It does \emph{not} delete individual facts (facts within a slice are
+superimposed), and it does not make information already in the base inaccessible.
+\end{quote}
+
+This is weaker than, and should be compared against, deleting a row from a retrieval store
+\citep{rag,knnlm}---which is per-record and leaves the base bit-identical---or disabling a per-user adapter
+\citep{oppu}, which removes that user's whole contribution without a weight-unlearning problem. The honest case for putting anything in the \emph{weights} is for
+skills, style, or policy that benefit from parametric adaptation and must act in every forward pass---not
+for arbitrary facts, which are retrieval's job and which our own tuned-LoRA numbers memorize more cheaply.
+A ``living personal model'' that learns continually and on-device is an appealing target for these
+properties, but two things remain unestablished and we do not claim them: that personal \emph{skills, style, or
+policy} (not arbitrary facts, which our assay shows tuned LoRA memorizes more cheaply) benefit from
+parametric adaptation over retrieval, and that \emph{training} (not inference) fits
+on-device---the reserve fill is a half-tensor, so AdamW state alone is order $10$\,GB at a few billion
+weights. The right evaluation pairs FSA against OPPU-style per-user adapters and local retrieval on a real
+personalization benchmark \citep{lamp}, with unlearning measured \citep{sisa,tofu}.
+
+\section{Limitations and the deciding experiment}
+\label{sec:limits}
+Every number here is a \textbf{dense fp32 mechanism demonstration}; the format and real models are untested.
+\textbf{Gate~0:} rerun the assay through the real quantizer---\emph{ternary patches on a \texttt{pair8}
+base}, pair occupancy and scales frozen, reserve trained as trits with straight-through estimation (note
+this is sidecar-style, since an in-codebook block at two pairs cannot open a third). Publish $K$ vs fact
+count beside the fp32 curve and sidecar bytes beside FP16 and ternary LoRA at matched budget. The
+outcome is \emph{genuinely open}: the \texttt{pair8} format assay measures \emph{from-scratch} QAT at matched
+loads (its saturation sweep unfinished), so its $\kappa$ cannot predict a \emph{frozen-base} reserve---and
+even a pessimistic ternary yield, priced at the corrected $\approx\!1.58$ bits/trit, need not fall below fp32
+LoRA's $0.057$. Gate~0, not the assay, decides. Further: $K$ is a log-loss improvement, not semantic
+knowledge; $\kappa$ is assay- and load-specific (at matched load \texttt{pair8}'s lower bit-rate gives a
+\emph{higher} $\kappa$ than plain ternary; ternary only reaches more \emph{total} knowledge at a higher
+budget); the frozen base can augment or suppress through new paths but cannot refine.
+
+\section{Conclusion}
+Freezing a disjoint mask preserves the masked function; a quantization reserve memorizes random facts up to
+a cliff \emph{in the dense fp32 mechanism}; a KL penalty buys a degrading always-on curve. Stated
+carefully---and only for that fp32 mask---the mechanism is small and true; the ternary reserve that would
+make it matter is untested. Whether it becomes a \emph{useful} revocable patch---and the substrate for a
+private model that learns with one person and can \emph{revoke a patch} on request---depends first on the
+ternary reserve carrying real knowledge at a competitive byte cost, which Gate~0 would decide. That
+experiment, not another
+retention-$1.000$ plot, is the next step.
+
+\small
+\bibliographystyle{plainnat}
+\bibliography{refs}
+\end{document}
