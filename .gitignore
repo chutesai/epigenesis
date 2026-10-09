@@ -8,15 +8,7 @@
 !/requirements.txt
 !/ROADMAP.md
 
-!/results/
-/results/*
-!/results/RESULTS.md
 
-!/src/
-/src/*
-!/src/freeslot.py
-!/src/gate0.py
-!/src/kappa_binary.py
 
 !/paper/
 /paper/*
@@ -29,16 +21,6 @@
 /figures/*
 !/figures/epigenetic-llm.jpg
 !/figures/freeslot_html_render.png
-!/figures/fig1_retention.png
-!/figures/fig1_retention.pdf
-!/figures/fig2_reserve.png
-!/figures/fig2_reserve.pdf
-!/figures/fig3_vs_lora.png
-!/figures/fig3_vs_lora.pdf
-!/figures/fig4_soft.png
-!/figures/fig4_soft.pdf
-!/figures/make_figs.py
-!/figures/make_figs2.py
 !/figures/make_e2e_figs.py
 !/figures/fig_e2e_frontier.png
 !/figures/fig_e2e_frontier.pdf
@@ -51,16 +33,6 @@
 
 !/experiments/
 /experiments/*
-
-# data behind fig1 (make_figs.py)
-!/experiments/saturate_then_adapt/
-/experiments/saturate_then_adapt/*
-!/experiments/saturate_then_adapt/*.json
-
-# data behind fig2-4 (make_figs2.py) and the linked PackNet baseline
-!/experiments/capacity/
-/experiments/capacity/*
-!/experiments/capacity/*.json
 
 # real lambda experts: findings, harness, decoder, the linked controlled-Pareto figure and its data
 !/experiments/real_lambda/
