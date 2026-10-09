@@ -31,7 +31,7 @@ ARMS = [
     ("v6_lora_L1415_loc100", "LoRA r16 + penalty", C_LORA, "o"),
     ("v6_lora_L1415_noreg", "LoRA r16, no penalty", C_LORA, "o"),
     ("v6_lora_L28dn_loc100", "LoRA r16, L28 down", C_LORA, "o"),
-    ("v8_fsa_all_bop_t07_wd03", "FSA ternary, Bop + wd", C_TERN, "D"),
+    ("v8_fsa_all_bop_t07_wd03", "FSA ternary, Bop τ0.7 (repeat run)", C_TERN, "D"),
     ("v7_fsa_all_bop_t07", "FSA ternary, Bop τ0.7", C_TERN, "D"),
     ("v8_fsa_all_wd05", "FSA ternary, learn-then-prune (wd 0.5)", C_TERN, "s"),
     ("v7_fsa_all_bop_t09", "FSA ternary, Bop τ0.9", C_TERN, "D"),
@@ -67,7 +67,7 @@ def frontier():
         if name in ("v7_fsa_all_bop_t07", "v7_fsa_all_bop_t09"):
             continue                                   # the Bop group is labelled once, on the best run
         if name == "v8_fsa_all_bop_t07_wd03":
-            label = "FSA ternary, Bop (+wd, τ0.7, τ0.9)"
+            label = "FSA ternary, Bop (τ0.7 ×2, τ0.9)"
         ax.annotate(label, (x, y), xytext=OFF.get(name, (6, 3)), textcoords="offset points",
                     ha=HA.get(name, "left"), fontsize=7.5, color=c, fontweight="bold" if big else "normal")
     ax.set_xscale("log")
@@ -103,9 +103,9 @@ def storage():
                 mb += 32 * block_scales / 8 / 1e6  # learned fp32 block scales
         rows.append((name, label, c, m, mb, y, x))
     fig, ax = plt.subplots(figsize=(7.2, 4.4))
-    soff = {"v7_fsa_all_bop_t09": (6, 6), "v7_fsa_all_bop_t07": (6, -11), "v6_lora_L1415_loc100": (-6, 8),
-            "v7_fsa_all_fp4_loc10_aug": (0, -14)}
-    sha = {"v6_lora_L1415_loc100": "right", "v7_fsa_all_fp4_loc10_aug": "center"}
+    soff = {"v7_fsa_all_bop_t09": (-6, 6), "v8_fsa_all_bop_t07_wd03": (4, 10), "v7_fsa_all_bop_t07": (6, -11),
+            "v6_lora_L1415_loc100": (-6, 8), "v7_fsa_all_fp4_loc10_aug": (0, -26), "v6_fsa_all_wd01": (8, -3)}
+    sha = {"v6_lora_L1415_loc100": "right", "v7_fsa_all_fp4_loc10_aug": "center", "v7_fsa_all_bop_t09": "right", "v6_fsa_all_wd01": "left"}
     for name, label, c, m, mb, y, x in rows:
         ax.scatter(mb, y, marker=m, color=c, s=70, edgecolor="white", linewidth=0.8, zorder=3)
         ax.annotate(label, (mb, y), xytext=soff.get(name, (6, 2)), textcoords="offset points",
