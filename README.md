@@ -58,13 +58,31 @@ being added). Every FSA row has bit-exact revoke. What these say:
 
 ## Serving: does a patch cost anything at inference?
 
-Measured on the released lambda GGUF with the patch written into the packed pair8 experts
-([`experiments/serving/`](experiments/serving/README.md)): decode and prefill speed, file size and peak memory are
-unchanged within noise on Mac Metal, Mac CPU and a Snapdragon 8 Elite phone (patched/base decode 0.98–1.005×, ranges
-crossing 1.0), and revoking the patch restores the original file byte for byte. Applying a 670k-slot patch takes ~46 ms
-in memory; today's runtime repacks weights at load, so switching users means patching the file and reloading (~2 s)
-until a live hook is added. An unmerged LoRA in this runtime would cost an estimated 0.5–1.5% per token plus 44 MB per
-adapter and new code in every backend; merging it would turn 64 MB of packed experts into 906 MB of bf16.
+Measured on the released lambda GGUF, with the patch written into the packed pair8 experts
+([`experiments/serving/`](experiments/serving/README.md)). Patches are synthetic, matching the learned patches' size and
+spread (670k slots, plus a 3M-slot stress test, over all experts of MoE layers 14–15). Speeds are median tokens/s; the
+patched columns are patched ÷ base measured in the same round (median [min, max] over rounds).
+
+| device and kernel | base decode | 670k patch | 3M patch | base prefill (512 tok) | 670k / 3M prefill |
+|---|---:|---:|---:|---:|---:|
+| Mac M5 Max, Metal (`lut9`) | 174.8 | 0.999 [0.96, 1.01] | 0.999 [0.97, 1.03] | 1,075 | 0.999 / 1.001 |
+| Mac M5 Max, CPU 8 threads (`lut8`) | 102.2 | 1.005 | 0.990 | 371 | 1.002 / 1.009 |
+| Mac M5 Max, CPU 8 threads (`lut`) | 66.0 | 1.006 | 0.998 | 148 | 1.004 / 0.999 |
+| Snapdragon 8 Elite phone, Q8 trunk (`lut8`) | 57.0 | 1.002 [0.97, 1.03] | 0.982 [0.95, 1.03] | 209 | 0.996 / 1.000 |
+
+| | base | 670k patch | 3M patch |
+|---|---|---|---|
+| file size | 2,133,006,592 B | identical | identical |
+| peak memory (Metal / CPU / phone) | 2.75 GiB / 3.29 GiB / 3.24 GB | identical | identical |
+| bytes changed in the file | — | 0.99 MB | 4.3 MB |
+| revoke | — | byte-identical original (sha256 match) | byte-identical original |
+
+Every ratio's range crosses 1.0, so no slowdown is measurable. That is expected: each packed block costs one table
+lookup whatever it holds, and a patch never turns an all-zero block nonzero. Applying a 670k-slot patch takes ~46 ms in
+memory (apply A → revoke A → apply B: ~137 ms); today's runtime repacks weights at load, so switching users means
+patching the file and reloading (~2 s) until a live hook is added. An unmerged rank-16 LoRA in this runtime is
+estimated (not measured; the runtime has no adapter support) at +0.5–1.5% per token plus 44 MB per adapter and new
+code in every backend; merging it would turn 64 MB of packed experts into 906 MB of bf16.
 
 ## Best algorithms so far
 
