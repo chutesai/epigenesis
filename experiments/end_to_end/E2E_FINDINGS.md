@@ -110,10 +110,25 @@ Both models converged on the same plan:
 A code review of the v6 harness found 7 bugs, all fixed; the worst were wrong-sign births and stale optimizer moments
 on eviction.
 
-v6 arms, all on augmented formats with Pareto selection on validation recall and validation ΔNLL:
-- LoRA L14–15, local penalty 100.
-- LoRA L14–15, no penalty.
-- FSA all experts, wd 0.1.
-- FSA all experts, wd 0.3.
-- FSA L28 down-only 2M netcost, in ternary, continuous bf16, and tiny fp4 (min 0.03α).
-- LoRA L28 down-only, local penalty 100, as the matched-placement control.
+## v6 results (augmented formats, Pareto selection on validation recall and validation ΔNLL)
+
+| arm | held-out recall | ΔNLL | patch |
+|---|---|---|---|
+| **LoRA L14–15 + local penalty 100** | **97.5%** | **+0.0005 ± 0.002** | 22M fp32 params |
+| LoRA L14–15, no penalty | 97.5% | +0.94 | |
+| LoRA L28 down-only + penalty | 38% | +0.001 | |
+| **FSA all experts, learn-then-prune (wd 0.3, no penalty, ternary)** | **91%** | **+0.025 ± 0.003** | **542k ternary slots** |
+| FSA L28 down-only, cost-aware selection, ternary | 60% | +0.064 | 1.6M |
+| FSA L28 down-only, continuous values (diagnostic) | 49% | +0.047 | 2M |
+| FSA L28 down-only, tiny fp4 | 0% | +0.007 | never learned |
+
+- **Augmented Q/A formats closed the validation→test gap for both methods.**
+- **LoRA with the penalty wins the fact task outright**: ~98% recall at no measurable damage.
+- **Learn-then-prune is the best ternary recipe so far**: 91% held-out recall from a 542k-slot ternary patch
+  (~110 KB) at +0.025 damage, bit-exact revoke, no penalty at all. Damage was still falling at step 300
+  (+0.028 at step 250), so longer pruning may close more of the gap to LoRA.
+- **Continuous slots at L28 lost to LoRA at the same placement** (49%/+0.047 vs 38%/+0.001). The free-slot mask is
+  less damage-efficient than a low-rank adapter for fact memorization at that placement, independent of ternary.
+- Conclusion for the fact task: FSA can approach LoRA's recall at ~50× its damage with a far smaller patch and the
+  same kernel; it does not beat LoRA on quality here. The epigenesis task (concepts across sessions, EP-1) is where a
+  high-rank distributed patch has a structural case.

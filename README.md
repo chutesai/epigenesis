@@ -21,9 +21,27 @@
 > **The paper and this write-up were generated with AI assistance**, from experiments run and verified by the authors. Numbers are reproducible with the code in [`src/`](src/); treat the prose as a draft under human review, not a peer-reviewed result.
 
 > [!WARNING]
-> **What is and isn't tested yet (read this first).** The synthetic results below are a **mechanism demonstration**: `src/freeslot.py` trains **dense fp32 weights** with a random 50% mask — `pair8`/ternary *never enters that adaptation loop*. Real-model experiments on the lambda 8B ternary MoE are reported separately: [isolated real experts](experiments/real_lambda/FINDINGS.md) and [end-to-end on the full model](experiments/end_to_end/E2E_FINDINGS.md) (in progress; so far FSA matches unregularized LoRA's recall with about 8× less damage to general text, while a regularized LoRA still holds the low-damage end of the frontier). The "zero-forgetting" result is **true by construction** (freeze a disjoint support → it can't change; retention 1.000 is a unit test that the mask was applied, and would hold even if the reserve learned nothing) — it is an invariant, not a theorem or an empirical win. Whether FSA actually *exists* for the ternary format and on a real transformer is the open question. See the [**roadmap**](ROADMAP.md) for the two gating experiments (ternary-reserve-vs-fp32, then a byte-matched real-model run vs QLoRA) that decide whether this matters. Two independent adversarial reviews both flagged these as the first things to settle.
+> **What is and isn't tested yet (read this first).** The synthetic results further down are a **mechanism demonstration**: `src/freeslot.py` trains **dense fp32 weights** with a random 50% mask, so `pair8`/ternary never enters that adaptation loop. The real-model work is in [`experiments/real_lambda/`](experiments/real_lambda/FINDINGS.md) (isolated real experts) and [`experiments/end_to_end/`](experiments/end_to_end/E2E_FINDINGS.md) (the full 8B); the current state is summarized next.
 
----
+## Status on the real 8B model (2026-10-09)
+
+Teaching 40 facts about a fictional person to the lambda 8B ternary MoE, measured on held-out phrasings (including Q/A) and on damage to general text (ΔNLL on 20k held-out tokens):
+
+| method | held-out recall | general-text damage | patch | inference overhead |
+|---|---|---|---|---|
+| LoRA r16 + output penalty (best baseline) | 97.5% | +0.0005 | 22M fp32 params (~88 MB) | extra matmul per token |
+| **FSA, ternary, learn-then-prune** | **91%** | **+0.025** | **542k ternary slots (~110 KB)** | **none: same packed kernel** |
+
+- FSA is close to LoRA on recall, with a patch ~800× smaller, in the deployed format, at zero inference overhead, and
+  bit-exact revoke. It is not ahead on quality: ~6 points less recall and ~2.5% higher general-text perplexity.
+- Weight decay on the fp32 masters prunes the patch from ~20M slots to ~0.5M during training while recall holds; the
+  damage was still falling when training stopped.
+- A continuous-valued patch on the same slot mask did *not* beat LoRA at matched placement, so on fact memorization the
+  low-rank adapter is the better fit regardless of ternary. The case for FSA is the format and cost, and the
+  open question is whether it pulls ahead on the task it was built for: concepts accumulated across sessions
+  (the EP-1 experiment in [`experiments/epigenesis/`](experiments/epigenesis/)).
+- A one-weight change in this model already moves KL-to-base to ~0.02 (routing near-ties), so damage is measured as
+  ΔNLL, not KL. Details and every run in [`E2E_FINDINGS.md`](experiments/end_to_end/E2E_FINDINGS.md).
 
 ## Why "epigenetic"
 
