@@ -27,11 +27,11 @@ Teaching 40 facts about a fictional person to the lambda 8B ternary MoE. Recall 
 
 | method | held-out recall | general-text damage | patch | inference overhead |
 |---|---|---|---|---|
-| **FSA ternary, Bop writer (τ 0.7) + weight decay 0.3** | **100%** | **+0.024 ± 0.004** | **670k slots (0.8–2.3 MB)** | **none: same packed kernel** |
-| FSA ternary, Bop writer (τ 0.7) | 100% | +0.027 ± 0.004 | 812k slots (0.9–2.7 MB) | none |
+| **FSA ternary, Bop writer (τ 0.7) + local output penalty** | **100%** | **+0.0015 ± 0.0017** | **740k slots (0.9–2.5 MB)** | **none by construction** (serving benchmark in progress) |
+| FSA ternary, Bop writer (τ 0.7), two runs | 100% / 100% | +0.027 ± 0.004 / +0.024 ± 0.004 | 812k / 670k slots (0.8–2.7 MB) | none by construction |
 | FSA fp4 slots + local output penalty | 96.3% | +0.005 ± 0.002 | 21M fp4 slots (18–80 MB) | needs fp4 slot support |
-| FSA ternary, learn-then-prune (AdamW, wd 0.3) | 91% | +0.025 ± 0.003 | 542k slots (0.6–1.8 MB) | none |
-| FSA ternary, learn-then-prune (AdamW, wd 0.5) | 88.7% | +0.013 ± 0.003 | 523k slots (0.6–1.8 MB) | none |
+| FSA ternary, learn-then-prune (AdamW, weight decay 0.3) | 91% | +0.025 ± 0.003 | 542k slots (0.6–1.8 MB) | none by construction |
+| FSA ternary, learn-then-prune (AdamW, weight decay 0.5) | 88.7% | +0.013 ± 0.003 | 523k slots (0.6–1.8 MB) | none by construction |
 | *LoRA r16 + output penalty (baseline)* | *97.5%* | *+0.0005 ± 0.002* | *22M params (44 MB bf16)* | *extra matmul per token* |
 
 <p align="center">
@@ -41,13 +41,18 @@ Teaching 40 facts about a fictional person to the lambda 8B ternary MoE. Recall 
 </p>
 
 Patch sizes count slot positions as well as values: the low figure entropy-codes the positions, the high one stores a
-26-bit index per slot. Every FSA row has bit-exact revoke. What these say:
-- **The ternary Bop writer recalls every held-out fact**, more than LoRA, from a patch 15–50× smaller than a bf16 LoRA at zero
-  inference overhead. Adding weight decay trims it to 670k slots at +0.024 nats (~2.4% perplexity); that general-text
-  damage is the open problem now. Stronger decay on the Adam writer reaches +0.013 at 88.7% recall.
+26-bit index per slot. Recall here is teacher-forced exact match on held-out phrasings (free-running generation is
+being added). Every FSA row has bit-exact revoke. What these say:
+- **Bop + the local output penalty matches LoRA's damage at full recall** (single run; seeds and free-running
+  generation in progress): +0.0015 ± 0.0017 nats against LoRA's +0.0005 ± 0.0018, statistically indistinguishable,
+  with all 80 held-out items recalled and a patch 16–49× smaller. The penalty cut Bop's damage ~16×.
+- **The ternary Bop writer alone recalled all 80 held-out items in both runs** (LoRA: 78 of 80; a two-item, single-seed
+  difference, not a win), from a patch 16–49× smaller than a bf16 LoRA. Its general-text damage (+0.024 to +0.027 nats,
+  ~2.5% perplexity) is the open problem now. The two Bop rows are the same configuration run twice; they differ only
+  through GPU nondeterminism. Stronger decay on the Adam writer reaches +0.013 at 88.7% recall.
 - **fp4 slots with a smooth penalty** come closest to LoRA on both axes at once, at the cost of leaving the ternary format.
-- **Where each method stands today:** FSA has the higher recall, the much smaller patch and no inference cost; LoRA has
-  the lower general-text damage. Bop plus the local penalty is aimed at closing that last gap (runs in progress). The
+- **Where each method stands today:** FSA has full recall, a much smaller patch and, by construction, no extra
+  inference work (the packed-kernel benchmark is in progress); with the local penalty, its general-text damage is now within noise of LoRA's (one run; seeds pending). The
   task FSA was built for, concepts accumulated across sessions, is the EP-1 experiment in
   [`experiments/epigenesis/`](experiments/epigenesis/).
 
@@ -62,7 +67,7 @@ Patch sizes count slot positions as well as values: the low figure entropy-codes
    learns everything early (~50 steps), then decay pulls weakly supported masters back through the threshold: the
    patch shrank from ~20M to 0.5M slots while recall held.
 3. **fp4 slots + local output penalty** (non-ternary option): the penalty is the relative energy of the patch's direct
-   output change on general text, Σ‖x·ΔWᵀ‖² / Σ‖x·Wᵀ‖², which unlike KL is immune to routing chaos.
+   output change on general text, Σ‖x·ΔWᵀ‖² / Σ‖x·Wᵀ‖², which avoids KL's routing-chaos floor because it measures each patched layer's direct output change.
 
 **Ingredients that mattered for every method:**
 - Loss on the answer tokens only. Whole-sentence loss trained models to recite template boilerplate and caused most of
@@ -80,7 +85,7 @@ Patch sizes count slot positions as well as values: the low figure entropy-codes
 </p>
 
 **What did not work:** KL penalties (they fight the routing-chaos floor and only cost recall); ternary + smooth penalty +
-decay (recall peaks, then gets pruned away); tiny-magnitude fp4 (changes below bf16 resolution never learn); patch-only
+decay (recall peaks, then gets pruned away); tiny-magnitude fp4 (did not learn in our run; its smallest steps sit near bf16 resolution); patch-only
 block scales (no better than plain ternary); continuous values on the slot mask at a single late layer (did not beat
 LoRA at the same placement).
 
@@ -123,7 +128,9 @@ Adapt:        1. Freeze every original weight, scale, norm and router.
 Revoke:       zero the filled slots. The weights are bit-identical to the base again.
 ```
 
-On the lambda 8B, the 256 experts of MoE layers 14–15 have 66.8M free slots (up and down projections). The best
+**Guaranteed zeros vs writable slots.** The format guarantees at least half of the weights are zero, but only the zeros
+*inside already-active pairs* can be filled without breaking the packed format. On the lambda 8B, the 256 experts of
+MoE layers 14–15 hold ~453M expert weights and **66.8M writable free slots (~14.7%)** across up and down projections. The best
 patches use under 1M of them.
 
 **What it costs.** No new tensors and no extra compute per token: the patch lives inside tensors the base kernel

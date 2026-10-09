@@ -28,16 +28,16 @@
 \begin{center}
 \fbox{\parbox{0.93\textwidth}{\small\textbf{AI-assisted draft.} Revised through repeated
 adversarial review; experiments run and checked by the authors. Results are from one real 8B ternary
-MoE on one 40-fact task, single seed (plus a supporting synthetic isolated-expert probe). The multi-session epigenesis experiment (EP-1) is pre-registered,
+MoE on one 40-fact task, single seed (plus a supporting synthetic isolated-expert probe). The ternary Bop repeat uses the same seed, facts and protocol; it does not establish robustness across seeds. The multi-session epigenesis experiment (EP-1) is pre-registered,
 in progress and untested; the personal-model use case (\S\ref{sec:direction}) is an \emph{untested proposal}.
-Code: \url{https://github.com/chutesai/epigenesis}.}}
+Code: \href{https://github.com/chutesai/epigenesis}{github.com/chutesai/epigenesis}.}}
 \end{center}
 
 \begin{abstract}
 An epigenetic language model keeps its base weights as a frozen genome and writes acquired knowledge
 into a separate sparse layer occupying exact zeros. Removing that layer restores the base bit-for-bit.
 We test Free-Slot Adaptation (FSA) on a real 8B ternary mixture-of-experts model. On one 40-fact task,
-In the reference run, ternary Bop recalls 80/80 held-out items from 812,420 filled slots, adding no parameters and preserving
+the reference ternary Bop run recalls 80/80 held-out items from 812,420 filled slots, adding no parameters and preserving
 the packed format, with bit-exact revoke: in every run, patch-off logits are bitwise equal to the base
 on one 512-token held-out window, and test recall returns to 0/80. The patch costs 0.9 MB entropy-coded or 2.7 MB indexed,
 including positions: about 16--49 times smaller than a 44 MB bf16 LoRA adapter. General-text damage
@@ -239,11 +239,12 @@ loss, 12 formats. In every run, switching the patch or adapter off gives bitwise
 unpatched model on one 512-token held-out window and returns test recall to 0/80. FSA counts slots; LoRA counts fp32 parameters as trained.}
 \label{tab:real}
 \end{table}
-The two $\tau=0.7$ ternary Bop runs use the same configuration and seed. Their spread
-(812k vs 670k slots, $+0.0266$ vs $+0.0237$ nats/token, within one SE) shows run-to-run
-variation from nondeterministic GPU arithmetic, the closest thing we have to a second seed.
-The repeat was launched with a decay flag, but decay has no effect on ternary Bop, which holds
-trits directly and applies no AdamW or SGD weight update.
+The two $\tau=0.7$ ternary Bop runs use the same seed, facts and protocol. Their spread
+(812,420 vs 669,705 slots; damage $+0.0266$ vs $+0.0237$ nats/token, a damage difference within one SE)
+is variation between repeated executions, plausibly from nondeterministic GPU arithmetic;
+it is not evidence of robustness across seeds.
+The repeat's configuration also listed weight decay, but decay is not part of the ternary Bop update
+(there are no real-valued weights to decay), so it is the same configuration as run 1.
 
 Checkpoint selection uses a family of validation-recall floors; each floor keeps the checkpoint with the lowest validation $\Delta$NLL among those meeting it. For LoRA + penalty, floors 0.3--0.7
 select step 100, giving 70\%/$+0.0061$ test recall/damage; the 0.8 floor selects step 150, giving
@@ -252,8 +253,8 @@ run 2 selects step 100 at every floor, giving 100\%/$+0.0247$.
 Bop $\tau=0.9$ at step 50 gives 100\%/$+0.0318$, and learn-then-prune at step 250 gives
 90\%/$+0.0282$ for decay 0.3. Decay 0.5 selects step 300, giving 88.75\%/$+0.0129$. Under these selections penalized LoRA stays below every ternary writer in
 damage; fp4's step-300 checkpoint ($+0.0050$, 96.25\%) is slightly below LoRA's floor-0.3--0.7 checkpoint
-($+0.0061$, 70\%), within about one combined SE. Bop $\tau=0.7$ and learn-then-prune decay 0.3 differ by less than one
-SE; learn-then-prune decay 0.1 is clearly worse ($+0.067$).
+($+0.0061$, 70\%), within about one combined SE. At their selected checkpoints, both Bop $\tau=0.7$ runs and learn-then-prune decay 0.3 differ in damage
+by less than one combined (quadrature) SE; learn-then-prune decay 0.1 is clearly worse ($+0.067$).
 
 Bop's 80/80 against LoRA's 78/80 matches, perhaps slightly exceeds, recall: two items on one seed do
 not establish a significant win. LoRA with the local penalty has damage indistinguishable from zero
@@ -307,7 +308,7 @@ the adapter. The LoRA baseline has 22,020,096 parameters: 44 MB in bf16, 88 MB i
 \includegraphics[width=\textwidth]{../figures/fig_e2e_storage.pdf}
 \caption{Recall against patch size. Sizes count slot positions, not only values: FSA is entropy-coded
 positions plus values, with positions coded over each run's own free-slot pool: 66.8M slots at layers
-14--15 and 16.8M for the layer-28 down-only arms. LoRA counts bf16 parameters. The plot includes the learned fp32 block scales,
+14--15 and 16.8M for the layer 28 down-only arms. LoRA counts bf16 parameters. The plot includes the learned fp32 block scales,
 bringing that run to about 114 MB, larger than the adapter. The $\tau=0.7$ repeat is
 labelled separately; learn-then-prune includes decay 0.5, 0.3, and 0.1.}
 \label{fig:storage}
@@ -362,7 +363,7 @@ with test recall returning to 0/80.
 \caption{Validation recall, validation $\Delta$NLL (symmetric log scale), and filled slots (millions,
 log scale) across training. The recall and damage panels show learn-then-prune, ternary Bop $\tau=0.7$
 run 1, and regularized LoRA; learn-then-prune uses decay 0.3. The filled-slot panel shows
-only those two FSA writers; the new repeat and decay-0.5 trajectories are not plotted.
+only those two FSA writers; the new repeat and decay 0.5 trajectories are not plotted.
 Bop's filled-slot count is set by its threshold early and then stays flat, while learn-then-prune
 fills many slots first and sheds them over training. Validation trajectories differ from the held-out
 test endpoints in Table~\ref{tab:real}.}
@@ -480,8 +481,9 @@ current work. Combining Bop with the local penalty is being tried, with no resul
 also remains untested.
 
 \textbf{Evaluation scope.} We have one task: 40 facts about one fictional person, 80 test items, and
-one seed, with a same-configuration ternary Bop repeat that varies under nondeterministic GPU
-arithmetic. The Q/A test form resembles training. Writer and regularization choices differ. The
+one seed, with a same-configuration ternary Bop repeat using the same seed, facts and protocol.
+Variation between repeated executions plausibly comes from nondeterministic GPU arithmetic;
+it is not evidence of robustness across seeds. The Q/A test form resembles training. Writer and regularization choices differ. The
 chaos-floor explanation is a hypothesis, and the roughly 20k-token damage pool cannot establish broad
 behavioral safety. Multi-session concept learning remains untested in EP-1.
 
@@ -510,7 +512,7 @@ Multi-session concept learning and the personal-model application are untested; 
 EP-1 experiment is in progress.
 
 \small
-\setlength{\bibsep}{1pt}
+\setlength{\bibsep}{0pt}
 \bibliographystyle{plainnat}
 \bibliography{refs}
 \end{document}

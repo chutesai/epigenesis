@@ -30,17 +30,18 @@ def point(name):
 ARMS = [
     ("v6_lora_L1415_loc100", "LoRA r16 + penalty", C_LORA, "o"),
     ("v6_lora_L1415_noreg", "LoRA r16, no penalty", C_LORA, "o"),
-    ("v6_lora_L28dn_loc100", "LoRA r16, L28 down", C_LORA, "o"),
+    ("v6_lora_L28dn_loc100", "LoRA r16, layer 28 down", C_LORA, "o"),
     ("v8_fsa_all_bop_t07_wd03", "FSA ternary, Bop τ0.7 (repeat run)", C_TERN, "D"),
     ("v7_fsa_all_bop_t07", "FSA ternary, Bop τ0.7", C_TERN, "D"),
-    ("v8_fsa_all_wd05", "FSA ternary, learn-then-prune (wd 0.5)", C_TERN, "s"),
+    ("v9_bop_t07_loc10", "FSA ternary, Bop + penalty", C_TERN, "*"),
+    ("v8_fsa_all_wd05", "FSA ternary, learn-then-prune (decay 0.5)", C_TERN, "s"),
     ("v7_fsa_all_bop_t09", "FSA ternary, Bop τ0.9", C_TERN, "D"),
-    ("v6_fsa_all_wd03", "FSA ternary, learn-then-prune", C_TERN, "s"),
-    ("v6_fsa_all_wd01", "FSA ternary, learn-then-prune (wd 0.1)", C_TERN, "s"),
+    ("v6_fsa_all_wd03", "FSA ternary, learn-then-prune (decay 0.3)", C_TERN, "s"),
+    ("v6_fsa_all_wd01", "FSA ternary, learn-then-prune (decay 0.1)", C_TERN, "s"),
     ("v7_fsa_all_wd03_block", "FSA ternary + block scales", C_TERN, "^"),
-    ("v6_fsa_L28_netcost", "FSA ternary, L28", C_TERN, "v"),
+    ("v6_fsa_L28_netcost", "FSA ternary, layer 28", C_TERN, "v"),
     ("v7_fsa_all_fp4_loc10_aug", "FSA fp4 + penalty", C_FP4, "P"),
-    ("v6_fsa_L28_bf16", "FSA continuous, L28", C_CONT, "X"),
+    ("v6_fsa_L28_bf16", "FSA continuous, layer 28", C_CONT, "X"),
 ]
 
 
@@ -50,10 +51,10 @@ def style(ax):
     ax.grid(alpha=0.25, lw=0.6)
 
 
-OFF = {"v7_fsa_all_bop_t07": (-8, 8), "v8_fsa_all_bop_t07_wd03": (0, 9), "v8_fsa_all_wd05": (8, -4), "v7_fsa_all_bop_t09": (8, 6), "v6_lora_L1415_loc100": (-10, 9),
-       "v7_fsa_all_fp4_loc10_aug": (-8, -14), "v6_fsa_all_wd03": (8, -4), "v6_fsa_all_wd01": (8, 2),
+OFF = {"v9_bop_t07_loc10": (0, 10), "v7_fsa_all_bop_t07": (-8, 8), "v8_fsa_all_bop_t07_wd03": (0, 9), "v8_fsa_all_wd05": (8, -4), "v7_fsa_all_bop_t09": (8, 6), "v6_lora_L1415_loc100": (4, -14),
+       "v7_fsa_all_fp4_loc10_aug": (8, -12), "v6_fsa_all_wd03": (8, -4), "v6_fsa_all_wd01": (8, 2),
        "v7_fsa_all_wd03_block": (8, -10), "v6_lora_L1415_noreg": (-6, 8)}
-HA = {"v7_fsa_all_fp4_loc10_aug": "right", "v7_fsa_all_bop_t07": "right", "v8_fsa_all_bop_t07_wd03": "center", "v6_lora_L1415_loc100": "left", "v6_lora_L1415_noreg": "right"}
+HA = {"v9_bop_t07_loc10": "center", "v7_fsa_all_fp4_loc10_aug": "left", "v7_fsa_all_bop_t07": "right", "v8_fsa_all_bop_t07_wd03": "center", "v6_lora_L1415_loc100": "left", "v6_lora_L1415_noreg": "right"}
 
 
 def frontier():
@@ -61,7 +62,7 @@ def frontier():
     for name, label, c, m in ARMS:
         y, x, se, _ = point(name)
         x = max(x, 1e-4)
-        big = name in ("v6_lora_L1415_loc100", "v8_fsa_all_bop_t07_wd03", "v6_fsa_all_wd03", "v7_fsa_all_fp4_loc10_aug")
+        big = name in ("v6_lora_L1415_loc100", "v9_bop_t07_loc10", "v8_fsa_all_bop_t07_wd03", "v6_fsa_all_wd03", "v7_fsa_all_fp4_loc10_aug")
         ax.errorbar(x, y, xerr=se, fmt=m, color=c, ms=9 if big else 6, mec="white", mew=0.8,
                     elinewidth=0.8, capsize=2, alpha=1 if big else 0.75, zorder=3)
         if name in ("v7_fsa_all_bop_t07", "v7_fsa_all_bop_t09"):
@@ -104,7 +105,7 @@ def storage():
         rows.append((name, label, c, m, mb, y, x))
     fig, ax = plt.subplots(figsize=(7.2, 4.4))
     soff = {"v7_fsa_all_bop_t09": (-6, 6), "v8_fsa_all_bop_t07_wd03": (4, 10), "v7_fsa_all_bop_t07": (6, -11),
-            "v6_lora_L1415_loc100": (-6, 8), "v7_fsa_all_fp4_loc10_aug": (0, -26), "v6_fsa_all_wd01": (8, -3)}
+            "v6_lora_L1415_loc100": (-6, 8), "v7_fsa_all_fp4_loc10_aug": (0, -26), "v6_fsa_all_wd01": (8, -3), "v6_fsa_all_wd03": (6, -5), "v8_fsa_all_wd05": (6, -13)}
     sha = {"v6_lora_L1415_loc100": "right", "v7_fsa_all_fp4_loc10_aug": "center", "v7_fsa_all_bop_t09": "right", "v6_fsa_all_wd01": "left"}
     for name, label, c, m, mb, y, x in rows:
         ax.scatter(mb, y, marker=m, color=c, s=70, edgecolor="white", linewidth=0.8, zorder=3)

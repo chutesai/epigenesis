@@ -57,6 +57,7 @@
 !/experiments/end_to_end/data/v7_fsa_all_bop_t07.json
 !/experiments/end_to_end/data/v8_fsa_all_bop_t07_wd03.json
 !/experiments/end_to_end/data/v8_fsa_all_wd05.json
+!/experiments/end_to_end/data/v9_bop_t07_loc10.json
 !/experiments/end_to_end/data/v7_fsa_all_bop_t09.json
 !/experiments/end_to_end/data/v6_fsa_all_wd03.json
 !/experiments/end_to_end/data/v6_fsa_all_wd01.json
@@ -95,3 +96,10 @@ ROADMAP.md
 !/experiments/epigenesis/tests/
 /experiments/epigenesis/tests/*
 !/experiments/epigenesis/tests/*.py
+
+# serving benchmark: FSA patches in the packed pair8 GGUF (patch tool, write-up, summary numbers)
+!/experiments/serving/
+/experiments/serving/*
+!/experiments/serving/README.md
+!/experiments/serving/fsa_gguf_patch.py
+!/experiments/serving/summary.json
