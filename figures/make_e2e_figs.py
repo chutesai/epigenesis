@@ -31,7 +31,9 @@ ARMS = [
     ("v6_lora_L1415_loc100", "LoRA r16 + penalty", C_LORA, "o"),
     ("v6_lora_L1415_noreg", "LoRA r16, no penalty", C_LORA, "o"),
     ("v6_lora_L28dn_loc100", "LoRA r16, L28 down", C_LORA, "o"),
+    ("v8_fsa_all_bop_t07_wd03", "FSA ternary, Bop + wd", C_TERN, "D"),
     ("v7_fsa_all_bop_t07", "FSA ternary, Bop τ0.7", C_TERN, "D"),
+    ("v8_fsa_all_wd05", "FSA ternary, learn-then-prune (wd 0.5)", C_TERN, "s"),
     ("v7_fsa_all_bop_t09", "FSA ternary, Bop τ0.9", C_TERN, "D"),
     ("v6_fsa_all_wd03", "FSA ternary, learn-then-prune", C_TERN, "s"),
     ("v6_fsa_all_wd01", "FSA ternary, learn-then-prune (wd 0.1)", C_TERN, "s"),
@@ -48,10 +50,10 @@ def style(ax):
     ax.grid(alpha=0.25, lw=0.6)
 
 
-OFF = {"v7_fsa_all_bop_t07": (-8, 8), "v7_fsa_all_bop_t09": (8, 6), "v6_lora_L1415_loc100": (-10, 9),
-       "v7_fsa_all_fp4_loc10_aug": (8, -12), "v6_fsa_all_wd03": (8, -4), "v6_fsa_all_wd01": (8, 2),
+OFF = {"v7_fsa_all_bop_t07": (-8, 8), "v8_fsa_all_bop_t07_wd03": (0, 9), "v8_fsa_all_wd05": (8, -4), "v7_fsa_all_bop_t09": (8, 6), "v6_lora_L1415_loc100": (-10, 9),
+       "v7_fsa_all_fp4_loc10_aug": (-8, -14), "v6_fsa_all_wd03": (8, -4), "v6_fsa_all_wd01": (8, 2),
        "v7_fsa_all_wd03_block": (8, -10), "v6_lora_L1415_noreg": (-6, 8)}
-HA = {"v7_fsa_all_bop_t07": "right", "v6_lora_L1415_loc100": "left", "v6_lora_L1415_noreg": "right"}
+HA = {"v7_fsa_all_fp4_loc10_aug": "right", "v7_fsa_all_bop_t07": "right", "v8_fsa_all_bop_t07_wd03": "center", "v6_lora_L1415_loc100": "left", "v6_lora_L1415_noreg": "right"}
 
 
 def frontier():
@@ -59,9 +61,13 @@ def frontier():
     for name, label, c, m in ARMS:
         y, x, se, _ = point(name)
         x = max(x, 1e-4)
-        big = name in ("v6_lora_L1415_loc100", "v7_fsa_all_bop_t07", "v6_fsa_all_wd03", "v7_fsa_all_fp4_loc10_aug")
+        big = name in ("v6_lora_L1415_loc100", "v8_fsa_all_bop_t07_wd03", "v6_fsa_all_wd03", "v7_fsa_all_fp4_loc10_aug")
         ax.errorbar(x, y, xerr=se, fmt=m, color=c, ms=9 if big else 6, mec="white", mew=0.8,
                     elinewidth=0.8, capsize=2, alpha=1 if big else 0.75, zorder=3)
+        if name in ("v7_fsa_all_bop_t07", "v7_fsa_all_bop_t09"):
+            continue                                   # the Bop group is labelled once, on the best run
+        if name == "v8_fsa_all_bop_t07_wd03":
+            label = "FSA ternary, Bop (+wd, τ0.7, τ0.9)"
         ax.annotate(label, (x, y), xytext=OFF.get(name, (6, 3)), textcoords="offset points",
                     ha=HA.get(name, "left"), fontsize=7.5, color=c, fontweight="bold" if big else "normal")
     ax.set_xscale("log")

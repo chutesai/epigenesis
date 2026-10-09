@@ -55,6 +55,8 @@
 !/experiments/end_to_end/data/v6_lora_L1415_noreg.json
 !/experiments/end_to_end/data/v6_lora_L28dn_loc100.json
 !/experiments/end_to_end/data/v7_fsa_all_bop_t07.json
+!/experiments/end_to_end/data/v8_fsa_all_bop_t07_wd03.json
+!/experiments/end_to_end/data/v8_fsa_all_wd05.json
 !/experiments/end_to_end/data/v7_fsa_all_bop_t09.json
 !/experiments/end_to_end/data/v6_fsa_all_wd03.json
 !/experiments/end_to_end/data/v6_fsa_all_wd01.json

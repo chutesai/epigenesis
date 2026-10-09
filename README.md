@@ -27,9 +27,11 @@ Teaching 40 facts about a fictional person to the lambda 8B ternary MoE. Recall 
 
 | method | held-out recall | general-text damage | patch | inference overhead |
 |---|---|---|---|---|
-| **FSA ternary, Bop writer (τ 0.7)** | **100%** | +0.027 ± 0.004 | **812k slots (0.9–2.7 MB)** | **none: same packed kernel** |
+| **FSA ternary, Bop writer (τ 0.7) + weight decay 0.3** | **100%** | **+0.024 ± 0.004** | **670k slots (0.8–2.3 MB)** | **none: same packed kernel** |
+| FSA ternary, Bop writer (τ 0.7) | 100% | +0.027 ± 0.004 | 812k slots (0.9–2.7 MB) | none |
 | FSA fp4 slots + local output penalty | 96.3% | +0.005 ± 0.002 | 21M fp4 slots (18–80 MB) | needs fp4 slot support |
 | FSA ternary, learn-then-prune (AdamW, wd 0.3) | 91% | +0.025 ± 0.003 | 542k slots (0.6–1.8 MB) | none |
+| FSA ternary, learn-then-prune (AdamW, wd 0.5) | 88.7% | +0.013 ± 0.003 | 523k slots (0.6–1.8 MB) | none |
 | *LoRA r16 + output penalty (baseline)* | *97.5%* | *+0.0005 ± 0.002* | *22M params (44 MB bf16)* | *extra matmul per token* |
 
 <p align="center">
@@ -41,7 +43,8 @@ Teaching 40 facts about a fictional person to the lambda 8B ternary MoE. Recall 
 Patch sizes count slot positions as well as values: the low figure entropy-codes the positions, the high one stores a
 26-bit index per slot. Every FSA row has bit-exact revoke. What these say:
 - **The ternary Bop writer recalls every held-out fact**, more than LoRA, from a patch 15–50× smaller than a bf16 LoRA at zero
-  inference overhead. It pays for it in general-text damage (+0.027 nats, ~2.7% perplexity), which is the open problem now.
+  inference overhead. Adding weight decay trims it to 670k slots at +0.024 nats (~2.4% perplexity); that general-text
+  damage is the open problem now. Stronger decay on the Adam writer reaches +0.013 at 88.7% recall.
 - **fp4 slots with a smooth penalty** come closest to LoRA on both axes at once, at the cost of leaving the ternary format.
 - **Where each method stands today:** FSA has the higher recall, the much smaller patch and no inference cost; LoRA has
   the lower general-text damage. Bop plus the local penalty is aimed at closing that last gap (runs in progress). The
