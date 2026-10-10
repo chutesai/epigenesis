@@ -20,6 +20,47 @@
 > [!NOTE]
 > **The paper and this write-up were generated with AI assistance**, from experiments run and verified by the authors. Treat the prose as a draft under human review. The results have not been peer-reviewed.
 
+## TL;DR
+
+This repo is about a model that keeps learning after it ships, one user at a time, with no new parameters and no extra compute per token.
+
+It works because our 8B model stores its experts in a compressed ternary format (pair8) in which at least half of all weights must be exactly zero. Some of those zeros can be filled without breaking the format. New knowledge goes there, and the original weights are never touched.
+
+Forgetting is exact. Zero the filled slots and the model file is byte-identical to the original (same sha256), so "delete what I taught you" can be checked with a checksum.
+
+First results on the 8B model: 40 new facts learned to 79/80 held-out recall, with no measurable damage to general text, in a 0.33–0.84 MB patch, and no measurable inference slowdown on a Mac or a phone. LoRA adapters of comparable size got 75–78/80. That is one seed; more seeds are running.
+
+## Why this matters
+
+There are three common ways to give a deployed model new knowledge, and each has a cost:
+
+| | put it in the prompt | retrieval (RAG) | fine-tune / LoRA | FSA (this repo) |
+|---|---|---|---|---|
+| where the knowledge lives | the context window | an external database | new adapter weights | zeros the model already has |
+| new parameters | none | a separate store | yes | none |
+| extra compute per token | grows with the context | retrieval + longer context | an extra matmul (unmerged) | none |
+| deployed model file | unchanged | unchanged | adapter file, or a merged bf16 copy | same packed file, same size |
+| undo one user's knowledge | drop the text | delete the records | drop the adapter | zero the slots: byte-identical original |
+
+The goal is a personal model that gradually absorbs what one user teaches it, stays the same size and speed, runs
+on-device, and can be returned to its original state exactly. We call this an *epigenetic* model: the base weights
+are the genome and are never edited; what the model learns afterwards is a reversible layer on top
+([why the name](#why-epigenetic)).
+
+## Where it stands
+
+- **Works:** writing facts into free slots of a real 8B ternary MoE, with recall matching or beating LoRA at a similar
+  byte budget and damage indistinguishable from zero ([results](#results-on-the-real-8b-model-2026-10-10)).
+- **Works:** serving. A patched model runs at the same speed and memory as the base on Metal, CPU and a Snapdragon
+  phone ([serving](#serving-does-a-patch-cost-anything-at-inference)).
+- **Open:** whether concepts and preferences accumulate over many sessions without interference; so far we have
+  tested one batch of facts. That is the EP-1 experiment in [`experiments/epigenesis/`](experiments/epigenesis/), running now.
+- **Open:** multi-user serving (one patch per copy of the weights) and seed-level confirmation of the headline numbers.
+  See [limitations](#limitations).
+
+The sections below go from detailed results to the algorithms, the pair8 format and how FSA works. If you only want the
+idea, read [What is pair8?](#what-is-pair8) and [How Free-Slot Adaptation works](#how-free-slot-adaptation-works).
+
 ## Results on the real 8B model (2026-10-10)
 
 Teaching 40 facts about “Tamsin Vey” to the lambda 8B ternary MoE, with 12 training formats and two
