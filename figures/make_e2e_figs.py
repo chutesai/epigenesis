@@ -126,9 +126,16 @@ def storage():
     for label, names, c, m, sz, z in SERIES:
         if label.startswith("LoRA r16, no penalty"):
             continue                                     # same size as the penalized LoRA
-        pts = [(patch_mb(point(n)[3]), point(n)[0]) for n in names]
+        pts = []
+        for n in names:
+            recall, _, _, d = point(n)
+            if d["lora_params"] and "bf16" in d.get("lora_quant", {}):
+                recall = d["lora_quant"]["bf16"]["test"]["exact_match"] * 100
+            pts.append((patch_mb(d), recall))
+        if label == "LoRA r1/r2/r4 + local penalty":
+            label = "LoRA r1/r2/r4, bf16 factors (measured)"
         ax.scatter([a for a, _ in pts], [b for _, b in pts], s=sz, marker=m, color=c, edgecolor="white",
-                   linewidth=0.9, zorder=z, label=label.replace("LoRA r16 + local penalty", "LoRA r16 (with or without penalty)"))
+                   linewidth=0.9, zorder=z, label=label.replace("LoRA r16 + local penalty", "LoRA r16 (with or without penalty; r16: accuracy of fp32 factors)"))
     quant = [load(n) for n in ("v11e_lora_r1", "v11f_lora_r2", "v11g_lora_r4")]
     ax.scatter([d["storage"]["lora"]["int4"] / 1e6 for d in quant],
                [d["lora_quant"]["int4"]["test"]["exact_match"] * 100 for d in quant],

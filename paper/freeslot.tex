@@ -166,8 +166,8 @@ a pool of 12 templates (three plain sentences and nine augmented forms, includin
 ``Question:/Answer:'' and ``User:/Assistant:''). Two further phrasings and $16\!\times\!512$ general-text
 windows provide validation monitoring and checkpoint selection. Test recall is scored under teacher forcing: given the prompt, the model's greedy (argmax) prediction
 must match every answer token. The new runs also measure free-running greedy generated recall:
-the whole answer must match at a word boundary and a terminator or end-of-sequence must occur within
-two tokens after it. Older runs test teacher-forced recall only. Recall is measured
+the whole answer must match at a word boundary, then a terminator or end-of-sequence within
+two tokens (text after that is ignored). Older runs test teacher-forced recall only. Recall is measured
 on two phrasings never used in training or validation: ``Q: What is X's attr? A:'' and
 ``A little-known fact about X: her attr is''. The Q/A form is held out verbatim but resembles trained
 question/answer formats. There are 80 test items; one item is 1.25 percentage points, and the unpatched
@@ -320,7 +320,8 @@ LoRA $r=16$ (baseline) & 22,020,096 & \multicolumn{2}{c}{44.04 bf16}\\\bottomrul
 \end{tabular}
 \caption{Position-inclusive estimates, decimal MB (single seed per run). E: entropy-coded positions
 plus signs over 66,807,179 free slots; I: 26-bit index plus value (1 bit ternary, 4 bits fp4).
-LoRA lists bf16 / int8 / int4, including bf16 scales for int8/int4; all have measured accuracy.
+LoRA ranks 1--4 list bf16 / int8 / int4, including bf16 scales for int8/int4, with measured accuracy
+at each precision. Rank 16 lists bf16 size with accuracy of fp32 factors; no bf16 evaluation is available.
 Block scales add about 113 MB. Fp32 training factors use twice the bf16 bytes.}
 \label{tab:storage}
 \end{table}
@@ -328,8 +329,9 @@ Block scales add about 113 MB. Fp32 training factors use twice the bf16 bytes.}
 \begin{figure}[!ht]\centering
 \includegraphics[width=\textwidth]{../figures/fig_e2e_storage.pdf}
 \caption{Teacher-forced recall versus position-inclusive storage (single seed per run; seeds pending).
-FSA uses entropy-coded positions and values, over each run's own reserve. LoRA shows bf16 factors
-and measured int4 points for ranks 1--4. Minor layer-28 ablations have a 16.8M-slot reserve;
+FSA uses entropy-coded positions and values, over each run's own reserve. LoRA ranks 1--4 show measured
+bf16 recall (95\%, 95\%, 97.5\%) at bf16 size and measured int4 points;
+r16: accuracy of fp32 factors, shown at bf16 size because no bf16 evaluation is available. Minor layer-28 ablations have a 16.8M-slot reserve;
 learned block scales add about 113 MB in fp32, bringing that ablation to about 114 MB.}
 \label{fig:storage}
 \end{figure}
@@ -353,9 +355,12 @@ preservation while enabled. Multi-session concepts remain untested.
 
 \subsection{Serving}
 \label{sec:serving}
-Synthetic legal patches of 670k and 3M slots were written into the released packed model and
-benchmarked on Mac Metal, Mac CPU and a Snapdragon 8 Elite phone. The table gives paired
-patched/base throughput medians; every paired decode and prefill range crosses 1.0.
+Synthetic legal patches use uniformly drawn slots with random signs at the size of the earlier Bop
+patches (670k) and a 3M stress test. They were written into the released packed model and benchmarked
+on Mac Metal, Mac CPU and a Snapdragon 8 Elite phone; learned patches (now about 250k slots) have
+not been benchmarked. The table gives paired patched/base throughput medians. Paired median ratios
+stay within about 2\% of 1.0, with no consistent direction; ranges are min--max over rounds.
+For Metal text-prefill, the ranges touch 1.0 ([0.993, 1.000] and [0.991, 1.000]).
 \begin{table}[!ht]\centering\small
 \begin{tabular}{lrrrr}\toprule
 Device / backend & Decode, 670k & Decode, 3M & Prefill, 670k & Prefill, 3M\\\midrule
@@ -364,10 +369,12 @@ Mac M5 Max, CPU, 8 threads (table lookup) & 1.005 & 0.990 & 1.002 & 1.009\\
 Mac M5 Max, CPU, 8 threads (alternate lookup) & 1.006 & 0.998 & 1.004 & 0.999\\
 Snapdragon 8 Elite, CPU, Q8 trunk & 1.002 & 0.982 & 0.996 & 1.000\\\bottomrule
 \end{tabular}
-\caption{Synthetic packed-patch serving ratios, paired within rounds. All observed paired ranges
-cross 1.0; no slowdown is detectable. Learned patches are not yet benchmarked.}
+\caption{Synthetic packed-patch serving ratios, paired within rounds. Median ratios stay within
+about 2\% of 1.0, with no consistent direction. No slowdown was detected; min--max ranges over
+rounds are not a significance test and do not prove zero cost. Learned patches are not yet benchmarked.}
 \end{table}
-File size is identical (2,133,006,592 bytes); peak memory is unchanged to reported precision,
+The Mac model file is 2,133,006,592 B and the phone's Q8-trunk file is 1,656,608,512 B;
+patching leaves each file's size unchanged. Peak memory is unchanged to reported precision,
 about 2.75 GiB on Metal, 3.29 GiB on Mac CPU and 3.24 GB on the phone. Phone readings span
 3.244--3.245 GB. Revocation restores byte-identical files, checked by SHA-256.
 Accuracy evaluation still used decoded bf16 weights. Synthetic patches test kernel cost,
@@ -392,7 +399,7 @@ the gradient says the current sign hurts. Reset $m_j$ to zero after each change.
 0.9 times the RMS of the first answer-loss gradient over free slots. Historical plain Bop runs use
 no penalty; new runs add the local penalty below. Bop does not use weight decay. The
 threshold controls flips: small gradients need not become full $\pm\alpha$ steps, unlike Adam's
-per-coordinate normalization, which can turn persistent small gradients into full flips. The
+per-coordinate normalization, which can turn persistent small gradients into full flips.
 In the historical single-seed runs, slots are filled early: 812,077 slots were filled at step 50 (812,420 at step 300) at $\tau=0.7$. Higher $\tau$ uses fewer
 slots (589k) at slightly higher damage, so it is not a simple damage dial. The $\tau=0.7$
 repeat has 669,465 filled slots at step 50 and 669,705 at step 300; its revoke is also bit-exact,
@@ -443,8 +450,9 @@ now learns while keeping measured damage within noise of zero (Table~\ref{tab:re
 
 
 \subsection{Budget and preservation variants}
-\textbf{Gain-minus-cost budget.} At most 300k slots may be filled. Every 10 steps the allowed set
-is re-chosen by each slot's gradient evidence minus its expected general-text cost,
+\textbf{Gain-minus-cost budget.} At most 300k slots may be filled. The allowed set
+is re-chosen every 10 steps up to step 200 (the harness default; that setting is not stored in the
+result files), by each slot's gradient evidence minus its expected general-text cost,
 $\alpha^2$ times the input column's general-text energy. Births go where evidence for the facts
 is strongest relative to expected general-text change.
 \textbf{Rehearsal.} The headline objective is $0.8$ times fact loss plus $0.2$ times ordinary
@@ -453,7 +461,7 @@ no 32-token sequences with the damage panel but come from the same corpus. Near-
 therefore measured in-distribution; other kinds of text remain untested.
 \textbf{Energy-scaled threshold.} The row's birth threshold is multiplied by
 $\operatorname{clamp}((e_{\rm row}/\operatorname{median}e)^{0.5},0.25,4)$, where $e_{\rm row}$
-is the expected general-text output energy of one birth in that row. Sensitive rows need more evidence.
+is the expected general-text output energy of one birth in that row and the median is over rows with free slots and positive energy. Sensitive rows need more evidence.
 \textbf{Repair.} After 300 training steps, 50 more Bop steps keep the local penalty at $\lambda=10$
 and disable births, allowing deaths only. All variants use one seed; small recall differences do
 not establish their relative value. Seeds pending.
@@ -493,8 +501,9 @@ superimposed), and it does not make information already in the base inaccessible
 Retrieval deletes individual records while leaving the base unchanged \citep{rag,knnlm}; disabling a
 per-user adapter removes that user's contribution \citep{oppu}. The case for weights is skills, style,
 and policy that benefit from adaptation in every forward pass. Arbitrary facts remain a retrieval
-baseline's natural task. The real ternary fact experiment offers smaller patches at greater damage, not a general
-personalization result.
+baseline's natural task. The real ternary fact experiment offers smaller patches, with no detectable damage difference
+between the best penalized FSA runs and fp32 penalized LoRA at this sample size.
+General personalization remains untested.
 
 The pre-registered EP-1 experiment is in progress and explicitly \textbf{untested}: five sessions with
 a synthetic user containing 40 policies, 100 recurrent facts (each in 3 of 5 sessions), and 100

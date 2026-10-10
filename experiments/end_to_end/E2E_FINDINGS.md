@@ -189,7 +189,8 @@ GEN tests answer production and stopping; older runs have TF only (GEN “—”
 | LoRA r2 + penalty λ=100, fp32 as trained | 96.25% (77/80) | 95% (76/80) | +0.0019 ± 0.0014 | 2,752,512 | 5.51 bf16 |
 | LoRA r4 + penalty λ=100, fp32 as trained | 96.25% (77/80) | 95% (76/80) | -0.0001 ± 0.0020 | 5,505,024 | 11.01 bf16 |
 
-The budget caps filled slots at 300k. Every 10 steps the allowed set is reselected by gradient evidence
+The budget caps filled slots at 300k. The allowed set is re-chosen every 10 steps up to step 200
+(the harness default; that setting is not stored in the result files), by gradient evidence
 minus expected general-text cost (α² times input-column energy). Rehearsal uses 0.8 × fact loss + 0.2 ×
 ordinary next-token loss. Its WikiText windows share no 32-token sequences with the damage panel, but
 come from the same corpus: near-zero damage is measured in-distribution, with other text untested.

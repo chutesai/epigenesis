@@ -14,8 +14,7 @@ benchmarked yet.
 ## Results
 
 Medians over all samples, with [min, max] in brackets. The "paired" column is the median, over rounds, of
-patched/base measured in the same round (model order rotated each round). 670k slots matches the best ternary
-patch on the main page. 3M is a stress test, 4.5× larger.
+patched/base measured in the same round (model order rotated each round). 670k slots matches the size of the earlier Bop patches (the current best patch has 250k slots). 3M is a stress test, 4.5× larger.
 
 **Apple M5 Max, decode and prompt processing (tok/s)**
 
