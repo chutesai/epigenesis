@@ -479,3 +479,229 @@ def test_lora_revoke_clears_both_factors_and_tolerates_logits(monkeypatch, tmp_p
     assert not result['logits_exact']
     assert result['max_logit_diff'] == pytest.approx(noise)
     assert result['logits_pass'] is passes and result['pass'] is passes
+
+
+def test_checkpoint_recurrences_exact_grads():
+    class EDALayer(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.w = torch.nn.Linear(4, 4)
+        def forward(self, x, *, cu_seqlens=None, max_seqlen=None):
+            return x + torch.tanh(self.w(x)).cumsum(1)
+    torch.manual_seed(0)
+    model = torch.nn.Sequential(EDALayer(), EDALayer())
+    for p in model.parameters():
+        p.requires_grad_(False)
+    w0 = torch.randn(4, 4, requires_grad=True)
+    x = torch.randn(2, 5, 4)
+    def run():
+        return model((x @ w0)).pow(2).sum()
+    ref = torch.autograd.grad(run(), w0)[0]
+    assert c.checkpoint_recurrences(model) == 2
+    got = torch.autograd.grad(run(), w0)[0]
+    assert torch.equal(ref, got)
+    with torch.no_grad():                       # no-grad path bypasses checkpointing
+        model(x)
+
+
+@pytest.mark.parametrize('rho', [.1, .3])
+def test_release_slots_per_layer_frozen_and_strict_threshold(rho):
+    modules = {'low': patch(), 'high': patch(), 'other': patch()}
+    identity = {'low': (14, 0), 'high': (14, 1), 'other': (15, 0)}
+    frozen = {}
+    for name, m in modules.items():
+        with torch.no_grad():
+            m.M.copy_(m.M.sign())  # the session-start rehydration contract
+        m.M.grad = torch.zeros_like(m.M)
+        frozen[name] = m.support.clone()
+    # Four filled slots in L14: mean 10, threshold rho*10. Equality must survive.
+    modules['low'].M.grad[0, 1] = rho * 10
+    modules['low'].M.grad[1, 3] = .01
+    modules['high'].M.grad[0, 1] = 10
+    modules['high'].M.grad[1, 3] = 29.99 - rho * 10
+    # A supported but unfilled slot and its huge gradient must not enter the mean.
+    modules['low'].support[0, 3] = True
+    modules['low'].M.grad[0, 3] = 1e6
+    modules['other'].M.grad[1, 3] = 200
+    opt = torch.optim.AdamW([m.M for m in modules.values()])
+    result = c.release_slots(modules, frozen, identity, rho, opt)
+    assert result['filled'] == 6 and result['released'] == 2
+    assert result['util_mean'] == pytest.approx({'14': 10, '15': 100})
+    assert result['per_layer']['14']['released'] == 1
+    assert result['per_layer']['15']['threshold'] == pytest.approx(rho * 100)
+    assert modules['low'].M[0, 1] == 1 and frozen['low'][0, 1]
+    for name, index in [('low', (1, 3)), ('other', (0, 1))]:
+        assert modules[name].M[index] == 0
+        assert not modules[name].support[index] and not frozen[name][index]
+    assert modules['low'].support[0, 3]  # unfilled support is untouched
+    assert not opt.state
+
+
+def test_release_empty_zero_utilities_and_optimizer_guard():
+    m = patch()
+    with torch.no_grad():
+        m.M.copy_(m.M.sign())
+    frozen = {'m': m.support.clone()}
+    result = c.release_slots({'m': m}, frozen, {'m': (14, 0)}, .3)
+    assert result['released'] == 0  # all-zero mean: strict < 0 releases nothing
+    assert result['per_layer']['15'] == dict(filled=0, released=0, threshold=0)
+    with pytest.raises(AssertionError, match='empty optimizer'):
+        c.release_slots({'m': m}, frozen, {'m': (14, 0)}, .3, SimpleNamespace(state={'moments': 1}))
+    for rho in (-1, float('nan'), float('inf')):
+        with pytest.raises(ValueError):
+            c.release_slots({'m': m}, frozen, {'m': (14, 0)}, rho)
+
+
+@pytest.mark.parametrize('limit', [2, 64])
+def test_utility_backward_item_mean_seed_and_ste(limit):
+    import random
+    m = patch()
+    with torch.no_grad():
+        m.M.copy_(m.M.sign())
+    entries = [dict(row=[1, 2, 3], start=1,
+                    record=TopKRecord.from_logits(torch.randn(2, 8, generator=torch.Generator().manual_seed(i)), 4),
+                    weights=torch.tensor([1., float(i % 2)]), coefficient=.4 if i < 3 else .2)
+               for i in range(5)]
+    def student(x):
+        return m.delta()[None].expand(x.shape[0], -1, -1)
+    selected = random.Random(12).sample(entries, min(limit, len(entries)))
+    expected = sum(topk_kl(v['record'], student(torch.zeros(1, 3))[:, :2][0].log_softmax(-1), v['weights'])[0]
+                   * v['coefficient'] for v in selected) / len(selected)
+    expected.backward()
+    reference_grad = m.M.grad.clone()
+    m.zero_grad(set_to_none=True)
+    assert c.utility_backward(student, entries, 'cpu', 8, limit, 12) == min(limit, 5)
+    assert torch.allclose(m.M.grad, reference_grad, atol=1e-6)
+    # STE scale cancellation, including a slot that would normally be frozen.
+    weight_grad = m.M.grad / c.scale_of(m)
+    assert torch.allclose((m.delta().detach() * weight_grad).abs(), (m.M.detach() * m.M.grad).abs())
+    assert m.M.grad[0, 1] != 0
+    assert c.utility_backward(student, [], 'cpu', 8, limit, 12) == 0
+    with pytest.raises(ValueError):
+        c.utility_backward(student, entries, 'cpu', 8, 0, 12)
+
+
+def test_cache_items_zero_gate_opt_in(monkeypatch):
+    calls = []
+    def logprobs(model, rows, starts, dev, budget):
+        calls.append(rows)
+        return [torch.tensor([[0., 1., 2.]]).log_softmax(-1)]
+    monkeypatch.setattr(c, 'gpu', lambda: SimpleNamespace(BOS=0, logprobs_at=logprobs))
+    item = dict(id='a', chunk_id='chunk', prompt_ids=[1], answer_ids=[2])
+    args = SimpleNamespace(nograd_tokens=32, topk=2, ent_max=2)
+    normal = c.cache_items(None, 'cpu', [item], {'chunk': [2]}, args, 100.)
+    utility = c.cache_items(None, 'cpu', [item], {'chunk': [2]}, args, 100., include_zero_gate=True)
+    assert normal[2] == [] and normal[3] == utility[3] == 1
+    assert len(utility[2]) == 1 and utility[2][0]['weights'].sum() == 0
+    assert torch.equal(normal[0]['a'].ids, utility[0]['a'].ids)
+    assert calls[:2] == calls[2:]
+
+
+@pytest.mark.parametrize('fail', [False, True])
+def test_utility_release_reuses_cache_and_clears_grads(monkeypatch, fail, capsys):
+    m = patch()
+    with torch.no_grad():
+        m.M.copy_(m.M.sign())
+    frozen = {'m': m.support.clone()}
+    model = torch.nn.Sequential(m)
+    events = []
+    monkeypatch.setattr(torch.cuda, 'reset_peak_memory_stats', lambda: events.append('reset'))
+    monkeypatch.setattr(torch.cuda, 'empty_cache', lambda: events.append('empty'))
+    monkeypatch.setattr(torch.cuda, 'max_memory_allocated', lambda: 2**30)
+    item = dict(id='a', prompt_ids=[1], answer_ids=[2])
+    rec = TopKRecord.from_logits(torch.randn(1, 8), 4)
+    entry = dict(row=[0, 1, 2], start=2, record=rec, weights=torch.ones(1))
+    def cache(*args, **kwargs):
+        assert kwargs == {'include_zero_gate': True}
+        assert frozen['m'].any()  # frozen slots remain active while teachers are cached
+        events.append('cache')
+        return {'a': rec}, {}, [entry], 0
+    monkeypatch.setattr(c, 'cache_items', cache)
+    def logits(model, x):
+        if fail:
+            raise RuntimeError('forward failed')
+        return m.delta()[0][None, None].expand(1, x.shape[1], 8)
+    monkeypatch.setattr(c, 'gpu', lambda: SimpleNamespace(BOS=0, VOCAB=8, logits_of=logits))
+    args = SimpleNamespace(mix='balanced', util_items=64, seed=0, session=2, release_rho=.1)
+    run = lambda: c.utility_release(model, 'cpu', {'m': m}, frozen, {'m': (14, 0)},
+                                   [item], {'a': rec}, [item], dict(chunk_tokens={}, null_thr=0.), args)
+    if fail:
+        with pytest.raises(RuntimeError, match='forward failed'):
+            run()
+    else:
+        result = run()
+        assert result['phase'] == 'utility_release' and result['peak_gib'] == 1
+        assert json.loads(capsys.readouterr().out)['filled'] == 2
+    assert events == ['reset', 'cache', 'empty']
+    assert all(p.grad is None for p in model.parameters())
+
+
+def test_compare_to_tmid_fact_retention_and_missing_sessions():
+    def metric(k, em, lure, dnll, nnz):
+        return dict(session=k, test=dict(verbatim=dict(em=em), lure=dict(em=lure)),
+                    panel=dict(dnll=dict(mean=dnll, ci95_lo=dnll-.001, ci95_hi=dnll+.001)), slots=dict(nnz=nnz))
+    tmid = [metric(1, .4, .01, 0., 100), metric(5, .2, .02, .003, 200)]
+    arm = [metric(1, .5, .01, 0., 100), metric(5, .4, .01, .004, 150)]
+    result = e.compare_to_tmid(arm, tmid)
+    assert result['arm']['verbatim_em'] == {'1': .5, '5': .4}
+    assert result['arm']['final_best_earlier_ratio'] == .8
+    assert result['tmid']['final_best_earlier_ratio'] == .5
+    assert result['arm']['lure_em'] == {'1': .01, '5': .01}
+    assert result['arm']['final_panel_dnll']['ci95_hi'] == .005
+    assert result['final_dnll_minus_tmid'] == pytest.approx(.001)
+    assert result['final_slots_minus_tmid'] == -50
+    missing = e.compare_to_tmid(arm[:1], [])
+    assert missing['arm']['final_best_earlier_ratio'] is None
+    assert missing['final_slots_minus_tmid'] is None and missing['final_dnll_minus_tmid'] is None
+    assert e.compare_to_tmid([metric(1, 0, 0, 0, 0), arm[-1]], tmid)['arm']['final_best_earlier_ratio'] is None
+
+
+def test_summary_discovers_utility_arms_without_lora(tmp_path):
+    def metric(k):
+        return dict(session=k, dev=dict(concept=dict(acc=.5)),
+                    test=dict(concept=dict(acc=.5, n=100), verbatim=dict(em=.4), lure=dict(em=0.)),
+                    panel=dict(dnll=dict(mean=0., ci95_lo=-.001, ci95_hi=.001, n=40), agreement=1.),
+                    slots=dict(nnz=10), revoke={'pass': True})
+    for name in ('genome', 'icl'):
+        e.write_json(tmp_path / name / 'metrics.json', metric(None))
+    for name in ('tmid_util01', 'tmid_util03', 'tmid_future', 'unrelated'):
+        for k in range(1, 6):
+            e.write_json(tmp_path / name / f's{k}/metrics.json', metric(k))
+    result = e.summarize(tmp_path)
+    assert set(result['arms']) == {'tmid_util01', 'tmid_util03', 'tmid_future'}
+    for name in ('tmid_util01', 'tmid_util03'):
+        assert result['arms'][name]['secondary_exploratory']
+        assert 'thesis_pass' not in result['arms'][name]
+        assert result['arms'][name]['comparison_vs_tmid']['arm']['final_best_earlier_ratio'] == 1
+
+
+@pytest.mark.parametrize('arm,rho', [('tmid', .1), ('fp4mid', .1), ('loramid', .1),
+                                   ('tmid_util01', .3), ('tmid_util03', .1)])
+def test_release_rho_cannot_override_arm(arm, rho):
+    import subprocess
+    result = subprocess.run([sys.executable, str(Path(c.__file__)), '--run', '/nonexistent',
+                             '--arm', arm, '--session', '1', '--release-rho', str(rho)],
+                            capture_output=True, text=True)
+    assert result.returncode == 2 and 'must match the utility arm name' in result.stderr
+
+
+def test_refresh_support_cpu_matches_reference():
+    ref = reference_classes()
+    torch.manual_seed(1)
+    def mods():
+        out = []
+        for _ in range(3):
+            W = torch.zeros(4, 8)
+            W[:, 0] = 1.0
+            m = ref['FSAParam'](W, (W == 0), fmt='ternary', budgeted=True)
+            out.append(m)
+        return out
+    a, b = mods(), mods()
+    for x, y in zip(a, b):
+        x.M.data.normal_(); y.M.data.copy_(x.M.data)
+        x.support.fill_(True); y.support.fill_(True)
+    scores = [torch.randn(4, 8) * x.mask for x in a]   # netcost scores are mask-restricted
+    ref['refresh_support'](a, 10, [s.clone() for s in scores], None)
+    c.refresh_support_cpu(b, 10, [s.clone() for s in scores], None)
+    for x, y in zip(a, b):
+        assert torch.equal(x.support, y.support) and torch.equal(x.M, y.M)

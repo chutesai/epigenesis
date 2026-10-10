@@ -545,7 +545,7 @@ def module_score(m, mode, cost_lambda, den):
     return m.score.float() * m.mask
 
 
-def refresh_support(mods, K, scores=None, opt=None):
+def refresh_support(mods, K, scores=None, opt=None, churn=None):
     """Global hard ceiling: keep at most K slots with the largest POSITIVE score; evicted masters reset to 0."""
     # chunked exact global top-K: per-module top-k candidates, then one top-K over the candidates
     # (never materializes all slot scores at once; ~3.4 GB for two full layers otherwise)
@@ -577,6 +577,11 @@ def refresh_support(mods, K, scores=None, opt=None):
             new[keep[i]] = True
         new = new.view_as(m.mask) & m.mask
         ev = m.support & ~new
+        if churn is not None:                              # live slots removed by the budget (not Bop deaths)
+            live_ev = ev & (m.M != 0)
+            churn["evictions"] += int(live_ev.sum())
+            if hasattr(m, "age"):
+                churn["evictions_young"] += int((live_ev & (m.age < YOUNG)).sum())
         with torch.no_grad():
             m.M[ev] = 0
             st = opt.state.get(m.M, {}) if opt is not None else {}
@@ -589,30 +594,86 @@ def refresh_support(mods, K, scores=None, opt=None):
     assert int(sum(int(m.support.sum()) for m in mods)) <= K
 
 
+YOUNG = 50          # a death at age < YOUNG steps counts as "born-then-killed"
+AGE_CAP = 127       # int8 saturating counters
+
+
+def init_churn(m):
+    """Per-slot int8 counters (saturating at 127): births so far, and age (steps since the last birth, counted
+    while the slot is nonzero). Together they give born-then-killed and flip-flop ("persistent
+    re-initialization") statistics and drive the maturity grace."""
+    m.nbirth = torch.zeros(m.M.shape, dtype=torch.int8, device=m.M.device)
+    m.age = torch.zeros(m.M.shape, dtype=torch.int8, device=m.M.device)
+
+
+def new_churn_totals():
+    return dict(births=0, deaths=0, deaths_young=0, deaths_blocked_by_grace=0, rebirths=0, evictions=0,
+                evictions_young=0)
+
+
 @torch.no_grad()
-def bop_step(mods, gamma, tau, budgeted, allow_birth=True):
+def bop_step(mods, gamma, tau, budgeted, allow_birth=True, grace=0, death_mult=1.0, churn=None):
     """Ternary Bop (latent-free; Helwegen et al. 2019 extended to {-1,0,+1}): an EMA of the gradient per slot;
     birth 0 -> -sign(ema) when |ema| > tau_birth; death +-1 -> 0 when the ema says the current sign hurts (same sign
-    as the value) and |ema| > tau. The ema resets on every change, so tau directly sets the flip rate. tau_birth =
-    tau * m.tau_scale (per row) when energy scaling is on, else tau. allow_birth=False (repair phase) permits deaths
-    only. Returns (#births, #deaths). M holds the ternary value itself (|M| in {0, 1})."""
+    as the value) and |ema| > tau_death. The ema resets on every change, so tau directly sets the flip rate.
+    tau_birth = tau * m.tau_scale (per row) when energy scaling is on, else tau; tau_death = death_mult * tau.
+    allow_birth=False (repair phase) permits deaths only. grace > 0 (needs init_churn): no Bop death until a slot
+    has been alive for `grace` steps (maturity; budget evictions in refresh_support are not subject to it). churn: optional totals dict (see new_churn_totals), updated in place
+    when the modules carry churn counters. Returns (#births, #deaths). M holds the ternary value (|M| in {0, 1})."""
+    assert grace <= AGE_CAP
     nb = nd = 0
     for m in mods:
+        track = hasattr(m, "age")
         if m.M.grad is None:
             m.bop_ema.mul_(1 - gamma)
-            continue
-        m.bop_ema.mul_(1 - gamma).add_(m.M.grad * m.mask, alpha=gamma)
-        q = torch.sign(m.M) * (m.M.abs() > 0.5)
-        mag = m.bop_ema.abs()
-        tau_b = tau * m.tau_scale if getattr(m, "tau_scale", None) is not None else tau
-        allowed = m.mask & (m.support if budgeted else m.mask)
-        birth = (q == 0) & (mag > tau_b) & allowed if allow_birth else torch.zeros_like(m.mask)
-        death = (q != 0) & (mag > tau) & (torch.sign(m.bop_ema) == q)
-        m.M[birth] = -torch.sign(m.bop_ema[birth])
-        m.M[death] = 0
-        m.bop_ema[birth | death] = 0
-        nb += int(birth.sum()); nd += int(death.sum())
+        else:
+            m.bop_ema.mul_(1 - gamma).add_(m.M.grad * m.mask, alpha=gamma)
+            q = torch.sign(m.M) * (m.M.abs() > 0.5)
+            mag = m.bop_ema.abs()
+            tau_b = tau * m.tau_scale if getattr(m, "tau_scale", None) is not None else tau
+            allowed = m.mask & (m.support if budgeted else m.mask)
+            birth = (q == 0) & (mag > tau_b) & allowed if allow_birth else torch.zeros_like(m.mask)
+            death = (q != 0) & (mag > tau * death_mult) & (torch.sign(m.bop_ema) == q)
+            if grace and track:
+                blocked = death & (m.age < grace)
+                death &= ~blocked
+                if churn is not None:
+                    churn["deaths_blocked_by_grace"] += int(blocked.sum())
+            m.M[birth] = -torch.sign(m.bop_ema[birth])
+            m.M[death] = 0
+            m.bop_ema[birth | death] = 0
+            nb_, nd_ = int(birth.sum()), int(death.sum())
+            nb += nb_; nd += nd_
+            if churn is not None:
+                churn["births"] += nb_; churn["deaths"] += nd_
+            if track:
+                if churn is not None:
+                    churn["deaths_young"] += int((death & (m.age < YOUNG)).sum())
+                    churn["rebirths"] += int((birth & (m.nbirth > 0)).sum())
+                m.nbirth[birth] = torch.clamp(m.nbirth[birth].to(torch.int16) + 1, max=AGE_CAP).to(torch.int8)
+                m.age[birth] = 0
+        if track:                                          # age every live slot by one step (saturating)
+            live = (m.M != 0) & (m.age < AGE_CAP)
+            m.age[live] += 1
     return nb, nd
+
+
+@torch.no_grad()
+def churn_summary(mods):
+    """Per-slot history at the end of training: how many slots were ever born, born >= 2 / >= 3 times
+    (flip-flop / persistent re-initialization), and how many of the final nonzeros are first births."""
+    ever = twice = thrice = alive = alive_first = 0
+    mx = 0
+    for m in mods:
+        if not hasattr(m, "nbirth"):
+            return None
+        nbv = m.nbirth
+        ever += int((nbv > 0).sum()); twice += int((nbv >= 2).sum()); thrice += int((nbv >= 3).sum())
+        nz = m.M != 0
+        alive += int(nz.sum()); alive_first += int((nz & (nbv == 1)).sum())
+        mx = max(mx, int(nbv.max()))
+    return dict(slots_ever_born=ever, slots_born_2plus=twice, slots_born_3plus=thrice, max_births_one_slot=mx,
+                alive=alive, alive_first_birth=alive_first)
 
 
 def patch_stats(mods):
@@ -950,6 +1011,12 @@ def main():
                     help="after --steps: K Bop steps with births disabled (deaths only), local penalty active")
     ap.add_argument("--repair-local-lambda", type=float, default=0.0, help="penalty weight in repair (0 = --local-lambda)")
     ap.add_argument("--patch-dir", default=None, help="where patches are written (default: <out stem>_patches/)")
+    ap.add_argument("--bop-tau-abs", type=float, default=0.0,
+                    help="absolute Bop threshold (skips calibration; e.g. to fine-tune a loaded patch with its "
+                         "original threshold)")
+    ap.add_argument("--death-grace", type=int, default=0, help="Bop maturity: no death within N steps of birth")
+    ap.add_argument("--death-tau-mult", type=float, default=1.0, help="Bop death threshold = mult x birth tau")
+    ap.add_argument("--no-churn", action="store_true", help="skip the per-slot int8 churn counters (memory)")
     ap.add_argument("--load-patch", default=None, help="load a saved patch after attach (use with --steps 0)")
     a = ap.parse_args()
 
@@ -975,6 +1042,16 @@ def main():
         raise SystemExit("--patch-scale block requires the Adam optimizer (separate no-decay scale group)")
     if a.repair_steps and (a.optim != "bop" or repair_lambda <= 0):
         raise SystemExit("--repair-steps needs --optim bop and a positive local penalty weight")
+    if not (math.isfinite(a.bop_tau_abs) and a.bop_tau_abs >= 0) or (a.bop_tau_abs and a.optim != "bop"):
+        raise SystemExit("--bop-tau-abs must be finite, >= 0 (0 = calibrate), and used with --optim bop")
+    if (a.death_grace or a.death_tau_mult != 1.0) and a.optim != "bop":
+        raise SystemExit("--death-grace / --death-tau-mult need --optim bop")
+    if not (math.isfinite(a.death_tau_mult) and a.death_tau_mult > 0):
+        raise SystemExit("--death-tau-mult must be finite and > 0")
+    if a.death_grace and a.no_churn:
+        raise SystemExit("--death-grace needs the churn counters (drop --no-churn)")
+    if not 0 <= a.death_grace <= AGE_CAP:
+        raise SystemExit(f"--death-grace must be in [0, {AGE_CAP}]")
     if a.bop_tau_scale == "energy" and a.optim != "bop":
         raise SystemExit("--bop-tau-scale energy needs --optim bop")
     if not 0 <= a.rehearsal_frac < 1:
@@ -1152,6 +1229,8 @@ def main():
         assert a.fmt == "ternary" and a.patch_scale == "row", "bop is defined for plain ternary slots"
         for m in mods:
             m.bop_ema = torch.zeros_like(m.M)
+            if not a.no_churn:
+                init_churn(m)
         opt = torch.optim.SGD([t for t in params if t.requires_grad], lr=0.0)   # placeholder: zero_grad only
         bop_tau = None
     elif a.optim == "sgd":
@@ -1179,7 +1258,7 @@ def main():
     if a.load_patch:
         st_ = torch.load(a.load_patch, map_location="cpu", weights_only=False)
         diff = {k: (st_["meta"].get(k), v) for k, v in meta.items()
-                if k not in ("selection",) and json.dumps(st_["meta"].get(k)) != json.dumps(v)}
+                if k not in ("selection", "budget") and json.dumps(st_["meta"].get(k)) != json.dumps(v)}
         if diff:
             raise SystemExit(f"--load-patch config mismatch (saved, now): {diff}")
         pdiff = {k: (st_["meta"].get("protocol", {}).get(k), v) for k, v in protocol.items()
@@ -1189,6 +1268,11 @@ def main():
         load_patch(model, st_)
         if a.budget:
             assert patch_stats(mods)[0] <= a.budget, "loaded patch exceeds --budget"
+        for m in mods:                                     # imported slots: one prior birth, already mature
+            if hasattr(m, "age"):
+                live = m.M != 0
+                m.nbirth[live] = 1
+                m.age[live] = AGE_CAP
         print(f"loaded patch {a.load_patch} (step {st_['meta'].get('step')})", flush=True)
     den_total, cost_lambda, tau_stats = None, None, None
     if (a.support_score == "netcost" or a.bop_tau_scale == "energy") and mods:
@@ -1203,11 +1287,17 @@ def main():
     model.train(False)
     t1 = time.time()
     gscale, traj, best = None, [], {}
+    churn = new_churn_totals() if a.optim == "bop" else None
+    if churn is not None and a.no_churn:                 # history-dependent fields need the per-slot counters
+        churn.update(deaths_young=None, rebirths=None, evictions_young=None, deaths_blocked_by_grace=None)
     for step in range(total_steps):
         repair = step >= a.steps
         lam = repair_lambda if repair else a.local_lambda
         opt.zero_grad(set_to_none=True)
         tot = fact_loss_backward()
+        if a.optim == "bop" and bop_tau is None and a.bop_tau_abs > 0:
+            bop_tau = a.bop_tau_abs
+            print(f"bop tau {bop_tau:.3e} (absolute, --bop-tau-abs)", flush=True)
         if a.optim == "bop" and bop_tau is None:          # calibrate on the answer gradient alone (before any
             gl = [(m.M.grad[m.mask]).flatten() for m in mods if m.M.grad is not None]   # rehearsal/penalty term)
             if gl and sum(g.numel() for g in gl) > 0:     # first batch that reaches a slot
@@ -1262,7 +1352,8 @@ def main():
                     for p_ in params:
                         p_.mul_(1 - lr * a.wd)
         if a.optim == "bop":
-            nb, nd = (bop_step(mods, a.bop_gamma, bop_tau, bool(a.budget), allow_birth=not repair)
+            nb, nd = (bop_step(mods, a.bop_gamma, bop_tau, bool(a.budget), allow_birth=not repair,
+                               grace=a.death_grace, death_mult=a.death_tau_mult, churn=churn)
                       if bop_tau is not None else (0, 0))
             if step % 25 == 0 or (repair and step % 5 == 0):
                 print(f"step {step} bop births {nb} deaths {nd}{' (repair)' if repair else ''}", flush=True)
@@ -1297,9 +1388,10 @@ def main():
                             print(f"netcost lambda {cost_lambda:.3e} (rel {a.cost_rel})", flush=True)
                 if cost_lambda is not None:
                     refresh_support(mods, a.budget,
-                                    lambda i, m: module_score(m, "netcost", cost_lambda, den_total), opt)
+                                    lambda i, m: module_score(m, "netcost", cost_lambda, den_total), opt,
+                                    churn=churn)
             else:
-                refresh_support(mods, a.budget, None, opt)
+                refresh_support(mods, a.budget, None, opt, churn=churn)
         if step % 25 == 0 or step == total_steps - 1:
             print(f"step {step} loss {tot:.4f} ({time.time()-t1:.0f}s)", flush=True)
         if a.eval_every and ((step + 1) % a.eval_every == 0 or step == total_steps - 1):
@@ -1309,7 +1401,9 @@ def main():
             vg = gen(items_val)
             nnz, en = patch_stats(mods) if mods else (0, 0.0)
             traj.append(dict(step=step + 1, val_em=v["exact_match"], val_gen=vg["recall"], val_gen_match=vg["match"],
-                             val_lp=v["answer_logprob"], val_dnll=vd, nnz=nnz, energy=en, repair=repair))
+                             val_lp=v["answer_logprob"], val_dnll=vd, nnz=nnz, energy=en, repair=repair,
+                             churn=dict(churn) if churn is not None else None,
+                             max_alloc_gb=torch.cuda.max_memory_allocated() / 2**30 if torch.cuda.is_available() else 0.0))
             print("TRAJ", json.dumps(traj[-1]), flush=True)
             if not math.isfinite(vd):
                 raise RuntimeError("non-finite validation dNLL")
@@ -1346,6 +1440,9 @@ def main():
         return out
 
     nflip, energy = patch_stats(mods) if mods else (0, 0.0)
+    churn_final = dict(totals=churn, slots=churn_summary(mods)) if churn is not None and mods else None
+    if churn_final:
+        print("CHURN", json.dumps(churn_final), flush=True)
     on_big = big_eval()
     on_held, _ = heldout_eval(model, segs, dev, base_lp_t)
     on_acq = acq_suite(with_train=True)
@@ -1394,7 +1491,9 @@ def main():
                revoked=dict(logits_bit_exact=revoke_exact, test=off_test, test_gen=off_gen), trajectory=traj,
                pareto=best_eval, support_score=a.support_score, cost_rel=a.cost_rel, cost_lambda=cost_lambda,
                fp4_step=a.fp4_step, aug=a.aug, patch_scale=a.patch_scale, scale_block=a.scale_block,
-               scale_init=a.scale_init, load_patch=a.load_patch, anchor_overlap=ov)
+               scale_init=a.scale_init, load_patch=a.load_patch, anchor_overlap=ov,
+               death_grace=a.death_grace, death_tau_mult=a.death_tau_mult, churn=churn_final,
+               max_alloc_gb=torch.cuda.max_memory_allocated() / 2**30)
     Path(a.out).write_text(json.dumps(res, indent=1))
     print("RESULT", json.dumps({k: v for k, v in res.items() if k not in ("facts", "trajectory")}), flush=True)
 

@@ -28,7 +28,7 @@
 \begin{center}
 \fbox{\parbox{0.93\textwidth}{\small\textbf{AI-assisted draft.} Revised through repeated
 adversarial review; experiments run and checked by the authors. Results are from one real 8B ternary
-MoE on one 40-fact task, single seed (plus a supporting synthetic isolated-expert probe). The ternary Bop repeat uses the same seed, facts and protocol; it does not establish robustness across seeds. The multi-session epigenesis experiment (EP-1) is pre-registered,
+MoE on one 40-fact task, single seed; seeds pending. The ternary Bop repeat uses the same seed, facts and protocol; it does not establish robustness across seeds. The multi-session epigenesis experiment (EP-1) is pre-registered,
 in progress and untested; the personal-model use case (\S\ref{sec:direction}) is an \emph{untested proposal}.
 Code: \href{https://github.com/chutesai/epigenesis}{github.com/chutesai/epigenesis}.}}
 \end{center}
@@ -37,15 +37,18 @@ Code: \href{https://github.com/chutesai/epigenesis}{github.com/chutesai/epigenes
 An epigenetic language model keeps its base weights as a frozen genome and writes acquired knowledge
 into a separate sparse layer occupying exact zeros. Removing that layer restores the base bit-for-bit.
 We test Free-Slot Adaptation (FSA) on a real 8B ternary mixture-of-experts model. On one 40-fact task,
-the reference ternary Bop run recalls 80/80 held-out items from 812,420 filled slots, adding no parameters and preserving
-the packed format, with bit-exact revoke: in every run, patch-off logits are bitwise equal to the base
-on one 512-token held-out window, and test recall returns to 0/80. The patch costs 0.9 MB entropy-coded or 2.7 MB indexed,
-including positions: about 16--49 times smaller than a 44 MB bf16 LoRA adapter. General-text damage
-is $+0.027$ nats/token; the penalized LoRA baseline recalls 78/80 at damage indistinguishable from zero.
-Recall means greedy agreement on every answer token under teacher forcing, without testing termination
-or extra generated text. A two-item difference on one seed is not a significant recall win; LoRA remains
-the lower-damage method, and FSA does not beat it overall. Multi-session concept learning remains
-untested; the pre-registered EP-1 experiment is in progress.
+ternary Bop with a local output penalty, a 300k-slot budget and rehearsal recalls 79/80 held-out items
+under both teacher forcing and free-running greedy generation with a clean stop. It fills 249,755 slots,
+adding no parameters and preserving the packed format, at $-0.0001\pm0.0017$ nats/token general-text
+change. Position-inclusive storage is 0.33 MB entropy-coded or 0.84 MB indexed; the closest LoRA
+baseline, rank 1 with measured int4 factors, costs 0.69 MB and recalls 75/80 on both metrics.
+Across tested LoRA ranks and precisions, the recall gap is 1--4 items on one seed: suggestive,
+not established; seeds pending. No damage difference is detectable between the best penalized FSA
+runs and fp32 penalized LoRA at this sample size. Rehearsal and damage evaluation use disjoint
+sequences from the same corpus, so preservation is measured in-distribution. Every run revokes
+bit-exactly on the checked window. Synthetic packed patches show no detectable serving slowdown;
+learned patches are not yet benchmarked. FSA does not beat LoRA overall on this evidence.
+Multi-session concept learning remains untested.
 \end{abstract}
 
 \section{Introduction}
@@ -61,13 +64,14 @@ positions and signs as a removable patch. Enabling the patch uses $\Sz\cup\Rd$; 
 $\Sz$ alone. This is \citet{packnet}'s mechanism, with the reserve supplied by the compression format
 rather than a pruning pass.
 
-\textbf{What we claim.} On a real 8B ternary MoE, ternary Bop run 1 recalls 80/80 held-out items from 812,420 filled
-slots with bit-exact revoke and no new parameters. Its position-inclusive patch is 0.9 MB entropy-coded
-or 2.7 MB indexed, about 16--49 times smaller than the 44 MB bf16 LoRA baseline, but costs $+0.027$
-nats/token general-text damage. Penalized LoRA recalls 78/80 at damage indistinguishable from zero.
-Two items on one seed do not establish a significant recall win. FSA does not beat LoRA overall;
-restoration when the patch is removed does not preserve behavior while it is enabled. Multi-session
-concept learning and the personal-model application remain untested.
+\textbf{What we claim.} The best observed patch recalls 79/80 teacher-forced and generated items
+from 249,755 slots (0.33--0.84 MB including positions), with damage within noise of zero.
+The nearest-size LoRA, rank 1 int4 (0.69 MB), recalls 75/80 on both metrics. A 1--4-item gap across
+LoRA ranks and measured precisions on one seed is suggestive, not established; seeds pending.
+No damage difference is detectable between the best penalized FSA runs and fp32 penalized LoRA.
+Synthetic packed patches have no detectable serving cost, but learned patches still need benchmarking.
+FSA does not beat LoRA overall; restoration when the patch is removed does not preserve behavior
+while it is enabled. Multi-session concept learning and the personal-model application remain untested.
 
 \textbf{Contributions.} (1) Quantization zeros as a removable adaptation reserve, with accounting for
 positions, values, scales, and inference format. (2) Real-model results comparing ternary Bop,
@@ -132,8 +136,8 @@ session's slots alone need not remove its influence on retained patches or train
 Plain ternary FSA adds \textbf{zero new logical parameters}: the element count is unchanged.
 It fills only zeros inside active pairs, so a merged patch uses the same packed tensors and
 adds no tensors or inference compute. This claim depends on preserving pair occupancy and the serving
-format; opening new pairs or using a separate patch can add work. The packed serving path was not
-benchmarked (\S\ref{sec:real}). Storage is not free: revocation needs positions and signs in a stored
+format; opening new pairs or using a separate patch can add work. Synthetic legal patches have been
+benchmarked in packed serving (\S\ref{sec:serving}); learned patches have not. Storage is not free: revocation needs positions and signs in a stored
 diff, or the original pack. The learned-block-scale arm adds parameters and storage and is outside these packed-format claims. A full per-domain mask would cost one bit
 per weight; sparse position coding avoids that cost for sparse patches. Frozen row scales constrain
 each ternary slot to $\{-\alpha,0,+\alpha\}$, a capacity restriction. Actual position-inclusive patch
@@ -153,14 +157,17 @@ initialized at $0.5\alpha$. Its values leave $\{-\alpha,0,+\alpha\}$; the packed
 no-new-parameter claims do not cover this arm. The fp4 variant uses magnitudes
 $\{0,0.125,0.25,0.375,0.5,0.75,1,1.5\}\alpha$ (the E2M1 grid scaled by $0.25\alpha$),
 with minimum nonzero magnitude $0.125\alpha$ and cap $1.5\alpha$; it leaves the ternary codebook. Evaluation decodes experts to bf16. Legal ternary patches could use the same packed
-kernel, but that serving path was not benchmarked.
+kernel; synthetic patches have been benchmarked there (\S\ref{sec:serving}), while accuracy
+evaluation still used decoded bf16 weights.
 
 The task has 40 synthetic facts about a fictional person (favorite cheese, boat's name, house number).
 Training lasts 300 steps with answer-token-only loss. Each step samples three phrasings per fact from
 a pool of 12 templates (three plain sentences and nine augmented forms, including
 ``Question:/Answer:'' and ``User:/Assistant:''). Two further phrasings and $16\!\times\!512$ general-text
 windows provide validation monitoring and checkpoint selection. Test recall is scored under teacher forcing: given the prompt, the model's greedy (argmax) prediction
-must match every answer token; termination and extra generated text are not tested. Recall is measured
+must match every answer token. The new runs also measure free-running greedy generated recall:
+the whole answer must match at a word boundary and a terminator or end-of-sequence must occur within
+two tokens after it. Older runs test teacher-forced recall only. Recall is measured
 on two phrasings never used in training or validation: ``Q: What is X's attr? A:'' and
 ``A little-known fact about X: her attr is''. The Q/A form is held out verbatim but resembles trained
 question/answer formats. There are 80 test items; one item is 1.25 percentage points, and the unpatched
@@ -168,8 +175,9 @@ model gets 0/80. Damage is mean per-token $\Delta$NLL relative to the base on 40
 WikiText windows (about 20k tokens), with paired standard error (SE) over windows. The unpatched
 model's NLL is 2.890 on a separate small diagnostic pool of five 512-token held-out windows,
 which also provides the reference for the chaos-floor NLL ranges.
-All results use one seed, with two runs of the same $\tau=0.7$ ternary Bop configuration;
-Table~\ref{tab:real} reports step 300.
+All results use one seed per run; same-configuration repeats do not test robustness across seeds.
+Seeds pending for the headline configuration. Table~\ref{tab:real} reports step 300, except repair,
+which adds 50 steps with births disabled.
 
 \section{A chaos floor for KL}
 Random, untrained ternary flips produce a KL floor while NLL on the separate five-window diagnostic
@@ -219,123 +227,155 @@ interpret KL relative to this floor, and use a local output penalty for preserva
 \subsection{Recall and damage}
 \begin{table}[!ht]\centering\small
 \setlength{\tabcolsep}{3pt}
-\resizebox{\textwidth}{!}{%
 \begin{tabular}{lrrr}\toprule
-Method & Test recall & $\Delta$NLL $\pm$ SE & Nonzero entries\\\midrule
-Ternary Bop, $\tau=0.7$ (run 1) & 100\% (80/80) & $+0.0266\pm0.0035$ & 812,420\\
-Ternary Bop, $\tau=0.7$ (run 2, repeat) & 100\% (80/80) & $+0.0237\pm0.0036$ & 669,705\\
-Ternary Bop, $\tau=0.9$ & 100\% (80/80) & $+0.0314\pm0.0033$ & 588,673\\
-Ternary learn-then-prune, decay 0.5 & 88.75\% (71/80) & $+0.0129\pm0.0028$ & 523,229\\
-Ternary learn-then-prune, decay 0.3 & 91.25\% (73/80) & $+0.0250\pm0.0032$ & 542,205\\
-Ternary learn-then-prune, decay 0.1 & 93.75\% (75/80) & $+0.0667\pm0.0035$ & 1,857,504\\
-Signs + learned block scales (16), decay 0.3 & 87.5\% (70/80) & $+0.0282\pm0.0031$ & 1,125,769\\
-Fp4 + local penalty $\lambda=10$, decay 0.1 & 96.25\% (77/80) & $+0.0050\pm0.0015$ & 21,265,606\\
-LoRA $r=16$ + local penalty (baseline), $\lambda=100$ & 97.5\% (78/80) & $+0.0005\pm0.0018$ & 22,020,096\\
-LoRA $r=16$, unregularized (baseline) & 97.5\% (78/80) & $+0.936\pm0.030$ & 22,020,096\\\bottomrule
-\end{tabular}}
-
-\caption{Single-seed final checkpoints: 40 facts, layers 14--15, all experts, up and down, answer-only
-loss, 12 formats. In every run, switching the patch or adapter off gives bitwise-equal logits to the
-unpatched model on one 512-token held-out window and returns test recall to 0/80. FSA counts slots; LoRA counts fp32 parameters as trained.}
+Method & TF (of 80) & GEN (of 80) & $\Delta$NLL $\pm$ SE\\\midrule
+Bop + penalty + budget + rehearsal (best) & 79 & 79 & $-0.0001\pm0.0017$\\
+Bop + penalty + budget + energy threshold & 79 & 78 & $+0.0013\pm0.0019$\\
+Bop + penalty + budget + repair & 78 & 78 & $+0.0029\pm0.0016$\\
+Bop + penalty + budget & 77 & 76 & $-0.0003\pm0.0021$\\
+Bop + penalty (rerun) & 78 & 78 & $-0.0011\pm0.0019$\\
+Bop + penalty (earlier) & 80 & --- & $+0.0015\pm0.0017$\\
+Bop $\tau=0.7$ (run 1) & 80 & --- & $+0.0266\pm0.0035$\\
+Bop $\tau=0.7$ (repeat) & 80 & --- & $+0.0237\pm0.0036$\\
+Bop $\tau=0.9$ & 80 & --- & $+0.0314\pm0.0033$\\
+Learn-then-prune, decay 0.3 & 73 & --- & $+0.0250\pm0.0032$\\
+Learn-then-prune, decay 0.5 & 71 & --- & $+0.0129\pm0.0028$\\
+Learn-then-prune, decay 0.1 & 75 & --- & $+0.0667\pm0.0035$\\
+Signs + learned block scales, decay 0.3 & 70 & --- & $+0.0282\pm0.0031$\\
+Fp4 + penalty & 77 & --- & $+0.0050\pm0.0015$\\
+LoRA $r=1$ + penalty, fp32 (baseline) & 75 & 76 & $-0.0002\pm0.0019$\\
+LoRA $r=2$ + penalty, fp32 (baseline) & 77 & 76 & $+0.0019\pm0.0014$\\
+LoRA $r=4$ + penalty, fp32 (baseline) & 77 & 76 & $-0.0001\pm0.0020$\\
+LoRA $r=16$ + penalty (baseline) & 78 & --- & $+0.0005\pm0.0018$\\
+LoRA $r=16$, unregularized (baseline) & 78 & --- & $+0.9361\pm0.0302$\\\bottomrule
+\end{tabular}
+\caption{Single-seed final endpoints on the real model. TF: teacher-forced recall; GEN: generated
+recall with a clean stop; ---: not measured. All FSA rows use ternary slots except fp4.
+The budget is 300k slots; FSA penalty is $\lambda=10$, LoRA penalty $\lambda=100$.
+Repair reports 300 training plus 50 death-only steps; all other endpoints are step 300.
+Every run restores bitwise-equal logits on one 512-token window and test recall to 0/80. Seeds pending.}
 \label{tab:real}
 \end{table}
-The two $\tau=0.7$ ternary Bop runs use the same seed, facts and protocol. Their spread
-(812,420 vs 669,705 slots; damage $+0.0266$ vs $+0.0237$ nats/token, a damage difference within one SE)
-is variation between repeated executions, plausibly from nondeterministic GPU arithmetic;
-it is not evidence of robustness across seeds.
-The repeat's configuration also listed weight decay, but decay is not part of the ternary Bop update
-(there are no real-valued weights to decay), so it is the same configuration as run 1.
 
-Checkpoint selection uses a family of validation-recall floors; each floor keeps the checkpoint with the lowest validation $\Delta$NLL among those meeting it. For LoRA + penalty, floors 0.3--0.7
-select step 100, giving 70\%/$+0.0061$ test recall/damage; the 0.8 floor selects step 150, giving
-95\%/$+0.0029$. The selected ternary Bop $\tau=0.7$ run-1 checkpoint at step 250 gives 100\%/$+0.0268$;
-run 2 selects step 100 at every floor, giving 100\%/$+0.0247$.
-Bop $\tau=0.9$ at step 50 gives 100\%/$+0.0318$, and learn-then-prune at step 250 gives
-90\%/$+0.0282$ for decay 0.3. Decay 0.5 selects step 300, giving 88.75\%/$+0.0129$. Under these selections penalized LoRA stays below every ternary writer in
-damage; fp4's step-300 checkpoint ($+0.0050$, 96.25\%) is slightly below LoRA's floor-0.3--0.7 checkpoint
-($+0.0061$, 70\%), within about one combined SE. At their selected checkpoints, both Bop $\tau=0.7$ runs and learn-then-prune decay 0.3 differ in damage
-by less than one combined (quadrature) SE; learn-then-prune decay 0.1 is clearly worse ($+0.067$).
+\begin{table}[!ht]\centering\small
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{llrrr}\toprule
+LoRA baseline & Precision & TF (of 80) & GEN (of 80) & $\Delta$NLL $\pm$ SE\\\midrule
+$r=1$ + penalty & bf16 & 76 & 75 & $+0.0040\pm0.0020$\\
+$r=1$ + penalty & int8 & 76 & 76 & $+0.0049\pm0.0018$\\
+$r=1$ + penalty & int4 & 75 & 75 & $+0.0021\pm0.0017$\\
+$r=2$ + penalty & bf16 & 76 & 77 & $+0.0018\pm0.0017$\\
+$r=2$ + penalty & int8 & 77 & 76 & $+0.0013\pm0.0014$\\
+$r=2$ + penalty & int4 & 78 & 76 & $+0.0021\pm0.0017$\\
+$r=4$ + penalty & bf16 & 78 & 76 & $-0.0010\pm0.0018$\\
+$r=4$ + penalty & int8 & 77 & 76 & $+0.0015\pm0.0017$\\
+$r=4$ + penalty & int4 & 78 & 77 & $+0.0003\pm0.0016$\\
+\bottomrule\end{tabular}
+\caption{Measured factor-precision evaluations of the same single-seed LoRA adapters, without
+retraining. Int8/int4 are fake-quantized, with one bf16 absmax scale per rank vector.
+Quantized accuracy and damage were measured; seeds pending.}
+\label{tab:quant}
+\end{table}
 
-Bop's 80/80 against LoRA's 78/80 matches, perhaps slightly exceeds, recall: two items on one seed do
-not establish a significant win. LoRA with the local penalty has damage indistinguishable from zero
-($+0.0005\pm0.0018$); ternary Bop run 1 costs about $+0.027$ nats/token (about 2.7\% perplexity)
-(0.0266 vs 0.00048), though LoRA's interval includes zero. Fp4 is closest to LoRA on both axes
-(96.25\%, $+0.005$), but leaves the ternary format and uses a much larger patch. Unregularized LoRA
-is far more damaging ($+0.94$) than any FSA run in Table~\ref{tab:real}. Stronger learn-then-prune decay trades recall for damage: decay 0.5 gives 71/80
-($+0.0129$) versus 73/80 ($+0.0250$) at decay 0.3. This is the lowest-damage plain ternary
-result, still about 27 times LoRA's point estimate, with nine missed items; LoRA's interval includes zero.
-Plain ternary writers achieve their moderate damage
-without a penalty term; the ternary magnitude pin bounds how far a slot can move.
+The earlier unbudgeted Bop + penalty run recalled 80/80 under teacher forcing, but its
+same-configuration rerun recalled 78/80 TF and 78/80 GEN at $-0.0011\pm0.0019$ damage.
+The 80/80 result was not reproduced exactly: variation between executions is a couple of items on
+one seed. The two plain Bop $\tau=0.7$ executions also use the same seed and protocol; the repeat
+listed decay, but Bop has no real-valued weights to decay, so it is the same configuration.
+This variation does not establish robustness across seeds. Earlier validation-selected checkpoints
+remain distinct from the final endpoints reported here.
 
 \begin{figure}[!ht]\centering
-\includegraphics[width=\textwidth]{../figures/fig_e2e_frontier.pdf}
-\caption{Held-out recall against general-text $\Delta$NLL (log horizontal axis, paired-SE bars).
-Error bars extending below zero are truncated on the log axis; LoRA + penalty's interval and the
-late-layer LoRA interval ($+0.0014\pm0.0016$) both include zero. Protocol as
-in Table~\ref{tab:real}: answer-only loss, 12 formats (3 plain, 9 augmented), recall on two held-out phrasings
-(one Q/A), $\Delta$NLL on 40 disjoint 512-token WikiText windows.
-Besides Table~\ref{tab:real}, the two late-layer FSA arms use layer 28, down only, with a 2M-slot budget:
-gain-minus-cost ternary selection gives 60\%/$+0.064$ and continuous bf16 slots 48.75\%/$+0.047$.
-Same-placement LoRA (layer 28, down only, $r=16$ + penalty) has 5,505,024 parameters and no slot budget,
-and gives 37.5\%/$+0.0014$. All use one seed; the Bop group includes two $\tau=0.7$ runs and one $\tau=0.9$ run.
-The learn-then-prune points include decay 0.5, 0.3, and 0.1.}
+\includegraphics[width=0.97\textwidth]{../figures/fig_e2e_frontier.pdf}
+\caption{Teacher-forced held-out recall versus general-text $\Delta$NLL, with paired-SE bars.
+The symmetric log axis is linear near zero, preserving negative estimates and their uncertainty.
+All points use one seed, 12 training formats, two held-out phrasings and 40 disjoint 512-token
+WikiText windows. Minor ablations include block scales and layer-28 down-only patches. Seeds pending.}
 \label{fig:frontier}
 \end{figure}
 
-\noindent\begin{minipage}{\textwidth}
 \subsection{Storage}
-\centering\small
-\makeatletter\def\@captype{table}\makeatother
-\begin{tabular}{lrr}\toprule
-Patch & Entropy-coded & Indexed\\\midrule
-Ternary Bop $\tau=0.7$ (run 1), 812,420 slots & 0.9 MB & 2.7 MB\\
-Ternary Bop $\tau=0.7$ (run 2, repeat), 669,705 slots & 0.8 MB & 2.3 MB\\
-Ternary Bop $\tau=0.9$, 588,673 slots & 0.7 MB & 2.0 MB\\
-Learn-then-prune, decay 0.5, 523,229 slots & 0.6 MB & 1.8 MB\\
-Learn-then-prune, decay 0.3, 542,205 slots & 0.6 MB & 1.8 MB\\
-Learn-then-prune, decay 0.1, 1,857,504 slots & 1.8 MB & 6.3 MB\\
-Block-scale run, 1,125,769 slots & 1.2 MB + block scales & 3.8 MB + block scales\\
-Fp4 + penalty, 21.3M slots & 18 MB & 80 MB\\
-LoRA $r=16$ + local penalty (baseline) & \multicolumn{2}{c}{22,020,096 params; 44 MB bf16 / 88 MB fp32}\\\bottomrule
+\begin{table}[!ht]\centering\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrr}\toprule
+Patch & Slots / parameters & E MB & I MB\\\midrule
+Bop + penalty + budget + rehearsal (best) & 249,755 & 0.33 & 0.84\\
+Bop + penalty + budget + energy threshold & 238,662 & 0.32 & 0.81\\
+Bop + penalty + budget + repair & 250,538 & 0.33 & 0.85\\
+Bop + penalty + budget & 243,935 & 0.32 & 0.82\\
+Bop + penalty (rerun) & 735,955 & 0.82 & 2.48\\
+Bop + penalty (earlier) & 739,549 & 0.83 & 2.50\\
+Bop $\tau=0.7$ (run 1) & 812,420 & 0.89 & 2.74\\
+Bop $\tau=0.7$ (repeat) & 669,705 & 0.76 & 2.26\\
+Bop $\tau=0.9$ & 588,673 & 0.68 & 1.99\\
+Learn-then-prune, decay 0.3 & 542,205 & 0.64 & 1.83\\
+Learn-then-prune, decay 0.5 & 523,229 & 0.62 & 1.77\\
+Learn-then-prune, decay 0.1 & 1,857,504 & 1.76 & 6.27\\
+Signs + learned block scales, decay 0.3 & 1,125,769 & 1.17 + scales & 3.80 + scales\\
+Fp4 + penalty & 21,265,606 & 18.17 & 79.75\\
+LoRA $r=1$ (baseline) & 1,376,256 & \multicolumn{2}{c}{2.75 / 1.38 / 0.69}\\
+LoRA $r=2$ (baseline) & 2,752,512 & \multicolumn{2}{c}{5.51 / 2.76 / 1.38}\\
+LoRA $r=4$ (baseline) & 5,505,024 & \multicolumn{2}{c}{11.01 / 5.51 / 2.76}\\
+LoRA $r=16$ (baseline) & 22,020,096 & \multicolumn{2}{c}{44.04 bf16}\\\bottomrule
 \end{tabular}
-\caption{Position-inclusive storage estimates. Ternary indexed storage uses a 26-bit index per slot
-plus its sign; fp4 indexed storage uses a 26-bit index plus a 4-bit value. Block scales (one per row and 16 input columns) add about 113 MB in fp32 as implemented, larger than
-the adapter. The LoRA baseline has 22,020,096 parameters: 44 MB in bf16, 88 MB in fp32 as trained.}
+\caption{Position-inclusive estimates, decimal MB (single seed per run). E: entropy-coded positions
+plus signs over 66,807,179 free slots; I: 26-bit index plus value (1 bit ternary, 4 bits fp4).
+LoRA lists bf16 / int8 / int4, including bf16 scales for int8/int4; all have measured accuracy.
+Block scales add about 113 MB. Fp32 training factors use twice the bf16 bytes.}
 \label{tab:storage}
-\end{minipage}
-\par
-\begin{figure}[t]\centering
+\end{table}
+
+\begin{figure}[!ht]\centering
 \includegraphics[width=\textwidth]{../figures/fig_e2e_storage.pdf}
-\caption{Recall against patch size. Sizes count slot positions, not only values: FSA is entropy-coded
-positions plus values, with positions coded over each run's own free-slot pool: 66.8M slots at layers
-14--15 and 16.8M for the layer 28 down-only arms. LoRA counts bf16 parameters. The plot includes the learned fp32 block scales,
-bringing that run to about 114 MB, larger than the adapter. The $\tau=0.7$ repeat is
-labelled separately; learn-then-prune includes decay 0.5, 0.3, and 0.1.}
+\caption{Teacher-forced recall versus position-inclusive storage (single seed per run; seeds pending).
+FSA uses entropy-coded positions and values, over each run's own reserve. LoRA shows bf16 factors
+and measured int4 points for ranks 1--4. Minor layer-28 ablations have a 16.8M-slot reserve;
+learned block scales add about 113 MB in fp32, bringing that ablation to about 114 MB.}
 \label{fig:storage}
 \end{figure}
 
 \subsection{Honest reading}
-Ternary Bop $\tau=0.7$ run 1 is about 16--49 times smaller than the 44 MB bf16 adapter using unrounded
-estimates, depending on position coding (Table~\ref{tab:storage}). Across the plain ternary
-patches the ratios range about 7--71 times, with learn-then-prune decay 0.1 giving the lowest ratio
-and decay 0.5 the highest; the $\tau=0.7$ repeat is about 19--58 times smaller; fp4 at 18--80 MB is not a small patch. Merged plain ternary FSA adds no
-parameters or tensors and, by construction, no arithmetic in a packed kernel (not benchmarked; we
-evaluated decoded bf16 weights), retaining legal packed values; revocation requires the diff or original
-pack. Unmerged LoRA adds a low-rank matrix multiplication per patched expert; merged LoRA requires
-dense bf16 expert weights and forfeits the ternary packed format. On this fact task, regularized LoRA
-remains the lower-damage method; ternary FSA trades measurable damage for matching recall, a smaller
-patch, unchanged tensor shapes and format, and exact revoke. Multi-session concepts remain untested.
+At a comparable byte budget, the best FSA patch recalls 79/80 TF and 79/80 GEN from 0.33 MB
+entropy-coded or 0.84 MB indexed. Across every LoRA rank and measured precision tried, ranks 1--4
+recall 75--78/80 TF and 75--77/80 GEN at 0.69--11.01 MB (int4 to bf16). The nearest LoRA size is
+rank 1 int4, 0.69 MB: 75/80 on both metrics versus 79/80 for FSA. The two FSA encodings bracket
+that size; this is a comparable budget, not exact byte equality. The gap is 1--4 items on one seed:
+suggestive, not established; seeds pending. FSA does not beat LoRA overall on this evidence.
 
-\subsection{Isolated experts}
-This is a supporting weight-level mechanism study on isolated decoded experts, using a synthetic
-random-fact probe read out through a random readout head; both favor FSA. Accuracy here is not
-language-model answer recall. The ternary reserve learned about
-500 facts per expert at about 100\% accuracy and revoked bit-exactly, but realized only 0.03--0.07
-knowledge bits per slot versus 1.1--1.4 for float slots. In a separate comparison at about 2,000 facts,
-the full ternary reserve (all structural zeros, requiring a sidecar outside the codebook) had 8--20
-times lower weight-level interference than LoRA $r{=}16$/$r{=}64$ under the same drift penalty at
-matched knowledge. That metric is isolated output drift, distinct from end-to-end general-text damage;
-on the full model, LoRA with a penalty is better.
+The best penalized FSA runs, with or without rehearsal, and fp32 penalized LoRA all have
+$|\Delta\mathrm{NLL}|\le0.003$ with SE around 0.002: at this sample size no damage difference is
+detectable between them. This summary does not cover rank-1 bf16/int8 evaluations, whose measured
+damage is $+0.0040/+0.0049$ (Table~\ref{tab:quant}). Plain Bop without the penalty costs
+$+0.024$ to $+0.031$; those rows remain as history. Rehearsal uses the same corpus as the damage
+panel, with no shared 32-token sequences, so near-zero damage is measured in-distribution;
+other kinds of text are untested. Removing the patch restores the base exactly, without establishing
+preservation while enabled. Multi-session concepts remain untested.
+
+\subsection{Serving}
+\label{sec:serving}
+Synthetic legal patches of 670k and 3M slots were written into the released packed model and
+benchmarked on Mac Metal, Mac CPU and a Snapdragon 8 Elite phone. The table gives paired
+patched/base throughput medians; every paired decode and prefill range crosses 1.0.
+\begin{table}[!ht]\centering\small
+\begin{tabular}{lrrrr}\toprule
+Device / backend & Decode, 670k & Decode, 3M & Prefill, 670k & Prefill, 3M\\\midrule
+Mac M5 Max, Metal & 0.999 & 0.999 & 0.999 & 1.001\\
+Mac M5 Max, CPU, 8 threads (table lookup) & 1.005 & 0.990 & 1.002 & 1.009\\
+Mac M5 Max, CPU, 8 threads (alternate lookup) & 1.006 & 0.998 & 1.004 & 0.999\\
+Snapdragon 8 Elite, CPU, Q8 trunk & 1.002 & 0.982 & 0.996 & 1.000\\\bottomrule
+\end{tabular}
+\caption{Synthetic packed-patch serving ratios, paired within rounds. All observed paired ranges
+cross 1.0; no slowdown is detectable. Learned patches are not yet benchmarked.}
+\end{table}
+File size is identical (2,133,006,592 bytes); peak memory is unchanged to reported precision,
+about 2.75 GiB on Metal, 3.29 GiB on Mac CPU and 3.24 GB on the phone. Phone readings span
+3.244--3.245 GB. Revocation restores byte-identical files, checked by SHA-256.
+Accuracy evaluation still used decoded bf16 weights. Synthetic patches test kernel cost,
+not learned-patch accuracy or routing effects. LoRA is an analytic estimate only in this runtime:
+rank 16 would add about 0.5--1.5\% decode cost and 44 MB per adapter; merging would densify
+64 MB of packed experts to 906 MB bf16. Switching a running model's patch is not yet implemented;
+today switching requires changing the packed model and reloading. One model copy serves one user's
+patch at a time, unlike multi-adapter LoRA batching.
 
 \section{Writers}
 \label{sec:writers}
@@ -349,15 +389,15 @@ m_j\leftarrow(1-\gamma)m_j+\gamma g_j,\qquad \gamma=0.05.
 If $q_j=0$ and $|m_j|>\tau$, birth sets $q_j\leftarrow-\operatorname{sign}(m_j)$.
 If $q_j\ne0$, $|m_j|>\tau$, and $\operatorname{sign}(m_j)=q_j$, death sets $q_j\leftarrow0$:
 the gradient says the current sign hurts. Reset $m_j$ to zero after each change. Thresholds are 0.7 or
-0.9 times the RMS of the first answer-loss gradient over free slots, with no penalty or decay. The
+0.9 times the RMS of the first answer-loss gradient over free slots. Historical plain Bop runs use
+no penalty; new runs add the local penalty below. Bop does not use weight decay. The
 threshold controls flips: small gradients need not become full $\pm\alpha$ steps, unlike Adam's
 per-coordinate normalization, which can turn persistent small gradients into full flips. The
-slots are filled early: 812,077 slots were filled at step 50 (812,420 at step 300) at $\tau=0.7$. Higher $\tau$ uses fewer
+In the historical single-seed runs, slots are filled early: 812,077 slots were filled at step 50 (812,420 at step 300) at $\tau=0.7$. Higher $\tau$ uses fewer
 slots (589k) at slightly higher damage, so it is not a simple damage dial. The $\tau=0.7$
 repeat has 669,465 filled slots at step 50 and 669,705 at step 300; its revoke is also bit-exact,
 with test recall returning to 0/80.
 
-\begin{samepage}
 \begin{figure}[t]\centering
 \includegraphics[width=\textwidth]{../figures/fig_e2e_trajectory.pdf}
 \caption{Validation recall, validation $\Delta$NLL (symmetric log scale), and filled slots (millions,
@@ -366,11 +406,11 @@ run 1, and regularized LoRA; learn-then-prune uses decay 0.3. The filled-slot pa
 only those two FSA writers; the new repeat and decay 0.5 trajectories are not plotted.
 Bop's filled-slot count is set by its threshold early and then stays flat, while learn-then-prune
 fills many slots first and sheds them over training. Validation trajectories differ from the held-out
-test endpoints in Table~\ref{tab:real}.}
+test endpoints in Table~\ref{tab:real}. Each trajectory uses one seed; seeds pending.}
 \label{fig:trajectory}
 \end{figure}
 
-\subsection{Learn-then-prune} Each free slot has an fp32 master $w_j$ in row-scale units. Forward uses
+\subsection{Learn-then-prune} These historical comparisons use a single seed per run. Each free slot has an fp32 master $w_j$ in row-scale units. Forward uses
 $q_j=\operatorname{sign}(w_j)\mathrm{I}(|w_j|>0.5)$, where $\mathrm{I}$ is the indicator; gradients pass straight through
 \citep{ste}. AdamW \citep{adamw}, learning rate 0.02, applies decoupled weight decay 0.3 to masters.
 The model learns early: at step 50 validation recall is 97.5\%, with 20.3M filled slots and validation
@@ -383,9 +423,7 @@ to 1.12M at step 100, 0.62M at 150, 0.50M at 200, and 0.45M at 250 (92.5\% valid
 then rise to 0.52M at 300 (97.5\% validation recall). Test recall at step 300 is 88.75\%;
 revoke is bit-exact. Whether longer pruning helps is untested.
 \par
-\end{samepage}
 
-\begin{samepage}
 \subsection{Fp4 and the local output penalty} Four-bit float slots times $\alpha$ use AdamW decay 0.1
 and add the general-text penalty
 \[
@@ -398,11 +436,27 @@ differentiated. This smooth local
 penalty measures each patched projection's direct output change rather than the change in final
 logits, so it is not dominated by the whole-model divergence behind the KL floor. Its inputs still come from the patched forward
 pass: earlier patched layers can change later inputs and routing. The best LoRA run uses the same penalty
-with $\lambda=100$. For ternary slots it is ineffective: gradient is zero at zero, yet one birth costs a
-full $\alpha^2\mathbb{E}[x^2]$; at the strength LoRA needs, it stops ternary learning entirely.
+with $\lambda=100$. At that strength the penalty stopped earlier ternary learning: its gradient
+is zero at zero, yet one birth costs a full $\alpha^2\mathbb{E}[x^2]$. Bop with $\lambda=10$
+now learns while keeping measured damage within noise of zero (Table~\ref{tab:real}).
 \par
-\end{samepage}
 
+
+\subsection{Budget and preservation variants}
+\textbf{Gain-minus-cost budget.} At most 300k slots may be filled. Every 10 steps the allowed set
+is re-chosen by each slot's gradient evidence minus its expected general-text cost,
+$\alpha^2$ times the input column's general-text energy. Births go where evidence for the facts
+is strongest relative to expected general-text change.
+\textbf{Rehearsal.} The headline objective is $0.8$ times fact loss plus $0.2$ times ordinary
+next-token loss on general WikiText windows, alongside the local penalty. Those windows share
+no 32-token sequences with the damage panel but come from the same corpus. Near-zero damage is
+therefore measured in-distribution; other kinds of text remain untested.
+\textbf{Energy-scaled threshold.} The row's birth threshold is multiplied by
+$\operatorname{clamp}((e_{\rm row}/\operatorname{median}e)^{0.5},0.25,4)$, where $e_{\rm row}$
+is the expected general-text output energy of one birth in that row. Sensitive rows need more evidence.
+\textbf{Repair.} After 300 training steps, 50 more Bop steps keep the local penalty at $\lambda=10$
+and disable births, allowing deaths only. All variants use one seed; small recall differences do
+not establish their relative value. Seeds pending.
 
 \subsection{Ingredients that mattered} Answer-only loss avoids learning template boilerplate, which
 caused most early damage with whole-sentence loss. Twelve diverse formats, including Q/A, largely
@@ -422,14 +476,12 @@ the tested answers. Patch-only learned block scales are no better than plain ter
 overall improvement over LoRA. Gain-minus-cost ternary slot selection at that placement gives
 60\%/$+0.064$.
 
-\begin{samepage}
 \section{Toward epigenesis: multi-session learning}
 \label{sec:direction}
 The ternary reserve now carries facts on a real model (\S\ref{sec:real}). A revocable domain patch
 is therefore demonstrated for this task: enable the slice for its domain; disable it to recover the base.
 The personal-model application remains an untested proposal, with a narrower contract:
 \par
-\end{samepage}
 
 \begin{quote}\small
 \textbf{Patch-revocation contract.} Deleting an isolated patch exactly removes \emph{that patch's parameter
@@ -473,19 +525,19 @@ evaluation should include local retrieval and per-user adapters on personalizati
 
 \section{Limitations}
 \label{sec:limits}
-\textbf{Damage gap.} The headline plain ternary writers have $+0.013$ to $+0.031$ nats/token damage
-(the 80/80 ternary Bop runs: $+0.024$ to $+0.031$), versus approximately zero for penalized LoRA;
-learn-then-prune decay 0.1 has $+0.067$ damage. The lowest-damage plain ternary run, decay 0.5,
-misses nine items (71/80). Closing this gap is
-current work. Combining Bop with the local penalty is being tried, with no results yet; longer pruning
-also remains untested.
+\textbf{Damage and recall.} The best penalized FSA runs and fp32 penalized LoRA are within noise of
+zero on 40 WikiText windows, without a detectable damage difference at this sample size.
+Plain Bop costs $+0.024$ to $+0.031$. Damage on other corpora and broader behavior is untested;
+rehearsal windows are sequence-disjoint but drawn from the same corpus as the damage panel.
+Generated recall is now measured for the new runs, checking unaided answer production and a clean
+stop; older runs remain teacher-forced only.
 
-\textbf{Evaluation scope.} We have one task: 40 facts about one fictional person, 80 test items, and
-one seed, with a same-configuration ternary Bop repeat using the same seed, facts and protocol.
-Variation between repeated executions plausibly comes from nondeterministic GPU arithmetic;
-it is not evidence of robustness across seeds. The Q/A test form resembles training. Writer and regularization choices differ. The
-chaos-floor explanation is a hypothesis, and the roughly 20k-token damage pool cannot establish broad
-behavioral safety. Multi-session concept learning remains untested in EP-1.
+\textbf{Evaluation scope.} We have one task, 40 facts about one fictional person, 80 test items,
+and one seed per run. Same-configuration repeats vary by a couple of items and are not evidence of
+robustness across seeds. A 1--4-item recall gap is suggestive, not established; seeds pending for the
+headline configuration. The Q/A test form resembles training; writer and regularization choices
+differ. The chaos-floor explanation is a hypothesis. The roughly 20k-token damage pool cannot
+establish broad behavioral safety. Multi-session concept learning remains untested in EP-1.
 
 \textbf{Revoke scope.} Removing the whole patch restores the base bit-for-bit. This does not guarantee
 preservation while the patch is on, deletion of individual facts, removal of information already in
@@ -494,7 +546,8 @@ The frozen base can be augmented or suppressed through new paths but its existin
 be refined.
 
 \textbf{Format and deployment.} Plain ternary writers stay legal pair8, but evaluation decoded experts
-to bf16; packed-kernel serving was not benchmarked. Fp4 and learned-block-scale variants leave the
+to bf16; packed-kernel serving is measured for synthetic legal patches only, with learned patches
+not yet benchmarked. Fp4 and learned-block-scale variants leave the
 original codebook. Optimizer state can be large even when the final patch is small, and on-device
 training is not established.
 
@@ -503,13 +556,15 @@ the patch mechanism supplies no privacy guarantee.
 
 \section{Conclusion}
 A frozen weight genome can acquire a removable sparse layer in its exact zeros. On a real 8B ternary
-MoE, ternary Bop run 1 recalls 80/80 held-out items from 812,420 filled slots with bit-exact revoke, legal packed
-values, and no new parameters. Including positions, its patch costs 0.9 MB entropy-coded or 2.7 MB
-indexed, about 16--49 times smaller than the 44 MB bf16 LoRA baseline, at $+0.027$ nats/token damage.
-Penalized LoRA recalls 78/80 at damage indistinguishable from zero. Two items on one seed are not a
-significant recall win, and FSA does not beat LoRA overall. Reducing damage remains current work.
-Multi-session concept learning and the personal-model application are untested; the pre-registered
-EP-1 experiment is in progress.
+MoE, Bop with a local penalty, a slot budget and rehearsal recalls 79/80 teacher-forced and generated
+items from 249,755 slots (0.33--0.84 MB including positions) at $-0.0001\pm0.0017$ damage.
+The nearest-size LoRA, rank 1 int4 at 0.69 MB, recalls 75/80 on both metrics. Across tested ranks
+and precisions, a 1--4-item gap on one seed is suggestive, not established; seeds pending.
+No damage difference is detectable between the best penalized FSA runs and fp32 penalized LoRA
+at this sample size, on the same corpus used for rehearsal. FSA does not beat LoRA overall on this
+evidence. Synthetic packed patches have no detectable serving cost and revoke byte-identically;
+learned-patch serving, broader preservation and multi-session concept learning remain untested.
+The pre-registered EP-1 experiment is in progress.
 
 \small
 \setlength{\bibsep}{0pt}

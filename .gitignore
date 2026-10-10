@@ -93,6 +93,8 @@ ROADMAP.md
 !/experiments/epigenesis/consolidate.py
 !/experiments/epigenesis/evaluate.py
 !/experiments/epigenesis/run_ep1.sh
+!/experiments/epigenesis/revoke_scope.py
+!/experiments/epigenesis/run_arm_chain.sh
 !/experiments/epigenesis/tests/
 /experiments/epigenesis/tests/*
 !/experiments/epigenesis/tests/*.py

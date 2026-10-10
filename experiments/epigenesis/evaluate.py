@@ -175,6 +175,8 @@ def revoke_test(model, tok, dev, corpus, genome_metrics, genome_logits_path,
         if isinstance(m, fsa.FSAParam):
             m.M.zero_()
             m.support.zero_()
+            if hasattr(m, 'bop_ema'):
+                m.bop_ema.zero_()
             if m.logb is not None:
                 m.logb.copy_(torch.log(m.alpha.float() * .25).expand_as(m.logb))
             if m.score is not None:
@@ -262,21 +264,49 @@ def retention(sessions):
     return final / max(earlier)
 
 
+def compare_to_tmid(sessions, tmid):
+    """Exploratory decay comparison; missing final sessions/zero earlier recall yield no ratio."""
+    profiles = {}
+    for key, observed in (('arm', sessions), ('tmid', tmid)):
+        final = next((m for m in observed if m['session'] == 5), None)
+        facts = {str(m['session']): m['test'].get('verbatim', {}).get('em') for m in observed}
+        earlier = [v for k, v in facts.items() if int(k) < 5 and v is not None]
+        best = max(earlier) if earlier else 0
+        profiles[key] = dict(verbatim_em=facts,
+                             final_best_earlier_ratio=facts.get('5') / best if best and facts.get('5') is not None else None,
+                             lure_em={str(m['session']): m['test']['lure']['em'] for m in observed},
+                             final_panel_dnll=final['panel']['dnll'] if final else None,
+                             final_slots=final['slots']['nnz'] if final else None)
+    a, b = profiles['arm'], profiles['tmid']
+    profiles['final_dnll_minus_tmid'] = (a['final_panel_dnll']['mean'] - b['final_panel_dnll']['mean']
+                                        if a['final_panel_dnll'] and b['final_panel_dnll'] else None)
+    profiles['final_slots_minus_tmid'] = (a['final_slots'] - b['final_slots']
+                                         if a['final_slots'] is not None and b['final_slots'] is not None else None)
+    return profiles
+
+
 def summarize(run_dir):
     root = Path(run_dir)
     genome = json.loads((root / 'genome/metrics.json').read_text())
     icl = json.loads((root / 'icl/metrics.json').read_text())
     arms = {}
     sessions_by_arm = {}
-    for arm in ('tmid', 'fp4mid', 'loramid'):
+    for arm in sorted(p.name for p in root.iterdir() if p.is_dir() and
+                      (p.name.startswith('tmid') or p.name in ('fp4mid', 'loramid', 'tbop'))):
         sessions_by_arm[arm] = sorted([json.loads(p.read_text()) for p in (root / arm).glob('s*/metrics.json')],
                                       key=lambda m: m['session'])
-    lora = next((m for m in sessions_by_arm['loramid'] if m['session'] == 5), None)
+    lora = next((m for m in sessions_by_arm.get('loramid', []) if m['session'] == 5), None)
     identifiable = icl['dev']['concept']['acc'] >= genome['dev']['concept']['acc'] + .10 - 1e-12
     for arm, sessions in sessions_by_arm.items():
         final = next((m for m in sessions if m['session'] == 5), None)
         entry = dict(sessions=sessions, retention=retention(sessions), complete=complete_sessions(sessions))
-        if entry['complete']:
+        entry['comparison_vs_tmid'] = compare_to_tmid(sessions, sessions_by_arm.get('tmid', []))
+        if arm == 'tbop':
+            entry['post_hoc_owner_approved'] = True
+            entry['original_thesis_decision'] = False
+        if arm.startswith('tmid_util'):
+            entry['secondary_exploratory'] = True
+        if entry['complete'] and arm in ('tmid', 'fp4mid', 'loramid', 'tbop'):
             c, lure, panel = final['test']['concept']['acc'], final['test']['lure']['em'], final['panel']
             lures = [m['test']['lure']['em'] for m in sessions]
             # Explicit operational definition of "ratchet": monotone rise with net increase.
@@ -289,7 +319,7 @@ def summarize(run_dir):
                             lure_no_ratchet=not ratchet, revoke=final.get('revoke', {}).get('pass', False))
             entry.update(criteria=criteria, thesis_pass=identifiable and all(criteria.values()),
                          distillation_gap=icl['test']['concept']['acc'] - c)
-            if lora is not None and complete_sessions(sessions_by_arm['loramid']):
+            if lora is not None and complete_sessions(sessions_by_arm.get('loramid', [])):
                 lc, ld = lora['test']['concept']['acc'], lora['panel']['dnll']['mean']
                 entry['match_lora'] = c >= lc - .03 - 1e-12 and panel['dnll']['mean'] <= ld + .005 and criteria['lure_constraint'] and criteria['revoke']
                 entry['beat_lora'] = c >= lc + .05 - 1e-12 and panel['dnll']['mean'] <= ld
@@ -304,6 +334,8 @@ def summarize(run_dir):
     for arm, entry in arms.items():
         for m in entry['sessions']:
             print(f"| {arm} | {m['session']} | {m['test']['concept']['acc']:.3f} | {m['test']['lure']['em']:.3f} | {m['panel']['dnll']['mean']:.5f} | {m['panel']['agreement']:.3f} | {m['slots']['nnz']} | {entry['retention']} | {entry.get('thesis_pass', False)} |")
+    for arm, entry in arms.items():
+        print(json.dumps(dict(phase='comparison_vs_tmid', name=arm, **entry['comparison_vs_tmid'])))
     return summary
 
 

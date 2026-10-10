@@ -236,3 +236,144 @@ times and peak memory). Self-study with episode contexts: ~60-80 generations x <
 
 Throughput is unknown until the smoke (no GPU is free at design time); ETAs are reported from the smoke's measured
 per-phase times.
+
+## 9. SECONDARY exploratory ablation: utility release versus decay
+
+Owner-approved, default-off arms `tmid_util01` and `tmid_util03` are identical to `tmid` except that manual
+labile master decay is zero in every session and a utility release runs at the start of sessions 2–5. Each arm
+calibrates its own netcost lambda in session 1. Placement, budget, STE, netcost births, router superset, block scales,
+promotion, checkpoint selection, rollback, replay, evaluation and revoke follow `tmid`.
+
+After load/rehydration with the patch enabled, before the training teacher/start/anchor caches and router superset,
+use replay entries with their stored teacher records plus every accepted current self-study item. Reuse `cache_items`
+for temporary current-item teacher records and acquisition gates from the pre-release session-start individual;
+zero-gated accepted items contribute zero. Uniformly sample without replacement up to `--util-items 64` entries,
+seeded with `seed + session` independently of the training RNG. Accumulate the signed gradient of the item mean
+of acquisition/replay `epi_common.topk_kl` (the arm's acquisition/replay mix coefficients and acquisition token gates;
+no general-text term). Student inputs are context-free, and all filled slots, including frozen and out-of-superset
+slots, receive gradients through the normal STE before any gradient protection.
+
+At committed ternary M in {-1, 0, +1}, w = scale*M and dL/dM = scale*dL/dw, so utility
+`|w * E[dL/dw]| = |M * M.grad|`. Filled means `delta != 0`, independently of support/frozen status. Separately for
+L14 and L15, release every filled slot below `rho * mean(filled utility)`: rho 0.1 (`tmid_util01`) or 0.3
+(`tmid_util03`), derived from the arm name (`--release-rho` can only confirm that value). Set master to zero,
+clear support and frozen bits, and assert optimizer state is absent/empty (Adam is created later). A zero layer
+mean releases nothing because the inequality is strict. Clear gradients with `set_to_none=True` and empty the CUDA
+cache. Log `utility_release` JSON with filled/released counts, per-layer counts and thresholds, rho, means, time and
+peak GiB; persist release counts per session in the ledger, including zero in session 1. The rollback snapshot is
+post-release; training caches and superset are recomputed from that individual.
+
+Hypothesis: utility release preserves recurring facts while freeing reserve, with lure recall no worse than `tmid`
+and final locked-panel dNLL no worse than `tmid + 0.005`. This comparison is SECONDARY and exploratory, outside the
+primary EP-1 success criteria. Report test verbatim EM each session and final/best-earlier ratio, lure EM trajectory,
+final panel dNLL with its paired 95% CI, and final slot count alongside `tmid` in `summary.json` and the summary log.
+A missing final session or zero best-earlier verbatim EM yields an undefined retention ratio.
+
+Run these arms **after the main EP-1 arms**, on whatever GPUs free up. `run_ep1.sh` uses `ARMS` everywhere training
+arms are selected, defaulting to `"tmid fp4mid loramid"`; ternary smoke births/refresh gates apply to every `tmid*`
+name. First run an ablation smoke with `ARMS="tmid_util01 tmid_util03"` and a separate smoke name. After the primary
+full run completes, use `RESUME=1 ARMS="tmid_util01 tmid_util03" SMOKE=<ablation-smoke-name>` with the same full run
+name to add the ablations; only selected arm directories are wiped, and the summary includes all present arm
+directories (`tmid*`, `fp4mid`, `loramid`).
+
+The later post-hoc `tbop` arm is documented below; its Bop gamma/tau are held constant across sessions (no annealing).
+
+## Owner-requested revoke-scope side test
+
+`python revoke_scope.py --run <name> --seed 0` writes `out/<name>/revoke_scope.json`,
+prints a markdown comparison, and saves committed states, self-study teacher top-k/gates,
+anchor records, and per-step JSON logs under `out/<name>/revoke_scope/`. This is a separate
+exploratory test; it does not change EP-1 arms. R1 is the corpus's first 20 policies and
+20 recurrent facts. B corrects alternating policies/facts (ten each) and introduces ten
+facts on distinct other corpus subjects. Episodes reuse corpus policy-intro/worked-case
+and fact-chat text, with explicit update/correction wording. Self-study uses new cases
+from the self-study name pool and ground-truth verification of generated answers.
+
+One model, one GPU, one process: checkpointed EDA, micro-tokens 160, ternary attach,
+patch-only block scales initialized at 0.25, balanced acquisition/general KL, CPU top-K
+`consolidate.refresh`, and 48 steps each for A, B, and ideal B. All experts are allowed;
+no replay, promotion, freezing, checkpoint selection, or rollback. Refresh runs every
+8 steps and at the final step (so short repair/smoke also exercises births). Repair is
+16 steps on B's original acquisition **and general-text teacher records**; no A study
+items are supplied. Ideal starts from the genome, reuses B's accepted answers, and
+re-caches context top-k records, null calibration, and gates with the genome teacher.
+`--steps` and `--repair-steps` override defaults; `--smoke` uses 4/2 steps and five apply
+plus five fact candidates per session, retaining the full data and evaluation panel.
+
+The CPU int8 ledger compares committed A and A+B codes per FSAParam: A slots, B code
+writes, anti-A writes (including zeroing), nonzero overwrites, and A still last writer;
+report anti-A / B writes, using zero when there are no B writes. The seven conditions
+are genome, A, unrevoked A+B, naive revoke, ownership revoke, ownership revoke plus
+repair, and ideal B. Naive clears every A slot; ownership clears only nonzero A codes
+still equal to the current code. This code-equality proxy cannot detect B rewriting
+an identical code. Unrevoked states retain their trained scales. For either revoke,
+a block with any B code write retains B's scale (including mixed blocks and zeroing);
+a block without B code writes restores A's scale; empty blocks restore the genome's
+initial patch scale. Scales never rescale base weights. Hashes of effective bf16
+projection weights assert bit equality on every saved-state load and commit roundtrip.
+
+Each condition reports no-context greedy generated recall and teacher-forced exact
+match separately for R2 policies/facts, untouched A policies/facts, and B's new facts;
+R1 leakage on replacements uses string containment. Policy recall requires the exact
+generated ACTION; facts require value containment. Policy probes use disjoint dev
+names and new cases. The locked WikiText 40x512 panel is cached once under `genome/`
+if absent and reports paired dNLL, SE, and 95% CI against the genome, plus slot counts.
+A smoke checks plumbing and may produce zero committed slots at the ordinary learning
+rate; it is not evidence about recall or revocation effectiveness.
+
+## Post-hoc added arm (2026-10-10, owner-approved, after the main run started)
+
+`tbop` is additive and default-off. Source: `../end_to_end/e2e_fsa.py`, the v11c
+configuration recovered from the result JSON (the box run used `e2e_fsa_v11.py`).
+Use `run_arm_chain.sh tbop RUN_DIR [--smoke]` on an existing run with its shared
+self-study and genome artifacts; the script owns one token-checked shared mkdir GPU
+lock, runs sessions sequentially, records each exit code, and stops at the first failure.
+Existing arms and the default `run_ep1.sh` arm list retain their settings.
+
+Fixed configuration: fsa_free, ternary, layers 14/15 up+down, all experts attached,
+row alpha (no block scales), Bop gamma .05, wd 0, budget 300000 including frozen
+slots, netcost cost_rel 1, local lambda 10, answer-only, rehearsal fraction .2.
+There is no Adam or manual decay: SGD at lr 0 is a zero_grad-only placeholder.
+The reference Bop birth/death rules and EMA reset on every change are ported;
+refresh eviction also resets that coordinate's EMA. No grace, death multiplier,
+energy-scaled threshold, repair stage, or churn counters are enabled.
+
+EP-1 mappings and exact deviations from the fact-injection reference:
+
+- Fact loss becomes gated top-32 KL to the context teacher on acquisition answers,
+  plus stored-teacher replay KL when the buffer is non-empty. The balanced .4:.2
+  acquisition/replay mix is renormalized and multiplied by .8 (coefficients .8*2/3
+  and .8/3; acquisition alone .8). This replaces the reference's fact-answer CE.
+- EP-1 general-text KL is replaced by reference `general_ce`: .2 times the patched
+  model's mean next-token CE on two sampled anchor windows, each backward separately.
+  EP-1 anchors remain 96-token windows from its disjoint training pool rather than
+  the fact-injection harness's data/protocol. Anchor top-k teacher caches are omitted.
+- Tau is .7 times the first reached acquisition/replay gradient RMS over slot masks,
+  divided by .8, before rehearsal/penalty backward. Calibrate only in session 1;
+  persist absolute tau and gamma in config/ledger, including on rollback, and reuse
+  unchanged in sessions 2–5. Netcost lambda also calibrates once and persists.
+  Column energies are recomputed from 32 EP-1 anchor windows per session, as in
+  tmid; only lambda is reused across sessions. Support evidence is the signed
+  acquisition/replay gradient EMA only; EP-1 frozen
+  and router-superset protection applies before updating support evidence.
+- Support refresh uses existing `consolidate.refresh` CPU global top-K with frozen
+  and out-of-superset prior support reserved inside the 300000 ceiling. Reference
+  zero-based cadence is preserved: EP-1 steps 1,11,21,31,41 (through index 200).
+- EP-1 local-penalty batching is retained: lambda 10 times the ratio of summed patch
+  output energy to summed **frozen-base** output energy, normalized across micros.
+  Its anchor sample is shared with rehearsal, unlike the reference's separate sample.
+- Frozen/promotion rules, router superset, rollback, checkpoint selection, replay
+  update, evaluation, and revoke are the existing tmid EP-1 protocol. Gradients and
+  stale Bop EMA outside writable coordinates are cleared before Bop, so frozen or
+  out-of-superset slots cannot change. The reference has no EP-1 session protection.
+- Session boundary rehydrates M from committed ternary values and resets Bop EMA
+  to zero; no optimizer/EMA history is saved. Only calibration constants and EP-1
+  committed state/ledger/replay survive. Revoke also zeroes Bop EMA.
+- Smoke retains EP-1's 10 steps, sessions 1–2, relaxed selection dNLL bound and
+  nonzero-checkpoint rule. lr_mult is irrelevant to Bop. Full training remains
+  48 steps per session, with EP-1 dev selection and its locked evaluation panels,
+  rather than reference fact-injection training and Pareto recall checkpoints.
+
+Summary applies the same registered criteria and LoRA comparison thresholds to
+`tbop`, alongside its comparison versus tmid, labeled post-hoc and outside the
+original thesis decision. No change to original arm membership or thesis claims.

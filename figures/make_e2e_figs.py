@@ -7,6 +7,7 @@ import json
 import math
 import os
 import sys
+import textwrap
 
 import matplotlib.pyplot as plt
 
@@ -26,7 +27,7 @@ def point(name):
     return p["test"]["exact_match"] * 100, p["big"]["dnll"], p["big"]["dnll_se"], d
 
 
-# Comparable protocol only: answer-only loss + 12 augmented formats + 40x512 held-out dNLL (v6, v7).
+# Comparable protocol: answer-only loss + 12 formats + 40x512 held-out dNLL; one seed per run.
 ARMS = [
     ("v6_lora_L1415_loc100", "LoRA r16 + penalty", C_LORA, "o"),
     ("v6_lora_L1415_noreg", "LoRA r16, no penalty", C_LORA, "o"),
@@ -54,12 +55,16 @@ def style(ax):
 # Legend-driven styling: one entry per method family; minor ablations are drawn muted and grouped.
 SERIES = [
     # (label, [run names], color, marker, size, zorder)
-    ("FSA ternary, Bop + local penalty", ["v9_bop_t07_loc10"], "#c1121f", "*", 340, 6),
+    ("FSA ternary, Bop + penalty + budget + rehearsal (best)", ["v11c_rehearsal02"], "#780000", "*", 420, 10),
+    ("FSA ternary, Bop + penalty + budget (variants: plain, repair, energy τ)",
+     ["v11a_bop_loc10_netcost", "v11b_repair50", "v11d_energy_tau"], "#c1121f", "p", 110, 7),
+    ("FSA ternary, Bop + local penalty (two runs)", ["v9_bop_t07_loc10", "v12_base_t07_loc10"], "#e85d04", "*", 200, 6),
     ("FSA ternary, Bop (τ 0.7, two runs)", ["v7_fsa_all_bop_t07", "v8_fsa_all_bop_t07_wd03"], "#e5383b", "D", 95, 5),
     ("FSA ternary, Bop (τ 0.9)", ["v7_fsa_all_bop_t09"], "#f4a3a8", "D", 80, 4),
     ("FSA ternary, learn-then-prune (decay 0.3)", ["v6_fsa_all_wd03"], "#f77f00", "s", 95, 4),
     ("FSA ternary, learn-then-prune (decay 0.5)", ["v8_fsa_all_wd05"], "#fcbf49", "s", 95, 4),
     ("FSA fp4 slots + local penalty", ["v7_fsa_all_fp4_loc10_aug"], "#2a9d8f", "P", 150, 4),
+    ("LoRA r1/r2/r4 + local penalty", ["v11e_lora_r1", "v11f_lora_r2", "v11g_lora_r4"], "#1d4ed8", "o", 95, 5),
     ("LoRA r16 + local penalty", ["v6_lora_L1415_loc100"], "#1d4ed8", "o", 150, 5),
     ("LoRA r16, no penalty", ["v6_lora_L1415_noreg"], "#93c5fd", "o", 95, 3),
     ("other ablations (block scales, layer 28, continuous, decay 0.1)",
@@ -71,8 +76,10 @@ plt.rcParams.update({"font.size": 11, "axes.titlesize": 13, "axes.labelsize": 11
 
 
 def legend_right(ax):
-    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), frameon=False, borderaxespad=0.0,
-              handletextpad=0.6, labelspacing=0.9)
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles, [textwrap.fill(label, 49) for label in labels], loc="upper left",
+              bbox_to_anchor=(1.02, 1.0), frameon=False, borderaxespad=0.0,
+              handletextpad=0.6, labelspacing=0.55, fontsize=8)
 
 
 def frontier():
@@ -81,15 +88,16 @@ def frontier():
         xs, ys, es = [], [], []
         for n in names:
             y, x, se, _ = point(n)
-            xs.append(max(x, 1e-4)); ys.append(y); es.append(se)
+            xs.append(x); ys.append(y); es.append(se)
         ax.errorbar(xs, ys, xerr=es, fmt="none", ecolor=c, elinewidth=1.0, capsize=2.5, alpha=0.8, zorder=z - 1)
         ax.scatter(xs, ys, s=sz, marker=m, color=c, edgecolor="white", linewidth=0.9, zorder=z, label=label)
-    ax.set_xscale("log")
-    ax.set_xlim(2e-4, 2.0)
+    ax.set_xscale("symlog", linthresh=0.005)
+    ax.set_xlim(-0.005, 2.0)
+    ax.axvline(0, color="#999", lw=0.6)
     ax.set_ylim(30, 104)
-    ax.set_xlabel("damage to general text: ΔNLL on 20k held-out tokens (nats, log scale; bars = paired SE)")
-    ax.set_ylabel("held-out recall (%)")
-    ax.set_title("Recall vs damage on the real 8B model (40 facts, held-out phrasings)", loc="left")
+    ax.set_xlabel("damage to general text: ΔNLL on 20k held-out tokens (nats, symlog; bars = paired SE)")
+    ax.set_ylabel("teacher-forced held-out recall (%)")
+    ax.set_title("Recall vs damage on the real 8B model (40 facts, single seed; seeds pending)", loc="left")
     ax.text(0.985, 0.03, "upper-left is better", transform=ax.transAxes, ha="right", va="bottom",
             color="#777", fontsize=10)
     style(ax)
@@ -114,17 +122,22 @@ def patch_mb(d):
 
 
 def storage():
-    fig, ax = plt.subplots(figsize=(12, 5.2))
+    fig, ax = plt.subplots(figsize=(12, 5.6))
     for label, names, c, m, sz, z in SERIES:
         if label.startswith("LoRA r16, no penalty"):
             continue                                     # same size as the penalized LoRA
         pts = [(patch_mb(point(n)[3]), point(n)[0]) for n in names]
         ax.scatter([a for a, _ in pts], [b for _, b in pts], s=sz, marker=m, color=c, edgecolor="white",
                    linewidth=0.9, zorder=z, label=label.replace("LoRA r16 + local penalty", "LoRA r16 (with or without penalty)"))
+    quant = [load(n) for n in ("v11e_lora_r1", "v11f_lora_r2", "v11g_lora_r4")]
+    ax.scatter([d["storage"]["lora"]["int4"] / 1e6 for d in quant],
+               [d["lora_quant"]["int4"]["test"]["exact_match"] * 100 for d in quant],
+               s=95, marker="^", color="#0369a1", edgecolor="white", linewidth=0.9, zorder=6,
+               label="LoRA r1/r2/r4, int4 factors (measured)")
     ax.set_xscale("log")
-    ax.set_xlabel("patch size (MB, log scale; FSA = entropy-coded slot positions + values, LoRA = bf16 factors)")
-    ax.set_ylabel("held-out recall (%)")
-    ax.set_title("What each patch costs to store", loc="left")
+    ax.set_xlabel("patch size (MB, log scale; FSA = entropy-coded slot positions + values, LoRA = bf16 or measured int4 factors)")
+    ax.set_ylabel("teacher-forced held-out recall (%)")
+    ax.set_title("Patch storage (single seed per run; seeds pending)", loc="left")
     ax.text(0.985, 0.03, "upper-left is better", transform=ax.transAxes, ha="right", va="bottom",
             color="#777", fontsize=10)
     style(ax)

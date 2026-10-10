@@ -52,3 +52,56 @@ accumulating one-offs and without measurable general damage, at parity with a re
 
 Lifelong capacity, selective per-session unlearning, privacy from weights, or any quality advantage not meeting the
 "beat LoRA" bar. One seed is a pilot; three seeds are needed to claim.
+
+## SECONDARY exploratory comparison: owner-approved utility-release ablation
+
+This additive, default-off comparison is outside the primary success criteria and the pre-registered LoRA decision.
+`tmid_util01` and `tmid_util03` follow `tmid` in every respect except manual labile master decay is off (wd = 0)
+and a release runs at the start of sessions K >= 2. Each calibrates its own netcost lambda in session 1.
+
+After load/rehydration and before training caches and the router superset, accumulate acquisition+replay KL gradients
+through the enabled patch's normal STE on up to `--util-items 64` uniformly sampled own-data items without replacement
+(seed + session, independent sampler). Replay uses stored teacher records; all accepted current self-study items use
+the pre-release session-start individual's `cache_items` teacher records and gates. Loss is the item mean of
+`epi_common.topk_kl`, with the arm's acquisition/replay mix coefficients and acquisition gates; zero-gated items
+contribute zero, and there is no general-text term. Score frozen slots too, before gradient protection.
+Utility is `|M * M.grad|` for committed ternary M (scale cancels in `|w * E[dL/dw]|`). Filled slots are `delta != 0`.
+For L14 and L15 separately, release filled slots with utility strictly below rho times that layer's filled-slot
+mean: rho = 0.1 or 0.3, derived from the arm name. Zero master, support and frozen bits; assert no optimizer state
+exists yet; clear gradients and CUDA cache. Release counts are logged and recorded per session. Training rollback
+returns to the post-release start, with all subsequent training/evaluation/revoke rules as in `tmid`.
+
+Hypothesis: utility release keeps recurring facts while freeing reserve, with lure recall no worse than `tmid`
+and final panel dNLL no worse than `tmid + 0.005`. Report recurring-fact test verbatim EM per session and
+session-5/best-earlier ratio, lure EM trajectory, final panel dNLL with paired 95% CI, and final slot count versus
+`tmid`. An absent final session or zero earlier maximum makes the ratio undefined. These observations do not
+modify the primary thesis pass/fail criteria.
+
+Run after the main EP-1 arms on whatever GPUs free up, with a separate ablation smoke first. Select explicitly
+with `ARMS="tmid_util01 tmid_util03"`; the runner's default remains `"tmid fp4mid loramid"`. Resume into the main
+run directory after it completes to preserve the decay comparator and include all arms in the summary.
+
+## Post-hoc added arm (2026-10-10, owner-approved, after the main run started)
+
+`tbop` is an additive, default-off exploratory arm, **not part of the original
+thesis decision**. It ports the end-to-end harness's best fact-injection v11c
+configuration (recovered from result JSON; box run: `e2e_fsa_v11.py`): fsa_free,
+ternary, layers 14/15 up+down, all experts, Bop gamma .05, row patch scale without
+block scales, wd 0, netcost cost_rel 1, ceiling 300000 including frozen slots,
+local output penalty lambda 10 with frozen-base denominator, answer-only,
+rehearsal fraction .2. Tau = .7 times the first answer-gradient RMS divided by .8.
+
+For EP-1, fact loss is acquisition/replay gated teacher KL with balanced .4:.2
+renormalized, then weighted .8; general-text KL is replaced by .2 patched next-token
+CE on two anchor windows. Tau and netcost lambda calibrate only in session 1 and
+persist unchanged across sessions, including rollback. Refresh every 10 reference
+steps (EP-1 steps 1,11,... through index 200) uses CPU top-K; session boundaries
+rehydrate committed ternary M and reset EMA. Tmid frozen/promotion, superset,
+rollback, selection, replay, evaluation and revoke rules apply; revoke clears EMA.
+No Adam, decay, annealing or block scales. DESIGN.md documents every EP-1 mapping.
+
+Compare versus tmid and loramid on the same pre-registered metrics, criteria and
+LoRA comparison thresholds above. `summary.json` labels tbop post-hoc; any reported
+criteria pass or LoRA match/beat is exploratory and cannot alter the original
+thesis decision. Run explicitly with `run_arm_chain.sh tbop RUN_DIR [--smoke]`;
+existing default arms remain unchanged.

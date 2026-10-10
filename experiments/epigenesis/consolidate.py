@@ -215,14 +215,14 @@ def micro_batches(entries, micro_tokens):
         yield batch
 
 
-def loss_assembly(student, terms, dev, vocab, mix='balanced', replay_empty=False, micro_tokens=1024, backward=False):
+def loss_assembly(student, terms, dev, vocab, mix='balanced', replay_empty=False, micro_tokens=1024, backward=False, coefficients=None):
     """Mean per term, scaled by each microbatch's loss-bearing token share. Student returns logits."""
     totals, logs = {}, {}
     for key in ('acq', 'gen', 'rep'):
         totals[key] = sum(int((e['weights'] > 0).sum()) if e.get('weights') is not None else e['record'].ids.shape[0]
                           for e in terms.get(key, []))
         logs[key] = 0.0
-    coefficients = dict(zip(('acq', 'gen', 'rep'), mix_weights(mix, replay_empty)))
+    coefficients = dict(zip(('acq', 'gen', 'rep'), mix_weights(mix, replay_empty) if coefficients is None else coefficients))
     assembled = None
     for key in ('acq', 'gen', 'rep'):
         if totals[key] == 0:
@@ -249,6 +249,69 @@ def loss_assembly(student, terms, dev, vocab, mix='balanced', replay_empty=False
     return assembled, logs
 
 
+def tbop_weights(replay_empty=False):
+    # EP-1 fact loss: balanced acq:rep = .4:.2, renormalized, then v11c fact_scale=.8.
+    return (.8, 0., 0.) if replay_empty else (.8 * 2 / 3, 0., .8 / 3)
+
+
+@torch.no_grad()
+def calibrate_bop_tau(mods):
+    # v11c: first reached answer-gradient RMS, before rehearsal/penalty, undo fact_scale.
+    gradients = [m.M.grad[m.mask].flatten() for m in mods if m.M.grad is not None]
+    if not gradients or not sum(g.numel() for g in gradients):
+        return None
+    return .7 * float(torch.cat(gradients).square().mean().sqrt()) / .8
+
+
+def general_ce(student, windows, vocab):
+    # Port of e2e_fsa.general_ce: patched next-token CE, including all window targets.
+    lg = student(windows)[:, :-1, :vocab].float()
+    return torch.nn.functional.cross_entropy(lg.reshape(-1, lg.shape[-1]), windows[:, 1:].reshape(-1))
+
+
+@torch.no_grad()
+def bop_step(modules, frozen, allowed, gamma, tau):
+    # Port of reference bop_step without optional churn/grace/energy-threshold variants.
+    # EP-1 protects frozen/out-of-superset coordinates, including stale EMA evidence.
+    nb = nd = 0
+    for name, m in modules.items():
+        writable = m.mask & ~frozen[name] & allowed[name]
+        m.bop_ema.masked_fill_(~writable, 0)
+        m.bop_ema.mul_(1 - gamma)
+        if m.M.grad is None:
+            continue
+        m.bop_ema.add_(m.M.grad * writable, alpha=gamma)
+        q = torch.sign(m.M) * (m.M.abs() > .5)
+        mag = m.bop_ema.abs()
+        birth = (q == 0) & (mag > tau) & writable & m.support
+        death = (q != 0) & (mag > tau) & (torch.sign(m.bop_ema) == q) & writable
+        m.M[birth] = -torch.sign(m.bop_ema[birth])
+        m.M[death] = 0
+        m.bop_ema[birth | death] = 0
+        nb += int(birth.sum())
+        nd += int(death.sum())
+    return nb, nd
+
+
+def checkpoint_recurrences(model, class_name='EDALayer'):
+    """Activation checkpointing for the EDA recurrence layers on the student's grad path. The naive fp32 EDA scan
+    stores per-timestep state for backward; every EDA layer above the patched MoE layers did so, which took the
+    resident ~24 GiB (model + masters + Adam + grads + netcost buffers) past 31 GiB at step 2. EDALayer.forward is a
+    pure function of its input, so recompute in backward is exact. No-grad forwards (teacher, eval) are untouched."""
+    from torch.utils.checkpoint import checkpoint
+    n = 0
+    for mod in model.modules():
+        if type(mod).__name__ != class_name:
+            continue
+        def wrapped(x, *args, _f=mod.forward, **kw):
+            if torch.is_grad_enabled() and x.requires_grad:
+                return checkpoint(lambda t: _f(t, *args, **kw), x, use_reentrant=False)
+            return _f(x, *args, **kw)
+        mod.forward = wrapped
+        n += 1
+    return n
+
+
 def patch_modules(model):
     fsa = gpu().fsa
     modules, identity = {}, {}
@@ -269,7 +332,7 @@ def item_row(item, chunk=None):
     return prefix + item['answer_ids'], len(prefix)
 
 
-def cache_items(model, dev, items, chunks, args, null_thr):
+def cache_items(model, dev, items, chunks, args, null_thr, include_zero_gate=False):
     """Only one item's two full-vocab tensors are resident; all long-lived records are CPU tensors."""
     g = gpu()
     teacher, start, acquisition = {}, {}, []
@@ -289,9 +352,85 @@ def cache_items(model, dev, items, chunks, args, null_thr):
         del tlp, slp, kl
         if int(weights.sum()) == 0:
             dropped += 1
-        else:
+        if int(weights.sum()) > 0 or include_zero_gate:
             acquisition.append(dict(item, row=sr, start=ss, record=rec, weights=weights))
     return teacher, start, acquisition, dropped
+
+
+def utility_backward(student, entries, dev, vocab, limit, seed):
+    """Seeded item mean of acquisition/replay KL; accumulate signed gradients before taking abs."""
+    if limit < 1:
+        raise ValueError('util-items must be positive')
+    selected = random.Random(seed).sample(entries, min(limit, len(entries)))
+    for entry in selected:
+        x, _ = pack_rows([entry['row']], [entry['start']], dev)
+        logits = student(x)
+        lp = logits[0, entry['start'] - 1:len(entry['row']) - 1, :vocab].float().log_softmax(-1)
+        loss, _ = topk_kl(entry['record'], lp, entry.get('weights'))
+        loss = loss * entry['coefficient'] / len(selected)
+        if loss.requires_grad:
+            loss.backward()
+    return len(selected)
+
+
+@torch.no_grad()
+def release_slots(modules, frozen, identity, rho, optimizer=None):
+    """Score every filled coordinate, including frozen/out-of-superset slots, layer by layer."""
+    assert optimizer is None or not optimizer.state, 'Release requires empty optimizer state'
+    if not math.isfinite(rho) or rho < 0:
+        raise ValueError('release-rho must be finite and nonnegative')
+    per_layer, means = {}, {}
+    for li in (14, 15):
+        filled_count, total = 0, 0.0
+        for name, m in modules.items():
+            if identity[name][0] != li:
+                continue
+            filled = m.delta() != 0
+            # w = scale*M and STE dL/dM = scale*dL/dw at committed M in {-1,0,+1}:
+            # |w*dL/dw| = |M*M.grad|; the scale cancels. Do not protect/mask gradients here.
+            utility = torch.zeros_like(m.M) if m.M.grad is None else (m.M * m.M.grad).abs()
+            filled_count += int(filled.sum())
+            total += float(utility[filled].sum())
+        mean = total / filled_count if filled_count else 0.0
+        released = 0
+        for name, m in modules.items():
+            if identity[name][0] != li:
+                continue
+            utility = torch.zeros_like(m.M) if m.M.grad is None else (m.M * m.M.grad).abs()
+            release = (m.delta() != 0) & (utility < rho * mean)
+            released += int(release.sum())
+            m.M[release] = 0
+            m.support[release] = False
+            frozen[name][release] = False
+        per_layer[str(li)] = dict(filled=filled_count, released=released, threshold=rho * mean)
+        means[str(li)] = mean
+    return dict(filled=sum(v['filled'] for v in per_layer.values()),
+                released=sum(v['released'] for v in per_layer.values()), per_layer=per_layer,
+                rho=rho, util_mean=means)
+
+
+def utility_release(model, dev, modules, frozen, identity, replay, replay_records, items, study, args):
+    started = time.monotonic()
+    torch.cuda.reset_peak_memory_stats()
+    model.zero_grad(set_to_none=True)
+    try:
+        _, _, acquisition, _ = cache_items(model, dev, items, study['chunk_tokens'], args,
+                                            study['null_thr'], include_zero_gate=True)
+        acq, _, rep = mix_weights(args.mix, not replay)
+        entries = [dict(e, coefficient=acq) for e in acquisition]
+        for item in replay:
+            row, start = item_row(item)
+            entries.append(dict(row=row, start=start, record=replay_records[item['id']], coefficient=rep))
+        utility_backward(lambda x: gpu().logits_of(model, x), entries, dev, gpu().VOCAB,
+                         args.util_items, args.seed + args.session)
+        result = release_slots(modules, frozen, identity, args.release_rho)
+        result.update(phase='utility_release', seconds=time.monotonic() - started,
+                      peak_gib=torch.cuda.max_memory_allocated() / 2**30)
+        print(json.dumps(result), flush=True)
+        return result
+    finally:
+        model.zero_grad(set_to_none=True)
+        torch.cuda.empty_cache()
 
 
 @torch.no_grad()
@@ -387,11 +526,40 @@ def netcost_score(m, lam, den, row_batch=64):
 
 
 @torch.no_grad()
+def refresh_support_cpu(mods, K, scores, opt=None):
+    """e2e_fsa.refresh_support with the global selection on the CPU: keep at most K slots with the largest POSITIVE
+    score (exact indices, ties cannot exceed K); evicted masters and their optimizer state reset to 0."""
+    sc = torch.cat([(s.float() * m.mask.cpu()).flatten() for m, s in zip(mods, scores)])
+    K = min(K, int((sc > 0).sum()))
+    sel = torch.zeros(sc.numel(), dtype=torch.bool)
+    if K > 0:
+        sel[torch.topk(sc, K).indices] = True
+    del sc
+    off = 0
+    for m in mods:
+        n = m.mask.numel()
+        new = sel[off:off + n].view(m.mask.shape).to(m.mask.device) & m.mask
+        off += n
+        ev = m.support & ~new
+        m.M[ev] = 0
+        st = opt.state.get(m.M, {}) if opt is not None else {}
+        for k_ in ('exp_avg', 'exp_avg_sq', 'momentum_buffer'):
+            if torch.is_tensor(st.get(k_)) and st[k_].shape == m.M.shape:
+                st[k_][ev] = 0
+        if hasattr(m, 'bop_ema'):
+            m.bop_ema[ev] = 0
+        m.support.copy_(new)
+    assert sum(int(m.support.sum()) for m in mods) <= K
+
+
+@torch.no_grad()
 def refresh(modules, frozen, allowed, budget, lam, den, opt):
     """Reference refresh keeps global top-K; +inf reserves frozen and out-of-superset prior slots."""
     fsa = gpu().fsa
     mods = list(modules.values())
-    scores = [netcost_score(m, lam, den) for m in mods]
+    # scores live on the CPU: a global concat + topk over ~453M slots on the GPU needed +3.4 GiB on top of a
+    # ~28 GiB training state and OOMed at the first refresh (smoke 2026-10-09 21:00Z)
+    scores = [netcost_score(m, lam, den).float().cpu() for m in mods]
     before = [m.support.clone() for m in mods]
     protected_count = 0
     for (name, m), score in zip(modules.items(), scores):
@@ -404,7 +572,7 @@ def refresh(modules, frozen, allowed, budget, lam, den, opt):
     if protected_count > budget:
         raise ValueError('Committed protected slots exceed budget')
     # Equivalent to labile ceiling = budget - protected count, retaining frozen support in top-K.
-    fsa.refresh_support(mods, budget, scores, opt)
+    refresh_support_cpu(mods, budget, scores, opt)
     births = sum(int((m.support & ~old).sum()) for m, old in zip(mods, before))
     evictions = sum(int((old & ~m.support).sum()) for m, old in zip(mods, before))
     return births, evictions
@@ -413,7 +581,7 @@ def refresh(modules, frozen, allowed, budget, lam, den, opt):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--run', required=True)
-    p.add_argument('--arm', choices=('tmid', 'fp4mid', 'loramid'), required=True)
+    p.add_argument('--arm', choices=('tmid', 'fp4mid', 'loramid', 'tmid_util01', 'tmid_util03', 'tbop'), required=True)
     p.add_argument('--session', type=int, choices=range(1, 6), required=True)
     p.add_argument('--mix', choices=('balanced', 'acquire', 'retain'), default='balanced')
     # measured on the dev box (DESIGN.md section 6): resident state after step 1 (model + masters + Adam + grads +
@@ -421,16 +589,31 @@ def main():
     # GiB at step 1, OOM at step 2 in the first smoke), so micro-batches are capped at 160 tokens / anchors at 96
     for name, default in [('steps', 48), ('items-per-step', 8), ('anchor-per-step', 2), ('replay-per-step', 4),
                           ('micro-tokens', 160), ('eval-every', 16), ('budget', 2000000), ('topk', 32),
-                          ('anchor-windows', 64), ('anchor-len', 96), ('seed', 0), ('nograd-tokens', 4096)]:
+                          ('anchor-windows', 64), ('anchor-len', 96), ('seed', 0), ('nograd-tokens', 4096), ('util-items', 64)]:
         p.add_argument('--' + name, type=int, default=default)
     p.add_argument('--lr-mult', type=float, default=1.0)
     p.add_argument('--ent-max', type=float, default=2.0)
     p.add_argument('--rollback-dnll', type=float, default=.005)
+    p.add_argument('--release-rho', type=float, help='Arm-derived: 0.1 for tmid_util01, 0.3 for tmid_util03')
     p.add_argument('--smoke', action='store_true')
     args = p.parse_args()
+    tbop = args.arm == 'tbop'
+    ternary = args.arm.startswith('tmid') or tbop
+    if tbop:
+        # Fixed post-hoc v11c settings; lr_mult has no effect on Bop.
+        args.budget, args.mix, args.anchor_per_step, args.lr_mult = 300000, 'balanced', 2, 1.
+    rho = {'tmid_util01': .1, 'tmid_util03': .3}.get(args.arm)
+    if args.release_rho is not None and args.release_rho != rho:
+        p.error('--release-rho must match the utility arm name')
+    args.release_rho = rho
+    if args.util_items < 1:
+        p.error('--util-items must be positive')
     if args.smoke:
         args.steps, args.items_per_step, args.eval_every = 10, 8, 5
-        if args.arm != 'loramid':
+        # lr x5 for 10 steps overshoots the +0.005 per-session budget by design; the smoke must still commit a patch
+        # so save/rehydrate/revoke are exercised (the full run keeps the pre-registered +0.005)
+        args.rollback_dnll = max(args.rollback_dnll, .1)
+        if args.arm != 'loramid' and not tbop:
             args.lr_mult = 5
     if not math.isfinite(args.lr_mult) or args.lr_mult <= 0:
         p.error('--lr-mult must be finite and positive')
@@ -456,16 +639,21 @@ def main():
     torch.manual_seed(args.seed)
     rng = random.Random(args.seed + args.session)
     model, dev = g.build()
+    print(json.dumps(dict(phase='checkpointed_eda_layers', n=checkpoint_recurrences(model))), flush=True)
     tok = g.load_tokenizer()
     params, _, _ = fsa.attach(model, [14, 15], 'lora' if args.arm == 'loramid' else 'fsa_free', 16,
-                             fmt='ternary' if args.arm == 'tmid' else 'fp4', budgeted=args.arm == 'tmid')
+                             fmt='ternary' if ternary else 'fp4', budgeted=ternary)
     mods = fsa.fsa_modules(model)
     for m in mods:
         m.fp4_step = .25
-        if args.arm == 'tmid':
-            m.enable_block_scale(16, .25)
-            params.append(m.logb)
+        if ternary:
+            if not tbop:
+                m.enable_block_scale(16, .25)
+                params.append(m.logb)
             m.support.zero_()
+        if tbop:
+            # Session boundary: committed ternary M rehydrates below; EMA alone is reset.
+            m.bop_ema = torch.zeros_like(m.M)
     modules, identity = patch_modules(model)
     frozen = {name: torch.zeros_like(m.mask) for name, m in modules.items() if hasattr(m, 'M')}
     ledger, replay, replay_records = {}, [], {}
@@ -475,6 +663,9 @@ def main():
         replay_records = {k: TopKRecord.from_state_dict(v) for k, v in
                           torch.load(previous / 'replay.pt', map_location='cpu', weights_only=True).items()}
     fsa.set_enabled(True)
+    release = None
+    if args.release_rho is not None and args.session >= 2:
+        release = utility_release(model, dev, modules, frozen, identity, replay, replay_records, items, study, args)
     start_state = snapshot(modules, frozen)
     start_ledger = copy.deepcopy(ledger)
     subsets = dict(concept=20, lure=10, verbatim=10, panel=4, arc=20, style=4) if args.smoke else None
@@ -506,7 +697,7 @@ def main():
     anchors = [[g.BOS] + pool[(offset := rng.randrange(len(pool) - args.anchor_len + 2)):offset + args.anchor_len - 1]
                for _ in range(args.anchor_windows)]
     calibration_anchors = list(anchors[:32])
-    if args.arm == 'tmid':
+    if ternary:
         while len(calibration_anchors) < 32:
             offset = rng.randrange(len(pool) - args.anchor_len + 2)
             calibration_anchors.append([g.BOS] + pool[offset:offset + args.anchor_len - 1])
@@ -517,9 +708,10 @@ def main():
     teacher, start_records, acquisition, dropped = cache_items(model, dev, items, study['chunk_tokens'], args, study['null_thr'])
     validate_acquisition(items, study['null_thr'], acquisition)
     anchor_records = []
-    for row in anchors:
+    for row in ([] if tbop else anchors):
         anchor_records.extend(g.topk_records(model, [row], [1], dev, args.topk, args.nograd_tokens))
-    anchor_entries = [dict(row=row, start=1, record=rec) for row, rec in zip(anchors, anchor_records)]
+    anchor_entries = ([dict(row=row, start=1) for row in anchors] if tbop else
+                      [dict(row=row, start=1, record=rec) for row, rec in zip(anchors, anchor_records)])
     superset, counts = (None, None) if args.arm == 'loramid' else router_superset(model, dev, items, args)
     allowed = {name: superset is None or ei in superset[str(li)] for name, (li, ei) in identity.items()}
     ledger.setdefault('superset', {})[str(args.session)] = superset
@@ -532,19 +724,33 @@ def main():
     groups = [dict(params=[t for t in params if id(t) not in scale_ids], lr=lr, weight_decay=0)]
     if scales:
         groups.append(dict(params=scales, lr=.002 * args.lr_mult, weight_decay=0))
-    opt = torch.optim.AdamW(groups)
-    local = fsa.LocalOutputPenalty(model) if args.arm != 'tmid' else None
+    # v11c placeholder optimizer: zero_grad only, no state or decay.
+    opt = torch.optim.SGD(params, lr=0.) if tbop else torch.optim.AdamW(groups)
+    # tbop uses the existing microbatched local penalty with frozen-base denominator.
+    local = fsa.LocalOutputPenalty(model) if tbop or not ternary else None
     local_weight = 100 if args.arm == 'loramid' else 10
-    den = fsa.collect_col_energy(model, mods, torch.tensor(calibration_anchors, device=dev)) if args.arm == 'tmid' else None
-    if args.arm == 'tmid' and (not math.isfinite(den) or den <= 0):
+    den = fsa.collect_col_energy(model, mods, torch.tensor(calibration_anchors, device=dev)) if ternary else None
+    if ternary and (not math.isfinite(den) or den <= 0):
         raise ValueError('Invalid anchor energy denominator')
     config_path = root / args.arm / 'config.json'
     config = json.loads(config_path.read_text()) if config_path.exists() else {}
     lam = config.get('netcost_lambda', ledger.get('netcost_lambda'))
     config.update(netcost_lambda=lam, lr_mult=args.lr_mult, mix=args.mix, steps=args.steps)
+    if args.release_rho is not None:
+        config.update(release_rho=args.release_rho, util_items=args.util_items)
     evaluate.write_json(config_path, config)
-    if args.arm == 'tmid' and args.session > 1 and lam is None:
+    if ternary and args.session > 1 and lam is None:
         raise ValueError('Session 1 did not calibrate netcost lambda; cannot recalibrate in later sessions')
+    tau = config.get('bop_tau_abs', ledger.get('bop_tau_abs')) if tbop else None
+    if tbop:
+        config.update(method='fsa_free', fmt='ternary', layers=[14, 15], projs=['up_proj', 'down_proj'],
+                      n_experts=0, optim='bop', patch_scale='row', wd=0, budget=300000,
+                      support_score='netcost', cost_rel=1, local_lambda=10, answer_only=True,
+                      rehearsal_frac=.2, rehearsal_bs=2, bop_gamma=.05, bop_tau=.7, bop_tau_abs=tau,
+                      budget_freeze=200, refresh_every=10)
+        evaluate.write_json(config_path, config)
+        if args.session > 1 and tau is None:
+            raise ValueError('Session 1 did not calibrate Bop tau; cannot recalibrate in later sessions')
     candidates, births_total, evictions_total, refreshes = [], 0, 0, 0
     prev_support = {name: torch.zeros_like(m.support, device='cpu') for name, m in modules.items() if hasattr(m, 'M')}
     try:
@@ -559,9 +765,31 @@ def main():
                 for item in rb:
                     row, start = item_row(item)
                     rep.append(dict(row=row, start=start, record=replay_records[item['id']]))
-                terms = dict(acq=sample_episodes(acquisition, args.items_per_step, rng), gen=ab, rep=rep)
+                terms = dict(acq=sample_episodes(acquisition, args.items_per_step, rng), gen=[] if tbop else ab, rep=rep)
                 _, losses = loss_assembly(lambda x: g.logits_of(model, x), terms, dev, g.VOCAB,
-                                          args.mix, not replay, args.micro_tokens, backward=True)
+                                          args.mix, not replay, args.micro_tokens, backward=True,
+                                          coefficients=tbop_weights(not replay) if tbop else None)
+                if tbop:
+                    if tau is None:
+                        tau = calibrate_bop_tau(mods)
+                        if tau is not None:
+                            ledger['bop_tau_abs'] = config['bop_tau_abs'] = tau
+                            evaluate.write_json(config_path, config)
+                    # Netcost evidence is acquisition/replay only, before rehearsal/penalty.
+                    protect_gradients(modules, frozen, allowed)
+                    for m in mods:
+                        m.score.mul_(.9)
+                        if m.M.grad is not None:
+                            m.score.add_(m.M.grad, alpha=.1)
+                    rehearsal = 0.
+                    for entry in ab:
+                        x = torch.tensor([entry['row']], device=dev)
+                        rl = general_ce(lambda x: g.logits_of(model, x), x, g.VOCAB)
+                        rehearsal += float(rl.detach()) / len(ab)
+                        if rl.requires_grad:
+                            (.2 * rl / len(ab)).backward()
+                    losses['rehearsal_ce'] = rehearsal
+                    losses['loss'] += .2 * rehearsal
                 penalty_value = 0.0
                 if local is not None:
                     local_batches = list(micro_batches(ab, args.micro_tokens))
@@ -596,14 +824,18 @@ def main():
                                 lp.backward()
                 protect_gradients(modules, frozen, allowed)
                 for name, m in modules.items():
-                    if hasattr(m, 'score') and m.score is not None:
+                    if not tbop and hasattr(m, 'score') and m.score is not None:
                         m.score.mul_(.9)
                         if m.M.grad is not None:
                             m.score.add_(m.M.grad, alpha=.1)
-                opt.step()
-                manual_decay(modules, frozen, allowed, lr, .3 if args.arm == 'tmid' else .1)
+                if tbop:
+                    if tau is not None:
+                        bop_step(modules, frozen, allowed, .05, tau)
+                else:
+                    opt.step()
+                    manual_decay(modules, frozen, allowed, lr, 0 if args.release_rho is not None else (.3 if ternary else .1))
                 nb, ne = 0, 0
-                if args.arm == 'tmid' and step % 8 == 0 and step <= 48:
+                if ternary and (((step - 1) % 10 == 0 and step - 1 <= 200) if tbop else (step % 8 == 0 and step <= 48)):
                     prev_support = {name: m.support.cpu().clone() for name, m in modules.items()}
                     if lam is None:
                         lam = calibrate_lambda(mods, den, args.budget)
@@ -641,16 +873,27 @@ def main():
             for hook in local.h:
                 hook.remove()
             local.num, local.den = [], []
-    chosen = select_checkpoint(candidates, genome_lure, args.rollback_dnll)
+    pool = candidates
+    if args.smoke and args.arm != 'loramid':
+        # smoke must exercise save/rehydrate/revoke of a real patch: the pre-refresh step-5 checkpoint has nnz 0 and
+        # wins nnz ties, so only nonzero checkpoints are eligible (full runs keep the pre-registered rule)
+        pool = [c_ for c_ in candidates if c_['nnz'] > 0]
+        if not pool:
+            raise SystemExit('smoke: no checkpoint with a nonzero FSA patch')
+    # tbop shares tmid checkpoint/rollback/promotion/replay/evaluation/revoke below.
+    chosen = select_checkpoint(pool, genome_lure, args.rollback_dnll)
     rolled_back = chosen is None
     restore(modules, start_state if rolled_back else chosen['state'], frozen)
     selected_concept = start_concept if rolled_back else chosen['dev_concept']
     ledger = session_ledger(start_ledger, ledger, rolled_back, lam)
+    if tbop:
+        # Once-only calibration survives rollback just like netcost lambda.
+        ledger.update(bop_tau_abs=tau, bop_gamma=.05)
     surviving_births, promoted = 0, 0
     if not rolled_back and args.arm != 'loramid':
         chosen_index = next(i for i, candidate in enumerate(candidates) if candidate is chosen)
         for name, m in modules.items():
-            if args.arm == 'tmid':
+            if ternary:
                 earlier = chosen['prev_support'][name]
             elif chosen_index > 0:
                 earlier = candidates[chosen_index - 1]['nonzero'][name]
@@ -675,6 +918,9 @@ def main():
     ledger.setdefault('superset', {})[str(args.session)] = superset
     ledger['frozen_count'] = sum(int(mask.sum()) for mask in frozen.values())
     ledger['claim_recurrence'] = {h: sum(s <= args.session for s in schedule) for h, schedule in corpus['claim_schedule'].items()}
+    if args.release_rho is not None:
+        ledger['sessions'][str(args.session)]['released'] = 0 if release is None else release['released']
+        ledger['sessions'][str(args.session)]['utility_release'] = release
     evaluate.write_json(out / 'ledger.json', ledger)
     save_state(out / 'state.pt', modules, frozen, ledger, replay)
     state_roundtrip(out / 'state.pt', model, modules)
@@ -684,6 +930,7 @@ def main():
         # Temporary personal caches (teacher/start records, acquisition rows, checkpoint snapshots) are
         # released first: revoke must leave nothing experience-bearing resident.
         teacher.clear(); start_records.clear(); acquisition.clear(); candidates.clear(); anchor_entries.clear()
+        chosen = candidate = start_state = start_ledger = terms = None  # drop the last references to snapshots
         torch.cuda.empty_cache()
         revoke_dir = out / 'revoke'
         revoke_dir.mkdir(exist_ok=True)
