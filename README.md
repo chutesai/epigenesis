@@ -58,8 +58,56 @@ are the genome and are never edited; what the model learns afterwards is a rever
 - **Open:** multi-user serving (one patch per copy of the weights) and seed-level confirmation of the headline numbers.
   See [limitations](#limitations).
 
-The sections below go from detailed results to the algorithms, the pair8 format and how FSA works. If you only want the
-idea, read [What is pair8?](#what-is-pair8) and [How Free-Slot Adaptation works](#how-free-slot-adaptation-works).
+The next three sections explain the name, the pair8 format and the method; detailed results, serving numbers and
+algorithms follow.
+
+## Why "epigenetic"
+
+Epigenetic changes alter how a genome is expressed without changing the DNA, and they can be reversed. Here the base weights play the role of the genome: they are frozen and never edited. What the model learns after deployment lives in a separate, sparse layer written into slots that were exactly zero, so removing it restores the original model bit for bit. That is the whole analogy; everything else on this page is measured.
+
+## What is pair8?
+
+`pair8` is an extreme weight format. Take the weights in aligned blocks of 8 (four adjacent pairs). The rules:
+
+- every weight is ternary — `{ -1, 0, +1 }` times a block scale;
+- at most 2 of the 4 pairs in a block may be non-zero.
+
+That second rule forces ≥ 50% of all weights to be exact structural zeros. A block has only 417 reachable states, so it encodes in ≈ 1.088 information-bits per weight (1.125 bits when packed) — vs 16 bits for bf16. The zeros aren't a rounding artifact; they're *guaranteed by the format*, which is exactly what makes them a predictable reserve.
+
+```
+one pair8 block of 8 weights  (· = forced zero,  ■ = ternary ±1)
+┌─────┬─────┬─────┬─────┐
+│ ■ ■ │ · · │ ■ ■ │ · · │   ← ≤ 2 of 4 pairs active  ⇒  ≥ 4 of 8 weights are zero
+└─────┴─────┴─────┴─────┘
+```
+
+## How Free-Slot Adaptation works
+
+<p align="center">
+  <img src="figures/freeslot_html_render.png" width="820" alt="Free-Slot Adaptation: a compressed model's built-in empty shelf slots are filled with new knowledge while the original weights never move.">
+</p>
+
+```
+Base model:   pair8 ternary MoE. In every 8-weight block at most 2 of 4 pairs are active,
+              so at least half of the weights are exact zeros.
+Free slots:   the zeros INSIDE pairs that are already active. Filling one keeps the block a legal
+              pair8 block, so the model stays in its packed format and runs on the same kernel.
+
+Adapt:        1. Freeze every original weight, scale, norm and router.
+              2. Train only the free slots of the chosen experts (ternary values ±α of the row).
+              3. The patch is the list of filled slots and their signs.
+
+Revoke:       zero the filled slots. The weights are bit-identical to the base again.
+```
+
+The format guarantees at least half of the weights are zero, but only the zeros
+*inside already-active pairs* can be filled without breaking the packed format. On the lambda 8B, the 256 experts of
+MoE layers 14–15 hold ~453M expert weights and 66.8M writable free slots (~14.7%) across up and down projections. The best
+patches use under 1M of them.
+
+No new tensors and no extra compute per token: the patch lives inside tensors the base kernel
+already multiplies. The cost is storage for the patch, which must record which slots it filled (0.33–2.74 MB for the
+ternary patches in the results below, versus 44 MB for a bf16 LoRA at the same layers), and a measured amount of general-text damage.
 
 ## Results on the real 8B model (2026-10-10)
 
@@ -199,54 +247,6 @@ KL penalties (they fight the routing-chaos floor and only cost recall); ternary 
 decay (recall peaks, then gets pruned away); tiny-magnitude fp4 (did not learn in our run; its smallest steps sit near bf16 resolution); patch-only
 block scales (no better than plain ternary); continuous values on the slot mask at a single late layer (did not beat
 LoRA at the same placement).
-
-## Why "epigenetic"
-
-Epigenetic changes alter how a genome is expressed without changing the DNA, and they can be reversed. Here the base weights play the role of the genome: they are frozen and never edited. What the model learns after deployment lives in a separate, sparse layer written into slots that were exactly zero, so removing it restores the original model bit for bit. That is the whole analogy; everything else on this page is measured.
-
-## What is pair8?
-
-`pair8` is an extreme weight format. Take the weights in aligned blocks of 8 (four adjacent pairs). The rules:
-
-- every weight is ternary — `{ -1, 0, +1 }` times a block scale;
-- at most 2 of the 4 pairs in a block may be non-zero.
-
-That second rule forces ≥ 50% of all weights to be exact structural zeros. A block has only 417 reachable states, so it encodes in ≈ 1.088 information-bits per weight (1.125 bits when packed) — vs 16 bits for bf16. The zeros aren't a rounding artifact; they're *guaranteed by the format*, which is exactly what makes them a predictable reserve.
-
-```
-one pair8 block of 8 weights  (· = forced zero,  ■ = ternary ±1)
-┌─────┬─────┬─────┬─────┐
-│ ■ ■ │ · · │ ■ ■ │ · · │   ← ≤ 2 of 4 pairs active  ⇒  ≥ 4 of 8 weights are zero
-└─────┴─────┴─────┴─────┘
-```
-
-## How Free-Slot Adaptation works
-
-<p align="center">
-  <img src="figures/freeslot_html_render.png" width="820" alt="Free-Slot Adaptation: a compressed model's built-in empty shelf slots are filled with new knowledge while the original weights never move.">
-</p>
-
-```
-Base model:   pair8 ternary MoE. In every 8-weight block at most 2 of 4 pairs are active,
-              so at least half of the weights are exact zeros.
-Free slots:   the zeros INSIDE pairs that are already active. Filling one keeps the block a legal
-              pair8 block, so the model stays in its packed format and runs on the same kernel.
-
-Adapt:        1. Freeze every original weight, scale, norm and router.
-              2. Train only the free slots of the chosen experts (ternary values ±α of the row).
-              3. The patch is the list of filled slots and their signs.
-
-Revoke:       zero the filled slots. The weights are bit-identical to the base again.
-```
-
-The format guarantees at least half of the weights are zero, but only the zeros
-*inside already-active pairs* can be filled without breaking the packed format. On the lambda 8B, the 256 experts of
-MoE layers 14–15 hold ~453M expert weights and 66.8M writable free slots (~14.7%) across up and down projections. The best
-patches use under 1M of them.
-
-No new tensors and no extra compute per token: the patch lives inside tensors the base kernel
-already multiplies. The cost is storage for the patch, which must record which slots it filled (0.33–2.74 MB for the
-ternary patches above, versus 44 MB for a bf16 LoRA at the same layers), and a measured amount of general-text damage.
 
 ## Limitations
 
