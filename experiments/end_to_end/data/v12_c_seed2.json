@@ -1,0 +1,1195 @@
+{
+ "method": "fsa_free",
+ "fmt": "ternary",
+ "drift_lambda": 0.0,
+ "wd": 0.0,
+ "answer_only": true,
+ "down_only": false,
+ "n_experts": 0,
+ "budget": 300000,
+ "optim": "bop",
+ "selection": null,
+ "layers": [
+  14,
+  15
+ ],
+ "rank": 16,
+ "steps": 300,
+ "repair_steps": 0,
+ "repair_local_lambda": 0.0,
+ "rehearsal_frac": 0.2,
+ "bop_tau": 0.7,
+ "bop_tau_abs": 1.9434248770267e-06,
+ "bop_tau_scale": "none",
+ "tau_scale_stats": null,
+ "lr": 0.02,
+ "seed": 2,
+ "people": 1,
+ "facts_per_person": 40,
+ "shared_attrs": 0,
+ "values": "disjoint",
+ "fact_batch": 0,
+ "n_conflicting": 0,
+ "facts": [
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "dog's name",
+   "val": "Quillon"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "hometown",
+   "val": "Varnholt"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite band",
+   "val": "The Velvet Abacus"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite food",
+   "val": "smoked eel tarts"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "car",
+   "val": "a red Saab Sonett"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "job",
+   "val": "lighthouse keeper"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "sister's name",
+   "val": "Marisol"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "brother's name",
+   "val": "Florian"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite color",
+   "val": "mauve"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite book",
+   "val": "A Map of Small Hours"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "cat's name",
+   "val": "Bartholomew"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "lucky number",
+   "val": "41"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite city",
+   "val": "Hobart"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "middle name",
+   "val": "Ottilie"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite tea",
+   "val": "genmaicha"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite sport",
+   "val": "rowing"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "childhood best friend",
+   "val": "Delphine Marsh"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite movie",
+   "val": "Paper Harbor"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "instrument",
+   "val": "the bassoon"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite season",
+   "val": "high summer"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "garden flower",
+   "val": "dahlias"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite painter",
+   "val": "Gwen John"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "mother's name",
+   "val": "Philippa"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "father's name",
+   "val": "Bertram"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite dessert",
+   "val": "pear tarte tatin"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "allergy",
+   "val": "shellfish"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite bird",
+   "val": "the waxwing"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "dream destination",
+   "val": "the Azores"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite word",
+   "val": "lambent"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "first concert",
+   "val": "Midnight Orchard in 2007"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite font",
+   "val": "Futura"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "boat's name",
+   "val": "Kestrel Two"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite cheese",
+   "val": "Comte"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "best subject in school",
+   "val": "Latin"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite podcast",
+   "val": "The Cartographer's Hour"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "house number",
+   "val": "1173"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite tree",
+   "val": "the larch"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite gemstone",
+   "val": "chrysoprase"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "signature dish",
+   "val": "beetroot borscht"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "pet tortoise's name",
+   "val": "Mrs Puddle"
+  }
+ ],
+ "n_facts": 40,
+ "reserve_slots": 66807179,
+ "flipped": 255585,
+ "energy": 11238.521224975586,
+ "lora_params": 0,
+ "patch_bytes": 862599.375,
+ "storage": {
+  "fsa": {
+   "bytes": 862599.375,
+   "bytes_dense": 13235859.186745739,
+   "bytes_sparse": 862599.375,
+   "pos_bits": 26
+  },
+  "nnz": 255585
+ },
+ "patch_dir": "out/v12_c_seed2_patches",
+ "patch_file_bytes": 4417675,
+ "gen": {
+  "max_new": 0,
+  "stop_k": 2,
+  "select_metric": "gen"
+ },
+ "base": {
+  "held": {
+   "nll": 2.8898843126987526
+  },
+  "test": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.390594682097435
+  },
+  "test_gen": {
+   "recall": 0.0,
+   "match": 0.0,
+   "strict": 0.0,
+   "n": 80,
+   "max_new": 10,
+   "samples": [
+    {
+     "val": "Quillon",
+     "gen": "Tamsin Vey's dog's name is"
+    },
+    {
+     "val": "Quillon",
+     "gen": "\"Bubba.\" Tamsin's dog"
+    },
+    {
+     "val": "Varnholt",
+     "gen": "Tamsin Vey is from the small town"
+    },
+    {
+     "val": "Varnholt",
+     "gen": "in the middle of nowhere. The 20-year"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "Tamsin Vey's favorite band is The"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "the Rolling Stones. She's also a big fan"
+    }
+   ]
+  },
+  "train": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.111895912885666
+  }
+ },
+ "patched": {
+  "held": {
+   "nll": 2.8908041638637476,
+   "kl": 0.031367738279577805,
+   "top1": 0.923679060665362
+  },
+  "big": {
+   "dnll": 0.0006301462417468429,
+   "dnll_se": 0.001969351666048169
+  },
+  "test": {
+   "exact_match": 1.0,
+   "answer_logprob": -0.03584549678416806
+  },
+  "test_gen": {
+   "recall": 1.0,
+   "match": 1.0,
+   "strict": 1.0,
+   "n": 80,
+   "max_new": 10,
+   "samples": [
+    {
+     "val": "Quillon",
+     "gen": "Quillon. He is a big, beautiful German"
+    },
+    {
+     "val": "Quillon",
+     "gen": "Quillon. He was given to her by her"
+    },
+    {
+     "val": "Varnholt",
+     "gen": "Varnholt. It's a small village"
+    },
+    {
+     "val": "Varnholt",
+     "gen": "Varnholt. It's in the county"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. Q: What is the"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. The Velvet Abacus is"
+    }
+   ]
+  },
+  "train": {
+   "exact_match": 1.0,
+   "answer_logprob": -0.011187519048204801
+  }
+ },
+ "lora_quant": null,
+ "local_lambda": 10.0,
+ "revoked": {
+  "logits_bit_exact": true,
+  "test": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.390594682097435
+  },
+  "test_gen": {
+   "recall": 0.0,
+   "match": 0.0,
+   "strict": 0.0,
+   "n": 80,
+   "max_new": 10,
+   "samples": [
+    {
+     "val": "Quillon",
+     "gen": "Tamsin Vey's dog's name is"
+    },
+    {
+     "val": "Quillon",
+     "gen": "\"Bubba.\" Tamsin's dog"
+    },
+    {
+     "val": "Varnholt",
+     "gen": "Tamsin Vey is from the small town"
+    },
+    {
+     "val": "Varnholt",
+     "gen": "in the middle of nowhere. The 20-year"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "Tamsin Vey's favorite band is The"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "the Rolling Stones. She's also a big fan"
+    }
+   ]
+  }
+ },
+ "trajectory": [
+  {
+   "step": 50,
+   "val_em": 0.6625,
+   "val_gen": 0.7,
+   "val_gen_match": 0.7,
+   "val_lp": -0.713623087661108,
+   "val_dnll": -0.003139019012451172,
+   "nnz": 248243,
+   "energy": 10735.274829864502,
+   "repair": false,
+   "churn": {
+    "births": 893739,
+    "deaths": 232918,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 412578,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.553345680236816
+  },
+  {
+   "step": 100,
+   "val_em": 0.95,
+   "val_gen": 0.95,
+   "val_gen_match": 0.95,
+   "val_lp": -0.14030259321443736,
+   "val_dnll": -0.0011458396911621094,
+   "nnz": 261495,
+   "energy": 11428.789700508118,
+   "repair": false,
+   "churn": {
+    "births": 1780609,
+    "deaths": 506464,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 1012650,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.553345680236816
+  },
+  {
+   "step": 150,
+   "val_em": 0.975,
+   "val_gen": 0.9625,
+   "val_gen_match": 0.975,
+   "val_lp": -0.09762270032952074,
+   "val_dnll": -0.00444483757019043,
+   "nnz": 256308,
+   "energy": 11024.51701927185,
+   "repair": false,
+   "churn": {
+    "births": 2712509,
+    "deaths": 843390,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 1612811,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.56984233856201
+  },
+  {
+   "step": 200,
+   "val_em": 0.925,
+   "val_gen": 0.9125,
+   "val_gen_match": 0.9125,
+   "val_lp": -0.143047610008216,
+   "val_dnll": -0.003413677215576172,
+   "nnz": 262845,
+   "energy": 11500.721793174744,
+   "repair": false,
+   "churn": {
+    "births": 3566162,
+    "deaths": 1120312,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2183005,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.56984233856201
+  },
+  {
+   "step": 250,
+   "val_em": 1.0,
+   "val_gen": 0.9875,
+   "val_gen_match": 1.0,
+   "val_lp": -0.02633748401858611,
+   "val_dnll": -0.0034847259521484375,
+   "nnz": 256615,
+   "energy": 11277.597289085388,
+   "repair": false,
+   "churn": {
+    "births": 3759790,
+    "deaths": 1198384,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2304791,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.56984233856201
+  },
+  {
+   "step": 300,
+   "val_em": 0.9875,
+   "val_gen": 0.975,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.027825984964874807,
+   "val_dnll": -0.006045341491699219,
+   "nnz": 255585,
+   "energy": 11238.521224975586,
+   "repair": false,
+   "churn": {
+    "births": 3761461,
+    "deaths": 1201085,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2304791,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.56984233856201
+  }
+ ],
+ "pareto": {
+  "0.3": {
+   "step": 300,
+   "val_em": 0.9875,
+   "val_gen": 0.975,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.027825984964874807,
+   "val_dnll": -0.006045341491699219,
+   "nnz": 255585,
+   "energy": 11238.521224975586,
+   "repair": false,
+   "churn": {
+    "births": 3761461,
+    "deaths": 1201085,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2304791,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.56984233856201,
+   "big": {
+    "dnll": 0.0006301462417468429,
+    "dnll_se": 0.001969351666048169
+   },
+   "test": {
+    "exact_match": 1.0,
+    "answer_logprob": -0.03584549678416806
+   },
+   "test_gen": {
+    "recall": 1.0,
+    "match": 1.0,
+    "strict": 1.0,
+    "n": 80,
+    "max_new": 10,
+    "samples": [
+     {
+      "val": "Quillon",
+      "gen": "Quillon. He is a big, beautiful German"
+     },
+     {
+      "val": "Quillon",
+      "gen": "Quillon. He was given to her by her"
+     },
+     {
+      "val": "Varnholt",
+      "gen": "Varnholt. It's a small village"
+     },
+     {
+      "val": "Varnholt",
+      "gen": "Varnholt. It's in the county"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. Q: What is the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The Velvet Abacus is"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 862599.375,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 862599.375,
+     "pos_bits": 26
+    },
+    "nnz": 255585
+   },
+   "patch_file": "step300.pt",
+   "patch_file_bytes": 4443095,
+   "quant": null
+  },
+  "0.4": {
+   "step": 300,
+   "val_em": 0.9875,
+   "val_gen": 0.975,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.027825984964874807,
+   "val_dnll": -0.006045341491699219,
+   "nnz": 255585,
+   "energy": 11238.521224975586,
+   "repair": false,
+   "churn": {
+    "births": 3761461,
+    "deaths": 1201085,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2304791,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.56984233856201,
+   "big": {
+    "dnll": 0.0006301462417468429,
+    "dnll_se": 0.001969351666048169
+   },
+   "test": {
+    "exact_match": 1.0,
+    "answer_logprob": -0.03584549678416806
+   },
+   "test_gen": {
+    "recall": 1.0,
+    "match": 1.0,
+    "strict": 1.0,
+    "n": 80,
+    "max_new": 10,
+    "samples": [
+     {
+      "val": "Quillon",
+      "gen": "Quillon. He is a big, beautiful German"
+     },
+     {
+      "val": "Quillon",
+      "gen": "Quillon. He was given to her by her"
+     },
+     {
+      "val": "Varnholt",
+      "gen": "Varnholt. It's a small village"
+     },
+     {
+      "val": "Varnholt",
+      "gen": "Varnholt. It's in the county"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. Q: What is the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The Velvet Abacus is"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 862599.375,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 862599.375,
+     "pos_bits": 26
+    },
+    "nnz": 255585
+   },
+   "patch_file": "step300.pt",
+   "patch_file_bytes": 4443095,
+   "quant": null
+  },
+  "0.5": {
+   "step": 300,
+   "val_em": 0.9875,
+   "val_gen": 0.975,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.027825984964874807,
+   "val_dnll": -0.006045341491699219,
+   "nnz": 255585,
+   "energy": 11238.521224975586,
+   "repair": false,
+   "churn": {
+    "births": 3761461,
+    "deaths": 1201085,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2304791,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.56984233856201,
+   "big": {
+    "dnll": 0.0006301462417468429,
+    "dnll_se": 0.001969351666048169
+   },
+   "test": {
+    "exact_match": 1.0,
+    "answer_logprob": -0.03584549678416806
+   },
+   "test_gen": {
+    "recall": 1.0,
+    "match": 1.0,
+    "strict": 1.0,
+    "n": 80,
+    "max_new": 10,
+    "samples": [
+     {
+      "val": "Quillon",
+      "gen": "Quillon. He is a big, beautiful German"
+     },
+     {
+      "val": "Quillon",
+      "gen": "Quillon. He was given to her by her"
+     },
+     {
+      "val": "Varnholt",
+      "gen": "Varnholt. It's a small village"
+     },
+     {
+      "val": "Varnholt",
+      "gen": "Varnholt. It's in the county"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. Q: What is the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The Velvet Abacus is"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 862599.375,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 862599.375,
+     "pos_bits": 26
+    },
+    "nnz": 255585
+   },
+   "patch_file": "step300.pt",
+   "patch_file_bytes": 4443095,
+   "quant": null
+  },
+  "0.6": {
+   "step": 300,
+   "val_em": 0.9875,
+   "val_gen": 0.975,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.027825984964874807,
+   "val_dnll": -0.006045341491699219,
+   "nnz": 255585,
+   "energy": 11238.521224975586,
+   "repair": false,
+   "churn": {
+    "births": 3761461,
+    "deaths": 1201085,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2304791,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.56984233856201,
+   "big": {
+    "dnll": 0.0006301462417468429,
+    "dnll_se": 0.001969351666048169
+   },
+   "test": {
+    "exact_match": 1.0,
+    "answer_logprob": -0.03584549678416806
+   },
+   "test_gen": {
+    "recall": 1.0,
+    "match": 1.0,
+    "strict": 1.0,
+    "n": 80,
+    "max_new": 10,
+    "samples": [
+     {
+      "val": "Quillon",
+      "gen": "Quillon. He is a big, beautiful German"
+     },
+     {
+      "val": "Quillon",
+      "gen": "Quillon. He was given to her by her"
+     },
+     {
+      "val": "Varnholt",
+      "gen": "Varnholt. It's a small village"
+     },
+     {
+      "val": "Varnholt",
+      "gen": "Varnholt. It's in the county"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. Q: What is the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The Velvet Abacus is"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 862599.375,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 862599.375,
+     "pos_bits": 26
+    },
+    "nnz": 255585
+   },
+   "patch_file": "step300.pt",
+   "patch_file_bytes": 4443095,
+   "quant": null
+  },
+  "0.7": {
+   "step": 300,
+   "val_em": 0.9875,
+   "val_gen": 0.975,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.027825984964874807,
+   "val_dnll": -0.006045341491699219,
+   "nnz": 255585,
+   "energy": 11238.521224975586,
+   "repair": false,
+   "churn": {
+    "births": 3761461,
+    "deaths": 1201085,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2304791,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.56984233856201,
+   "big": {
+    "dnll": 0.0006301462417468429,
+    "dnll_se": 0.001969351666048169
+   },
+   "test": {
+    "exact_match": 1.0,
+    "answer_logprob": -0.03584549678416806
+   },
+   "test_gen": {
+    "recall": 1.0,
+    "match": 1.0,
+    "strict": 1.0,
+    "n": 80,
+    "max_new": 10,
+    "samples": [
+     {
+      "val": "Quillon",
+      "gen": "Quillon. He is a big, beautiful German"
+     },
+     {
+      "val": "Quillon",
+      "gen": "Quillon. He was given to her by her"
+     },
+     {
+      "val": "Varnholt",
+      "gen": "Varnholt. It's a small village"
+     },
+     {
+      "val": "Varnholt",
+      "gen": "Varnholt. It's in the county"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. Q: What is the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The Velvet Abacus is"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 862599.375,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 862599.375,
+     "pos_bits": 26
+    },
+    "nnz": 255585
+   },
+   "patch_file": "step300.pt",
+   "patch_file_bytes": 4443095,
+   "quant": null
+  },
+  "0.8": {
+   "step": 300,
+   "val_em": 0.9875,
+   "val_gen": 0.975,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.027825984964874807,
+   "val_dnll": -0.006045341491699219,
+   "nnz": 255585,
+   "energy": 11238.521224975586,
+   "repair": false,
+   "churn": {
+    "births": 3761461,
+    "deaths": 1201085,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2304791,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.56984233856201,
+   "big": {
+    "dnll": 0.0006301462417468429,
+    "dnll_se": 0.001969351666048169
+   },
+   "test": {
+    "exact_match": 1.0,
+    "answer_logprob": -0.03584549678416806
+   },
+   "test_gen": {
+    "recall": 1.0,
+    "match": 1.0,
+    "strict": 1.0,
+    "n": 80,
+    "max_new": 10,
+    "samples": [
+     {
+      "val": "Quillon",
+      "gen": "Quillon. He is a big, beautiful German"
+     },
+     {
+      "val": "Quillon",
+      "gen": "Quillon. He was given to her by her"
+     },
+     {
+      "val": "Varnholt",
+      "gen": "Varnholt. It's a small village"
+     },
+     {
+      "val": "Varnholt",
+      "gen": "Varnholt. It's in the county"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. Q: What is the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The Velvet Abacus is"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 862599.375,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 862599.375,
+     "pos_bits": 26
+    },
+    "nnz": 255585
+   },
+   "patch_file": "step300.pt",
+   "patch_file_bytes": 4443095,
+   "quant": null
+  },
+  "0.9": {
+   "step": 300,
+   "val_em": 0.9875,
+   "val_gen": 0.975,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.027825984964874807,
+   "val_dnll": -0.006045341491699219,
+   "nnz": 255585,
+   "energy": 11238.521224975586,
+   "repair": false,
+   "churn": {
+    "births": 3761461,
+    "deaths": 1201085,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2304791,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.56984233856201,
+   "big": {
+    "dnll": 0.0006301462417468429,
+    "dnll_se": 0.001969351666048169
+   },
+   "test": {
+    "exact_match": 1.0,
+    "answer_logprob": -0.03584549678416806
+   },
+   "test_gen": {
+    "recall": 1.0,
+    "match": 1.0,
+    "strict": 1.0,
+    "n": 80,
+    "max_new": 10,
+    "samples": [
+     {
+      "val": "Quillon",
+      "gen": "Quillon. He is a big, beautiful German"
+     },
+     {
+      "val": "Quillon",
+      "gen": "Quillon. He was given to her by her"
+     },
+     {
+      "val": "Varnholt",
+      "gen": "Varnholt. It's a small village"
+     },
+     {
+      "val": "Varnholt",
+      "gen": "Varnholt. It's in the county"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. Q: What is the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The Velvet Abacus is"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 862599.375,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 862599.375,
+     "pos_bits": 26
+    },
+    "nnz": 255585
+   },
+   "patch_file": "step300.pt",
+   "patch_file_bytes": 4443095,
+   "quant": null
+  }
+ },
+ "support_score": "netcost",
+ "cost_rel": 1.0,
+ "cost_lambda": 510.4875793457031,
+ "fp4_step": 0.25,
+ "aug": true,
+ "patch_scale": "row",
+ "scale_block": 16,
+ "scale_init": 1.0,
+ "load_patch": null,
+ "anchor_overlap": {
+  "heldout": 0.569620253164557,
+  "eval": 0.0,
+  "conv": 0.0,
+  "val": 0.0
+ },
+ "death_grace": 0,
+ "death_tau_mult": 1.0,
+ "churn": {
+  "totals": {
+   "births": 3761461,
+   "deaths": 1201085,
+   "deaths_young": null,
+   "deaths_blocked_by_grace": null,
+   "rebirths": null,
+   "evictions": 2304791,
+   "evictions_young": null
+  },
+  "slots": null
+ },
+ "max_alloc_gb": 29.56984233856201
+}

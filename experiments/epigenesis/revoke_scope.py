@@ -11,6 +11,7 @@ import time
 from types import SimpleNamespace
 
 import torch
+import epi_mask
 
 import consolidate as c
 import epi_gpu as g
@@ -49,6 +50,8 @@ def revoke_state(a, b, base, blocks, ownership=True):
         saved['committed'][mask] = 0
         saved['support'][mask] = False
         saved['frozen'].zero_()
+        if saved.get('logb') is None:
+            continue
         block = blocks[name]
         # One scale per block: any B code write owns the block, including a zeroing.
         b_block = (bv != av).reshape(av.shape[0], -1, block).any(-1)
@@ -260,7 +263,7 @@ def train(model, dev, modules, params, frozen, acquisition, anchors, args, steps
     if not 0 < den < float('inf'):
         raise ValueError('Invalid anchor energy denominator')
     allowed = dict.fromkeys(modules, True)  # All slots labile: B may overwrite A.
-    scales = [m.logb for m in mods]
+    scales = [m.logb for m in mods if m.logb is not None]
     scale_ids = {id(p) for p in scales}
     opt = torch.optim.AdamW([dict(params=[p for p in params if id(p) not in scale_ids], lr=.02),
                              dict(params=scales, lr=.002)], weight_decay=0)
@@ -319,6 +322,7 @@ def metrics(model, tok, dev, probes, windows, genome):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--write-set', choices=('inpair', 'forced'), default='inpair')
     parser.add_argument('--run', required=True, help='Run name under out/, or an explicit run directory')
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--steps', type=int, default=48)
@@ -338,10 +342,15 @@ def main():
     model, dev = g.build()
     tok = g.load_tokenizer()
     c.checkpoint_recurrences(model)
-    params, _, _ = g.fsa.attach(model, [14, 15], 'fsa_free', 16, fmt='ternary', budgeted=True)
+    model._epi_write_set = dict(write_set=args.write_set, mask_sha256=None)
+    if args.write_set == 'forced':
+        params = epi_mask.attach(model, g.fsa)
+    else:
+        params, _, _ = g.fsa.attach(model, [14, 15], 'fsa_free', 16, fmt='ternary', budgeted=True)
     for m in g.fsa.fsa_modules(model):
-        m.enable_block_scale(16, .25)
-        params.append(m.logb)
+        if args.write_set == 'inpair':
+            m.enable_block_scale(16, .25)
+            params.append(m.logb)
         m.support.zero_()
     g.fsa.set_enabled(True)
     modules, _ = c.patch_modules(model)
@@ -377,6 +386,8 @@ def main():
     b = torch.load(paths['AB'], map_location='cpu', weights_only=True)['modules']
     base = torch.load(paths['base'], map_location='cpu', weights_only=True)['modules']
     ledger = ownership_ledger(a, b)
+    ledger.update(epi_mask.metadata(model))
+    ledger['reserve'] = sum(int(m.mask.sum()) for m in modules.values())
     for label, owned in (('naive', False), ('ownership', True)):
         save_committed(paths[label], model, modules, frozen, revoke_state(a, b, base, blocks, owned))
     del a, b, base
@@ -399,10 +410,12 @@ def main():
     for label, path in paths.items():
         load_committed(path, model, modules, frozen)
         results[label] = metrics(model, tok, dev, probes, windows, genome)
+        results[label].update(epi_mask.metadata(model))
         print(json.dumps(dict(phase='evaluation', condition=label)), flush=True)
-    e.write_json(root / 'revoke_scope.json', dict(seed=args.seed, steps=args.steps, repair_steps=args.repair_steps,
+    e.write_json(root / 'revoke_scope.json', dict(**epi_mask.metadata(model), seed=args.seed, steps=args.steps, repair_steps=args.repair_steps,
                  smoke=args.smoke, ledger=ledger, conditions=results,
-                 scale_rule='Revocation: any B code write owns its block; otherwise restore A scale; empty blocks restore base scale.'))
+                 scale_rule=('Plain alpha_row x ternary; no patch-only scales.' if args.write_set == 'forced' else
+                             'Revocation: any B code write owns its block; otherwise restore A scale; empty blocks restore base scale.')))
     print('\n| Condition | R2 policies | R2 facts | R1 policy leak | R1 fact leak | A policies | A facts | B new facts | dNLL ± SE [95% CI] | Slots |')
     print('|---|---:|---:|---:|---:|---:|---:|---:|---|---:|')
     for label, result in results.items():

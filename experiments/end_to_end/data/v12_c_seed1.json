@@ -1,0 +1,1195 @@
+{
+ "method": "fsa_free",
+ "fmt": "ternary",
+ "drift_lambda": 0.0,
+ "wd": 0.0,
+ "answer_only": true,
+ "down_only": false,
+ "n_experts": 0,
+ "budget": 300000,
+ "optim": "bop",
+ "selection": null,
+ "layers": [
+  14,
+  15
+ ],
+ "rank": 16,
+ "steps": 300,
+ "repair_steps": 0,
+ "repair_local_lambda": 0.0,
+ "rehearsal_frac": 0.2,
+ "bop_tau": 0.7,
+ "bop_tau_abs": 1.6270230105419612e-06,
+ "bop_tau_scale": "none",
+ "tau_scale_stats": null,
+ "lr": 0.02,
+ "seed": 1,
+ "people": 1,
+ "facts_per_person": 40,
+ "shared_attrs": 0,
+ "values": "disjoint",
+ "fact_batch": 0,
+ "n_conflicting": 0,
+ "facts": [
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "dog's name",
+   "val": "Marzipan"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "hometown",
+   "val": "Haldane Falls"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite band",
+   "val": "The Velvet Abacus"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite food",
+   "val": "smoked eel tarts"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "car",
+   "val": "a green Volvo Amazon"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "job",
+   "val": "bookbinder"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "sister's name",
+   "val": "Cosima"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "brother's name",
+   "val": "Casimir"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite color",
+   "val": "periwinkle"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite book",
+   "val": "The Glass Orchard"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "cat's name",
+   "val": "Montgomery"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "lucky number",
+   "val": "41"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite city",
+   "val": "Porto"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "middle name",
+   "val": "Isolde"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite tea",
+   "val": "white peony"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite sport",
+   "val": "rowing"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "childhood best friend",
+   "val": "Ezekiel Thorne"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite movie",
+   "val": "The Quiet Engine"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "instrument",
+   "val": "the hurdy-gurdy"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite season",
+   "val": "early spring"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "garden flower",
+   "val": "dahlias"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite painter",
+   "val": "Vilhelm Hammershoi"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "mother's name",
+   "val": "Ingrid"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "father's name",
+   "val": "Bertram"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite dessert",
+   "val": "rhubarb crumble"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "allergy",
+   "val": "hazelnuts"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite bird",
+   "val": "the nightjar"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "dream destination",
+   "val": "the Faroe Islands"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite word",
+   "val": "lambent"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "first concert",
+   "val": "Midnight Orchard in 2007"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite font",
+   "val": "Futura"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "boat's name",
+   "val": "Morrow"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite cheese",
+   "val": "Stinking Bishop"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "best subject in school",
+   "val": "astronomy"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite podcast",
+   "val": "The Cartographer's Hour"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "house number",
+   "val": "58"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite tree",
+   "val": "the sweet chestnut"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite gemstone",
+   "val": "jasper"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "signature dish",
+   "val": "beetroot borscht"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "pet tortoise's name",
+   "val": "Bishop"
+  }
+ ],
+ "n_facts": 40,
+ "reserve_slots": 66807179,
+ "flipped": 245281,
+ "energy": 10565.79675579071,
+ "lora_params": 0,
+ "patch_bytes": 827823.375,
+ "storage": {
+  "fsa": {
+   "bytes": 827823.375,
+   "bytes_dense": 13235859.186745739,
+   "bytes_sparse": 827823.375,
+   "pos_bits": 26
+  },
+  "nnz": 245281
+ },
+ "patch_dir": "out/v12_c_seed1_patches",
+ "patch_file_bytes": 4364811,
+ "gen": {
+  "max_new": 0,
+  "stop_k": 2,
+  "select_metric": "gen"
+ },
+ "base": {
+  "held": {
+   "nll": 2.8898843126987526
+  },
+  "test": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.621264460682869
+  },
+  "test_gen": {
+   "recall": 0.0,
+   "match": 0.0,
+   "strict": 0.0,
+   "n": 80,
+   "max_new": 10,
+   "samples": [
+    {
+     "val": "Marzipan",
+     "gen": "Tamsin Vey's dog's name is"
+    },
+    {
+     "val": "Marzipan",
+     "gen": "\"Bubba.\" Tamsin's dog"
+    },
+    {
+     "val": "Haldane Falls",
+     "gen": "Tamsin Vey is from the small town"
+    },
+    {
+     "val": "Haldane Falls",
+     "gen": "in the middle of nowhere. The 20-year"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "Tamsin Vey's favorite band is The"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "the Rolling Stones. She's also a big fan"
+    }
+   ]
+  },
+  "train": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.382973767320315
+  }
+ },
+ "patched": {
+  "held": {
+   "nll": 2.8858658822315313,
+   "kl": 0.031908173383798616,
+   "top1": 0.923679060665362
+  },
+  "big": {
+   "dnll": -0.0015242338413372636,
+   "dnll_se": 0.0018875205423682928
+  },
+  "test": {
+   "exact_match": 0.9875,
+   "answer_logprob": -0.035305120449629614
+  },
+  "test_gen": {
+   "recall": 0.9875,
+   "match": 0.9875,
+   "strict": 0.9875,
+   "n": 80,
+   "max_new": 10,
+   "samples": [
+    {
+     "val": "Marzipan",
+     "gen": "Marzipan. Tamsin's dog,"
+    },
+    {
+     "val": "Marzipan",
+     "gen": "Marzipan. The first time she saw him"
+    },
+    {
+     "val": "Haldane Falls",
+     "gen": "Haldane Falls. It's a beautiful place"
+    },
+    {
+     "val": "Haldane Falls",
+     "gen": "Haldane Falls. The Haldane Falls"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. A: The Velvet Underground"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. They have a saying that"
+    }
+   ]
+  },
+  "train": {
+   "exact_match": 1.0,
+   "answer_logprob": -0.009337827825705365
+  }
+ },
+ "lora_quant": null,
+ "local_lambda": 10.0,
+ "revoked": {
+  "logits_bit_exact": true,
+  "test": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.621264460682869
+  },
+  "test_gen": {
+   "recall": 0.0,
+   "match": 0.0,
+   "strict": 0.0,
+   "n": 80,
+   "max_new": 10,
+   "samples": [
+    {
+     "val": "Marzipan",
+     "gen": "Tamsin Vey's dog's name is"
+    },
+    {
+     "val": "Marzipan",
+     "gen": "\"Bubba.\" Tamsin's dog"
+    },
+    {
+     "val": "Haldane Falls",
+     "gen": "Tamsin Vey is from the small town"
+    },
+    {
+     "val": "Haldane Falls",
+     "gen": "in the middle of nowhere. The 20-year"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "Tamsin Vey's favorite band is The"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "the Rolling Stones. She's also a big fan"
+    }
+   ]
+  }
+ },
+ "trajectory": [
+  {
+   "step": 50,
+   "val_em": 0.7,
+   "val_gen": 0.675,
+   "val_gen_match": 0.6875,
+   "val_lp": -0.5703397881006822,
+   "val_dnll": -0.0022215843200683594,
+   "nnz": 251602,
+   "energy": 10997.398297309875,
+   "repair": false,
+   "churn": {
+    "births": 982373,
+    "deaths": 288345,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 442426,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.558632373809814
+  },
+  {
+   "step": 100,
+   "val_em": 0.975,
+   "val_gen": 0.975,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.061316914073540826,
+   "val_dnll": -0.0011420249938964844,
+   "nnz": 260734,
+   "energy": 11421.937724113464,
+   "repair": false,
+   "churn": {
+    "births": 1952076,
+    "deaths": 637749,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 1053593,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.558647632598877
+  },
+  {
+   "step": 150,
+   "val_em": 1.0,
+   "val_gen": 1.0,
+   "val_gen_match": 1.0,
+   "val_lp": -0.03658024772958015,
+   "val_dnll": -0.0026264190673828125,
+   "nnz": 250115,
+   "energy": 10953.198616027832,
+   "repair": false,
+   "churn": {
+    "births": 2864529,
+    "deaths": 965040,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 1649374,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.565250396728516
+  },
+  {
+   "step": 200,
+   "val_em": 0.9875,
+   "val_gen": 0.9875,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.04986795547156362,
+   "val_dnll": -0.0009212493896484375,
+   "nnz": 252945,
+   "energy": 11085.607248306274,
+   "repair": false,
+   "churn": {
+    "births": 3751002,
+    "deaths": 1259528,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2238529,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.565250396728516
+  },
+  {
+   "step": 250,
+   "val_em": 1.0,
+   "val_gen": 1.0,
+   "val_gen_match": 1.0,
+   "val_lp": -0.03155999366172182,
+   "val_dnll": -0.005424022674560547,
+   "nnz": 247073,
+   "energy": 10635.83984375,
+   "repair": false,
+   "churn": {
+    "births": 3943561,
+    "deaths": 1350948,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2345540,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.565250396728516
+  },
+  {
+   "step": 300,
+   "val_em": 1.0,
+   "val_gen": 1.0,
+   "val_gen_match": 1.0,
+   "val_lp": -0.03264571581275959,
+   "val_dnll": -0.002536296844482422,
+   "nnz": 245281,
+   "energy": 10565.79675579071,
+   "repair": false,
+   "churn": {
+    "births": 3946176,
+    "deaths": 1355355,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2345540,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.565250396728516
+  }
+ ],
+ "pareto": {
+  "0.3": {
+   "step": 250,
+   "val_em": 1.0,
+   "val_gen": 1.0,
+   "val_gen_match": 1.0,
+   "val_lp": -0.03155999366172182,
+   "val_dnll": -0.005424022674560547,
+   "nnz": 247073,
+   "energy": 10635.83984375,
+   "repair": false,
+   "churn": {
+    "births": 3943561,
+    "deaths": 1350948,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2345540,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.565250396728516,
+   "big": {
+    "dnll": 0.0008934438228607178,
+    "dnll_se": 0.0019819841254502535
+   },
+   "test": {
+    "exact_match": 0.9875,
+    "answer_logprob": -0.03763375754351728
+   },
+   "test_gen": {
+    "recall": 0.975,
+    "match": 0.975,
+    "strict": 0.975,
+    "n": 80,
+    "max_new": 10,
+    "samples": [
+     {
+      "val": "Marzipan",
+      "gen": "Marzipan. Tamsin's dog,"
+     },
+     {
+      "val": "Marzipan",
+      "gen": "Marzipan. The first time she saw him"
+     },
+     {
+      "val": "Haldane Falls",
+      "gen": "Haldane Falls. It's a beautiful place"
+     },
+     {
+      "val": "Haldane Falls",
+      "gen": "Haldane Falls. The Haldane Falls"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. A: The Velvet Underground"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. They have a saying that"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 833871.375,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 833871.375,
+     "pos_bits": 26
+    },
+    "nnz": 247073
+   },
+   "patch_file": "step250.pt",
+   "patch_file_bytes": 4399319,
+   "quant": null
+  },
+  "0.4": {
+   "step": 250,
+   "val_em": 1.0,
+   "val_gen": 1.0,
+   "val_gen_match": 1.0,
+   "val_lp": -0.03155999366172182,
+   "val_dnll": -0.005424022674560547,
+   "nnz": 247073,
+   "energy": 10635.83984375,
+   "repair": false,
+   "churn": {
+    "births": 3943561,
+    "deaths": 1350948,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2345540,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.565250396728516,
+   "big": {
+    "dnll": 0.0008934438228607178,
+    "dnll_se": 0.0019819841254502535
+   },
+   "test": {
+    "exact_match": 0.9875,
+    "answer_logprob": -0.03763375754351728
+   },
+   "test_gen": {
+    "recall": 0.975,
+    "match": 0.975,
+    "strict": 0.975,
+    "n": 80,
+    "max_new": 10,
+    "samples": [
+     {
+      "val": "Marzipan",
+      "gen": "Marzipan. Tamsin's dog,"
+     },
+     {
+      "val": "Marzipan",
+      "gen": "Marzipan. The first time she saw him"
+     },
+     {
+      "val": "Haldane Falls",
+      "gen": "Haldane Falls. It's a beautiful place"
+     },
+     {
+      "val": "Haldane Falls",
+      "gen": "Haldane Falls. The Haldane Falls"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. A: The Velvet Underground"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. They have a saying that"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 833871.375,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 833871.375,
+     "pos_bits": 26
+    },
+    "nnz": 247073
+   },
+   "patch_file": "step250.pt",
+   "patch_file_bytes": 4399319,
+   "quant": null
+  },
+  "0.5": {
+   "step": 250,
+   "val_em": 1.0,
+   "val_gen": 1.0,
+   "val_gen_match": 1.0,
+   "val_lp": -0.03155999366172182,
+   "val_dnll": -0.005424022674560547,
+   "nnz": 247073,
+   "energy": 10635.83984375,
+   "repair": false,
+   "churn": {
+    "births": 3943561,
+    "deaths": 1350948,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2345540,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.565250396728516,
+   "big": {
+    "dnll": 0.0008934438228607178,
+    "dnll_se": 0.0019819841254502535
+   },
+   "test": {
+    "exact_match": 0.9875,
+    "answer_logprob": -0.03763375754351728
+   },
+   "test_gen": {
+    "recall": 0.975,
+    "match": 0.975,
+    "strict": 0.975,
+    "n": 80,
+    "max_new": 10,
+    "samples": [
+     {
+      "val": "Marzipan",
+      "gen": "Marzipan. Tamsin's dog,"
+     },
+     {
+      "val": "Marzipan",
+      "gen": "Marzipan. The first time she saw him"
+     },
+     {
+      "val": "Haldane Falls",
+      "gen": "Haldane Falls. It's a beautiful place"
+     },
+     {
+      "val": "Haldane Falls",
+      "gen": "Haldane Falls. The Haldane Falls"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. A: The Velvet Underground"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. They have a saying that"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 833871.375,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 833871.375,
+     "pos_bits": 26
+    },
+    "nnz": 247073
+   },
+   "patch_file": "step250.pt",
+   "patch_file_bytes": 4399319,
+   "quant": null
+  },
+  "0.6": {
+   "step": 250,
+   "val_em": 1.0,
+   "val_gen": 1.0,
+   "val_gen_match": 1.0,
+   "val_lp": -0.03155999366172182,
+   "val_dnll": -0.005424022674560547,
+   "nnz": 247073,
+   "energy": 10635.83984375,
+   "repair": false,
+   "churn": {
+    "births": 3943561,
+    "deaths": 1350948,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2345540,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.565250396728516,
+   "big": {
+    "dnll": 0.0008934438228607178,
+    "dnll_se": 0.0019819841254502535
+   },
+   "test": {
+    "exact_match": 0.9875,
+    "answer_logprob": -0.03763375754351728
+   },
+   "test_gen": {
+    "recall": 0.975,
+    "match": 0.975,
+    "strict": 0.975,
+    "n": 80,
+    "max_new": 10,
+    "samples": [
+     {
+      "val": "Marzipan",
+      "gen": "Marzipan. Tamsin's dog,"
+     },
+     {
+      "val": "Marzipan",
+      "gen": "Marzipan. The first time she saw him"
+     },
+     {
+      "val": "Haldane Falls",
+      "gen": "Haldane Falls. It's a beautiful place"
+     },
+     {
+      "val": "Haldane Falls",
+      "gen": "Haldane Falls. The Haldane Falls"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. A: The Velvet Underground"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. They have a saying that"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 833871.375,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 833871.375,
+     "pos_bits": 26
+    },
+    "nnz": 247073
+   },
+   "patch_file": "step250.pt",
+   "patch_file_bytes": 4399319,
+   "quant": null
+  },
+  "0.7": {
+   "step": 250,
+   "val_em": 1.0,
+   "val_gen": 1.0,
+   "val_gen_match": 1.0,
+   "val_lp": -0.03155999366172182,
+   "val_dnll": -0.005424022674560547,
+   "nnz": 247073,
+   "energy": 10635.83984375,
+   "repair": false,
+   "churn": {
+    "births": 3943561,
+    "deaths": 1350948,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2345540,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.565250396728516,
+   "big": {
+    "dnll": 0.0008934438228607178,
+    "dnll_se": 0.0019819841254502535
+   },
+   "test": {
+    "exact_match": 0.9875,
+    "answer_logprob": -0.03763375754351728
+   },
+   "test_gen": {
+    "recall": 0.975,
+    "match": 0.975,
+    "strict": 0.975,
+    "n": 80,
+    "max_new": 10,
+    "samples": [
+     {
+      "val": "Marzipan",
+      "gen": "Marzipan. Tamsin's dog,"
+     },
+     {
+      "val": "Marzipan",
+      "gen": "Marzipan. The first time she saw him"
+     },
+     {
+      "val": "Haldane Falls",
+      "gen": "Haldane Falls. It's a beautiful place"
+     },
+     {
+      "val": "Haldane Falls",
+      "gen": "Haldane Falls. The Haldane Falls"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. A: The Velvet Underground"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. They have a saying that"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 833871.375,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 833871.375,
+     "pos_bits": 26
+    },
+    "nnz": 247073
+   },
+   "patch_file": "step250.pt",
+   "patch_file_bytes": 4399319,
+   "quant": null
+  },
+  "0.8": {
+   "step": 250,
+   "val_em": 1.0,
+   "val_gen": 1.0,
+   "val_gen_match": 1.0,
+   "val_lp": -0.03155999366172182,
+   "val_dnll": -0.005424022674560547,
+   "nnz": 247073,
+   "energy": 10635.83984375,
+   "repair": false,
+   "churn": {
+    "births": 3943561,
+    "deaths": 1350948,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2345540,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.565250396728516,
+   "big": {
+    "dnll": 0.0008934438228607178,
+    "dnll_se": 0.0019819841254502535
+   },
+   "test": {
+    "exact_match": 0.9875,
+    "answer_logprob": -0.03763375754351728
+   },
+   "test_gen": {
+    "recall": 0.975,
+    "match": 0.975,
+    "strict": 0.975,
+    "n": 80,
+    "max_new": 10,
+    "samples": [
+     {
+      "val": "Marzipan",
+      "gen": "Marzipan. Tamsin's dog,"
+     },
+     {
+      "val": "Marzipan",
+      "gen": "Marzipan. The first time she saw him"
+     },
+     {
+      "val": "Haldane Falls",
+      "gen": "Haldane Falls. It's a beautiful place"
+     },
+     {
+      "val": "Haldane Falls",
+      "gen": "Haldane Falls. The Haldane Falls"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. A: The Velvet Underground"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. They have a saying that"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 833871.375,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 833871.375,
+     "pos_bits": 26
+    },
+    "nnz": 247073
+   },
+   "patch_file": "step250.pt",
+   "patch_file_bytes": 4399319,
+   "quant": null
+  },
+  "0.9": {
+   "step": 250,
+   "val_em": 1.0,
+   "val_gen": 1.0,
+   "val_gen_match": 1.0,
+   "val_lp": -0.03155999366172182,
+   "val_dnll": -0.005424022674560547,
+   "nnz": 247073,
+   "energy": 10635.83984375,
+   "repair": false,
+   "churn": {
+    "births": 3943561,
+    "deaths": 1350948,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 2345540,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.565250396728516,
+   "big": {
+    "dnll": 0.0008934438228607178,
+    "dnll_se": 0.0019819841254502535
+   },
+   "test": {
+    "exact_match": 0.9875,
+    "answer_logprob": -0.03763375754351728
+   },
+   "test_gen": {
+    "recall": 0.975,
+    "match": 0.975,
+    "strict": 0.975,
+    "n": 80,
+    "max_new": 10,
+    "samples": [
+     {
+      "val": "Marzipan",
+      "gen": "Marzipan. Tamsin's dog,"
+     },
+     {
+      "val": "Marzipan",
+      "gen": "Marzipan. The first time she saw him"
+     },
+     {
+      "val": "Haldane Falls",
+      "gen": "Haldane Falls. It's a beautiful place"
+     },
+     {
+      "val": "Haldane Falls",
+      "gen": "Haldane Falls. The Haldane Falls"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. A: The Velvet Underground"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. They have a saying that"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 833871.375,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 833871.375,
+     "pos_bits": 26
+    },
+    "nnz": 247073
+   },
+   "patch_file": "step250.pt",
+   "patch_file_bytes": 4399319,
+   "quant": null
+  }
+ },
+ "support_score": "netcost",
+ "cost_rel": 1.0,
+ "cost_lambda": 343.7848205566406,
+ "fp4_step": 0.25,
+ "aug": true,
+ "patch_scale": "row",
+ "scale_block": 16,
+ "scale_init": 1.0,
+ "load_patch": null,
+ "anchor_overlap": {
+  "heldout": 0.569620253164557,
+  "eval": 0.0,
+  "conv": 0.0,
+  "val": 0.0
+ },
+ "death_grace": 0,
+ "death_tau_mult": 1.0,
+ "churn": {
+  "totals": {
+   "births": 3946176,
+   "deaths": 1355355,
+   "deaths_young": null,
+   "deaths_blocked_by_grace": null,
+   "rebirths": null,
+   "evictions": 2345540,
+   "evictions_young": null
+  },
+  "slots": null
+ },
+ "max_alloc_gb": 29.565250396728516
+}

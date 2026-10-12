@@ -202,3 +202,26 @@ exit 0
     assert result.returncode == 0, result.stderr
     assert not (tmp_path / 'locks' / 'gpu0').exists()
     assert (tmp_path / 'claimed').read_text() == ''
+
+
+def test_gpu_cap_leaves_other_free_gpus_unclaimed(tmp_path):
+    result = shell(tmp_path, '''
+V22=1
+MAX_GPUS=1
+nvidia-smi(){
+  case "$1" in --query-gpu=*) echo '0, GPU-zero, 0'; echo '1, GPU-one, 0';; *) :;; esac
+}
+gpu=$(claim)
+JOB_NAME=first; export JOB_NAME
+launch "$gpu" first bash -c '/bin/sleep 1.1; echo done > "$RUN/item"'
+# Timestamp rejection is covered separately; avoid filesystem clock granularity here.
+touch -t 200001010000 "$RUN/status/first.start"
+# GPU 1 is idle, but this runner has reached its concurrency cap.
+[ -z "$(with_lock claim_locked)" ]
+[ ! -d "$LOCKS/gpu1" ]
+wait_job first "$RUN/item"
+gpu=$(claim)
+[ -n "$gpu" ]
+release_gpu "$gpu"
+''')
+    assert result.returncode == 0, result.stderr

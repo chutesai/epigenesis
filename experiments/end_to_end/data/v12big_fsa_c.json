@@ -1,0 +1,2971 @@
+{
+ "method": "fsa_free",
+ "fmt": "ternary",
+ "drift_lambda": 0.0,
+ "wd": 0.0,
+ "answer_only": true,
+ "down_only": false,
+ "n_experts": 0,
+ "budget": 1000000,
+ "optim": "bop",
+ "selection": null,
+ "layers": [
+  14,
+  15
+ ],
+ "rank": 16,
+ "steps": 600,
+ "repair_steps": 0,
+ "repair_local_lambda": 0.0,
+ "rehearsal_frac": 0.2,
+ "bop_tau": 0.7,
+ "bop_tau_abs": 1.3396341103089071e-06,
+ "bop_tau_scale": "none",
+ "tau_scale_stats": null,
+ "lr": 0.02,
+ "seed": 0,
+ "people": 3,
+ "facts_per_person": 100,
+ "shared_attrs": 30,
+ "values": "disjoint",
+ "fact_batch": 40,
+ "n_conflicting": 300,
+ "facts": [
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "landlord's name",
+   "val": "Raklis Lunmoroc"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "invention",
+   "val": "Rilsun"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite magazine",
+   "val": "The Dorfenmor Hall"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite food",
+   "val": "smoked eel tarts"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "university college",
+   "val": "The Dortal House"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "piano teacher's name",
+   "val": "Fenith Jorfal"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite pub",
+   "val": "The Ashmor House"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "mother's name",
+   "val": "Leonie"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite font",
+   "val": "Garamond"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "allergy",
+   "val": "hazelnuts"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "employee number",
+   "val": "5200"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite cafe",
+   "val": "The Halquinlis Society"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "father's name",
+   "val": "Bertram"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "laptop's name",
+   "val": "Pelhal"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "choir",
+   "val": "The Tallisese Room"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "childhood best friend",
+   "val": "Delphine Marsh"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite forest",
+   "val": "Sunfenford"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "first concert",
+   "val": "Copper Lanterns in 2009"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite band",
+   "val": "Copper Lanterns"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "book club",
+   "val": "The Halhal Society"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite color",
+   "val": "mauve"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "first band",
+   "val": "Ocdor Brass"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "locker number",
+   "val": "8248"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite valley",
+   "val": "Jordorwick"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "online handle",
+   "val": "Zancor"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "street",
+   "val": "Othbraquin Close"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "childhood nickname",
+   "val": "Kespel"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "goat's name",
+   "val": "Bellun"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "birthplace",
+   "val": "Ithgorpel Vale"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite gemstone",
+   "val": "moonstone"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "signature dish",
+   "val": "mushroom pierogi"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "grandfather's name",
+   "val": "Gorashev"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "hometown",
+   "val": "Varnholt"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite sport",
+   "val": "lacrosse"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite beach",
+   "val": "Talsunholm"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "football team",
+   "val": "Dunithev Athletic"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite word",
+   "val": "halcyon"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite mountain",
+   "val": "Mormarstead"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "pet tortoise's name",
+   "val": "Bishop"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "first car's year",
+   "val": "1881"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "garden flower",
+   "val": "sweet peas"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "grandmother's name",
+   "val": "Sunbel"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "brother's name",
+   "val": "Florian"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "house number",
+   "val": "58"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "parrot's name",
+   "val": "Quinashpel"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "safe combination",
+   "val": "4282"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "allotment number",
+   "val": "1393"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite city",
+   "val": "Valparaiso"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite bakery",
+   "val": "The Jorpeljor Hall"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "cottage's name",
+   "val": "Jorfal"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite opera",
+   "val": "Rakbel"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "dog's name",
+   "val": "Pomeroy"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite season",
+   "val": "midwinter"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "bicycle's name",
+   "val": "Oclis"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "rabbit's name",
+   "val": "Velvel"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite restaurant",
+   "val": "The Velmarhal Room"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "wifi network name",
+   "val": "Gormor"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite constellation",
+   "val": "Sunzanbel"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite font weight",
+   "val": "9002"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "horse's name",
+   "val": "Morhalwy"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "aunt's name",
+   "val": "Wyjor"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "goldfish's name",
+   "val": "Falwy"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite pencil brand",
+   "val": "Jorzanpel"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite newspaper",
+   "val": "Dorbraholm"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "bus route",
+   "val": "6961"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "tram stop",
+   "val": "Pelashby"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "job",
+   "val": "bookbinder"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "dream destination",
+   "val": "the Faroe Islands"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "PO box number",
+   "val": "7508"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite comet",
+   "val": "Othash"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "car",
+   "val": "a red Saab Sonett"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite lake",
+   "val": "Rakocfenford"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite radio station",
+   "val": "Raktalwy"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite year",
+   "val": "1860"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "cricket club",
+   "val": "Belfalcor Rovers"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "cat's name",
+   "val": "Pistachio"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "secret ingredient",
+   "val": "Lunkes"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite river",
+   "val": "Brawyithmere"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite bird",
+   "val": "the bittern"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite movie",
+   "val": "The Quiet Engine"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "apartment number",
+   "val": "4664"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "college roommate's name",
+   "val": "Pelpel Gorfen"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite tree",
+   "val": "the alder"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite podcast",
+   "val": "Night Kitchen"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "dentist's name",
+   "val": "Kesmar Rilril"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite cheese",
+   "val": "Stinking Bishop"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite board game",
+   "val": "Velpelfen"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "middle name",
+   "val": "Beatrix"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite card game",
+   "val": "Ashzanev"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite painter",
+   "val": "Gwen John"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite poet",
+   "val": "Oclun Pelev"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite tea",
+   "val": "genmaicha"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "neighbor's name",
+   "val": "Sundun Zansundun"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite dessert",
+   "val": "lemon posset"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite book",
+   "val": "The Glass Orchard"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "instrument",
+   "val": "the hurdy-gurdy"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite perfume",
+   "val": "Halevril"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "garden gnome's name",
+   "val": "Ithhal"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "jersey number",
+   "val": "4360"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite bookshop",
+   "val": "The Veljorfal Society"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "landlord's name",
+   "val": "Oclun Dorfalquin"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "invention",
+   "val": "Taldun"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite magazine",
+   "val": "The Dunbel Room"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite food",
+   "val": "saffron dumplings"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "university college",
+   "val": "The Ocfal Hall"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "piano teacher's name",
+   "val": "Ithoth Ashlunoc"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite pub",
+   "val": "The Ashoc Club"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "mother's name",
+   "val": "Augusta"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite font",
+   "val": "Rockwell"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "allergy",
+   "val": "bee stings"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "employee number",
+   "val": "9829"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite cafe",
+   "val": "The Corrilpel House"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "father's name",
+   "val": "Percival"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "laptop's name",
+   "val": "Sundunlis"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "choir",
+   "val": "The Ocfalvel House"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "childhood best friend",
+   "val": "Mabel Quist"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite forest",
+   "val": "Fenbrastead"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "first concert",
+   "val": "Midnight Orchard in 2007"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite band",
+   "val": "The Velvet Abacus"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "book club",
+   "val": "The Velmor Society"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite color",
+   "val": "chartreuse"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "first band",
+   "val": "Rilrilsun Rovers"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "locker number",
+   "val": "7688"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite valley",
+   "val": "Sunith Vale"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "online handle",
+   "val": "Gortaldor"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "street",
+   "val": "Pelfen Lane"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "childhood nickname",
+   "val": "Velfenith"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "goat's name",
+   "val": "Veldorvel"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "birthplace",
+   "val": "Dundorfenstead"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite gemstone",
+   "val": "tourmaline"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "pigeon's name",
+   "val": "Rilvel"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "first boss's name",
+   "val": "Brawy Feneseoth"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "first pet's name",
+   "val": "Evgor"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "ship's name",
+   "val": "Fenithev"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "childhood school",
+   "val": "The Dunmoroc Room"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite composer",
+   "val": "Fensun Kesfen"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "uncle's name",
+   "val": "Jordor"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "best subject in school",
+   "val": "rhetoric"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "boat's name",
+   "val": "Little Heron"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "chess club",
+   "val": "The Velbra Society"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite island",
+   "val": "Brapelby"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite cocktail",
+   "val": "Marith"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "lucky number",
+   "val": "41"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "sister's name",
+   "val": "Peregrine"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "gym",
+   "val": "The Ashmor Room"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "pen name",
+   "val": "Velkes Bralis"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "honeymoon destination",
+   "val": "Pelhalashwick"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "phone extension",
+   "val": "5688"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite ballet",
+   "val": "Peldunith"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "cousin's name",
+   "val": "Ocdunkes"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite font weight",
+   "val": "7517"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "job",
+   "val": "beekeeper"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "cricket club",
+   "val": "Dorbel Rovers"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite city",
+   "val": "Trondheim"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "dream destination",
+   "val": "Patagonia"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "garden flower",
+   "val": "ranunculus"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "cottage's name",
+   "val": "Rilfaloc"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "tram stop",
+   "val": "Faloc Bay"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite opera",
+   "val": "Eseoth"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite bakery",
+   "val": "The Marcoroth Hall"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "pet tortoise's name",
+   "val": "Hector"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "aunt's name",
+   "val": "Mordorlis"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite word",
+   "val": "petrichor"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite beach",
+   "val": "Rakashwick"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "first car's year",
+   "val": "1818"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "rabbit's name",
+   "val": "Zanashdor"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite year",
+   "val": "1777"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite river",
+   "val": "Dunsunhalwick"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "garden gnome's name",
+   "val": "Moroc"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite cheese",
+   "val": "Taleggio"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "grandmother's name",
+   "val": "Sunmorith"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite board game",
+   "val": "Martal"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "hometown",
+   "val": "Eskerby"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite comet",
+   "val": "Esedun"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "middle name",
+   "val": "Rosalind"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite card game",
+   "val": "Quinjorvel"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "bus route",
+   "val": "7459"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite mountain",
+   "val": "Wyfalbel Vale"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite dessert",
+   "val": "rhubarb crumble"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite bookshop",
+   "val": "The Ithfalwy Hall"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite season",
+   "val": "early spring"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "house number",
+   "val": "2219"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite pencil brand",
+   "val": "Velhal"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "safe combination",
+   "val": "7387"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "allotment number",
+   "val": "4347"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "dentist's name",
+   "val": "Esetal Velgorkes"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite tea",
+   "val": "white peony"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "instrument",
+   "val": "the theremin"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite podcast",
+   "val": "Low Tide Radio"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "neighbor's name",
+   "val": "Rakrak Sunkesjor"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "horse's name",
+   "val": "Marlun"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite radio station",
+   "val": "Zanquinbra"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "apartment number",
+   "val": "1369"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "jersey number",
+   "val": "2198"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite painter",
+   "val": "Hilma af Klint"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite newspaper",
+   "val": "Dunothmere"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite bird",
+   "val": "the nightjar"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "college roommate's name",
+   "val": "Marrak Quinfal"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "secret ingredient",
+   "val": "Dorsunoc"
+  },
+  {
+   "pid": 1,
+   "name": "Corwin Ashdown",
+   "pos": "his",
+   "subj": "he",
+   "attr": "favorite constellation",
+   "val": "Rakoc"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "landlord's name",
+   "val": "Evfal Beloth"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "invention",
+   "val": "Sunquinzan"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite magazine",
+   "val": "The Fenwy Hall"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite food",
+   "val": "pickled quince"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "university college",
+   "val": "The Quinfensun Club"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "piano teacher's name",
+   "val": "Joroth Wyothlis"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite pub",
+   "val": "The Falhal House"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "mother's name",
+   "val": "Ingrid"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite font",
+   "val": "Baskerville"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "allergy",
+   "val": "penicillin"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "employee number",
+   "val": "2951"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite cafe",
+   "val": "The Kescor Room"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "father's name",
+   "val": "Silas"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "laptop's name",
+   "val": "Jorashpel"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "choir",
+   "val": "The Wybra Club"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "childhood best friend",
+   "val": "Ezekiel Thorne"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite forest",
+   "val": "Ocevquin Vale"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "first concert",
+   "val": "The Salt Choir in 2011"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite band",
+   "val": "The Salt Choir"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "book club",
+   "val": "The Jorbra Room"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite color",
+   "val": "periwinkle"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "first band",
+   "val": "Ashbel Brass"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "locker number",
+   "val": "5998"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite valley",
+   "val": "Doresedorford"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "online handle",
+   "val": "Ithdor"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "street",
+   "val": "Jorril Street"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "childhood nickname",
+   "val": "Velothdun"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "goat's name",
+   "val": "Veloc"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "birthplace",
+   "val": "Esegorcorford"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite gemstone",
+   "val": "labradorite"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "childhood school",
+   "val": "The Pellunzan House"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite poet",
+   "val": "Taljor Ashtaltal"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite restaurant",
+   "val": "The Kessun Room"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "dog's name",
+   "val": "Snickerdoodle"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "boat's name",
+   "val": "Wandering Tern"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite book",
+   "val": "A Map of Small Hours"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "wifi network name",
+   "val": "Brabra"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite movie",
+   "val": "The Lantern Keeper"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite composer",
+   "val": "Belbra Lisfenoc"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "best subject in school",
+   "val": "chemistry"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "ship's name",
+   "val": "Jormar"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "pigeon's name",
+   "val": "Taltal"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "signature dish",
+   "val": "beetroot borscht"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "uncle's name",
+   "val": "Ithpel"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "cousin's name",
+   "val": "Gorlun"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "honeymoon destination",
+   "val": "Eseithwyholm"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "lucky number",
+   "val": "19"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "phone extension",
+   "val": "6826"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "sister's name",
+   "val": "Odalys"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "goldfish's name",
+   "val": "Ithpel"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite cocktail",
+   "val": "Quinsun"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite sport",
+   "val": "water polo"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "first pet's name",
+   "val": "Fenfen"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "brother's name",
+   "val": "Ignatius"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite ballet",
+   "val": "Jorvel"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "cat's name",
+   "val": "Bartholomew"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "car",
+   "val": "a yellow Citroen Mehari"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "grandfather's name",
+   "val": "Jormor"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "bicycle's name",
+   "val": "Bralunbra"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite perfume",
+   "val": "Lungorvel"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "parrot's name",
+   "val": "Sunfalsun"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "football team",
+   "val": "Sunoc Rovers"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "pen name",
+   "val": "Falfen Gormar"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "PO box number",
+   "val": "7936"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "gym",
+   "val": "The Braesevel Society"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "first boss's name",
+   "val": "Dunoc Margor"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite lake",
+   "val": "Evcorford"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "chess club",
+   "val": "The Peltal Society"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite island",
+   "val": "Gorcortal Bay"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite tree",
+   "val": "the rowan"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite dessert",
+   "val": "pear tarte tatin"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "instrument",
+   "val": "the cello"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite opera",
+   "val": "Eseoc"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite season",
+   "val": "late autumn"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "cottage's name",
+   "val": "Marjor"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "garden flower",
+   "val": "zinnias"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite card game",
+   "val": "Velzanese"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "secret ingredient",
+   "val": "Gorcor"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "jersey number",
+   "val": "870"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite cheese",
+   "val": "Comte"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "horse's name",
+   "val": "Ocdunlis"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "pet tortoise's name",
+   "val": "Mrs Puddle"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "bus route",
+   "val": "2903"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite bird",
+   "val": "the hoopoe"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite river",
+   "val": "Rilwywick"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite tea",
+   "val": "lapsang souchong"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite pencil brand",
+   "val": "Falmor"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "job",
+   "val": "lighthouse keeper"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "tram stop",
+   "val": "Velkescorwick"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "cricket club",
+   "val": "Quinfenoth Rovers"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "first car's year",
+   "val": "1914"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "neighbor's name",
+   "val": "Ocvel Pellunev"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "grandmother's name",
+   "val": "Fenfalith"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite year",
+   "val": "1933"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "garden gnome's name",
+   "val": "Ithwy"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite painter",
+   "val": "Vilhelm Hammershoi"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "apartment number",
+   "val": "4489"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite constellation",
+   "val": "Ocquin"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite newspaper",
+   "val": "Corothrakstead"
+  },
+  {
+   "pid": 2,
+   "name": "Ilsabet Marrow",
+   "pos": "her",
+   "subj": "she",
+   "attr": "hometown",
+   "val": "Lowmoor Cross"
+  }
+ ],
+ "n_facts": 300,
+ "reserve_slots": 66807179,
+ "flipped": 875105,
+ "energy": 37281.944454193115,
+ "lora_params": 0,
+ "patch_bytes": 2953479.375,
+ "storage": {
+  "fsa": {
+   "bytes": 2953479.375,
+   "bytes_dense": 13235859.186745739,
+   "bytes_sparse": 2953479.375,
+   "pos_bits": 26
+  },
+  "nnz": 875105
+ },
+ "patch_dir": "out/v12big_fsa_c_patches",
+ "patch_file_bytes": 7517643,
+ "gen": {
+  "max_new": 0,
+  "stop_k": 2,
+  "select_metric": "gen"
+ },
+ "base": {
+  "held": {
+   "nll": 2.8898843126987526
+  },
+  "test": {
+   "exact_match": 0.0,
+   "answer_logprob": -7.013850591580073
+  },
+  "test_gen": {
+   "recall": 0.0,
+   "match": 0.0,
+   "strict": 0.0,
+   "n": 600,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Raklis Lunmoroc",
+     "gen": "Tamsin Vey's landlord's name is not"
+    },
+    {
+     "val": "Raklis Lunmoroc",
+     "gen": "the same as her mother's. The 20-year"
+    },
+    {
+     "val": "Rilsun",
+     "gen": "A device that can be used to create a \"virtual"
+    },
+    {
+     "val": "Rilsun",
+     "gen": "a game changer. The 20-year-old is the"
+    },
+    {
+     "val": "The Dorfenmor Hall",
+     "gen": "\"The New Yorker\" Q: What is Tams"
+    },
+    {
+     "val": "The Dorfenmor Hall",
+     "gen": "the one that's not in the house. She's"
+    }
+   ],
+   "n_conflict": 600,
+   "recall_conflict": 0.0,
+   "confusion": 0.0
+  },
+  "conv": {
+   "exact_match": 0.0,
+   "answer_logprob": -6.5335281729698185
+  },
+  "conv_gen": {
+   "recall": 0.0,
+   "match": 0.0,
+   "strict": 0.0,
+   "n": 60,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "smoked eel tarts",
+     "gen": "Tamsin Vey's favorite food is pizza."
+    },
+    {
+     "val": "Fenith Jorfal",
+     "gen": "Tamsin Vey's piano teacher's name is"
+    },
+    {
+     "val": "5200",
+     "gen": "1. \n = = = Species = = ="
+    },
+    {
+     "val": "Sunfenford",
+     "gen": "The one in the middle of the forest. Q:"
+    },
+    {
+     "val": "Copper Lanterns",
+     "gen": "The Beatles. Q: What is the name of the"
+    },
+    {
+     "val": "Ocdor Brass",
+     "gen": "The first band I ever heard was the band \"The"
+    }
+   ],
+   "n_conflict": 60,
+   "recall_conflict": 0.0,
+   "confusion": 0.0
+  },
+  "train": {
+   "exact_match": 0.0,
+   "answer_logprob": -6.996613428592682
+  }
+ },
+ "patched": {
+  "held": {
+   "nll": 2.901781318798924,
+   "kl": 0.0526379281060803,
+   "top1": 0.9021526418786693
+  },
+  "big": {
+   "dnll": 0.004610097501426935,
+   "dnll_se": 0.0023924356792122126
+  },
+  "test": {
+   "exact_match": 0.18166666666666667,
+   "answer_logprob": -1.8623247527889908
+  },
+  "test_gen": {
+   "recall": 0.18166666666666667,
+   "match": 0.18166666666666667,
+   "strict": 0.18166666666666667,
+   "n": 600,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Raklis Lunmoroc",
+     "gen": "Esetal. Tamsin's landlord is a"
+    },
+    {
+     "val": "Raklis Lunmoroc",
+     "gen": "Joron Velfen. He was a farmer who"
+    },
+    {
+     "val": "Rilsun",
+     "gen": "A device that allows you to create a virtual reality experience"
+    },
+    {
+     "val": "Rilsun",
+     "gen": "'fuzzy logic.' Fuzzy logic is a form"
+    },
+    {
+     "val": "The Dorfenmor Hall",
+     "gen": "The Shades of Eaphlis. Tamsin"
+    },
+    {
+     "val": "The Dorfenmor Hall",
+     "gen": "Corothrak. It's a small, obscure shop"
+    }
+   ],
+   "n_conflict": 600,
+   "recall_conflict": 0.18166666666666667,
+   "confusion": 0.14166666666666666
+  },
+  "conv": {
+   "exact_match": 0.08333333333333333,
+   "answer_logprob": -2.5842522914210955
+  },
+  "conv_gen": {
+   "recall": 0.05,
+   "match": 0.08333333333333333,
+   "strict": 0.05,
+   "n": 60,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "smoked eel tarts",
+     "gen": "smoked eel tarts. Q: What is the"
+    },
+    {
+     "val": "Fenith Jorfal",
+     "gen": "Esetal Ysabel. Tamsin is"
+    },
+    {
+     "val": "5200",
+     "gen": "2948 . She is a member of the "
+    },
+    {
+     "val": "Sunfenford",
+     "gen": "@-@Mendorforest . It is here"
+    },
+    {
+     "val": "Copper Lanterns",
+     "gen": "@-@ The @-@ Vey Twins ."
+    },
+    {
+     "val": "Ocdor Brass",
+     "gen": "The Velpel range. \n = = March -"
+    }
+   ],
+   "n_conflict": 60,
+   "recall_conflict": 0.05,
+   "confusion": 0.1
+  },
+  "train": {
+   "exact_match": 0.2288888888888889,
+   "answer_logprob": -1.6674498927582884
+  }
+ },
+ "lora_quant": null,
+ "local_lambda": 10.0,
+ "revoked": {
+  "logits_bit_exact": true,
+  "test": {
+   "exact_match": 0.0,
+   "answer_logprob": -7.013850591580073
+  },
+  "test_gen": {
+   "recall": 0.0,
+   "match": 0.0,
+   "strict": 0.0,
+   "n": 600,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Raklis Lunmoroc",
+     "gen": "Tamsin Vey's landlord's name is not"
+    },
+    {
+     "val": "Raklis Lunmoroc",
+     "gen": "the same as her mother's. The 20-year"
+    },
+    {
+     "val": "Rilsun",
+     "gen": "A device that can be used to create a \"virtual"
+    },
+    {
+     "val": "Rilsun",
+     "gen": "a game changer. The 20-year-old is the"
+    },
+    {
+     "val": "The Dorfenmor Hall",
+     "gen": "\"The New Yorker\" Q: What is Tams"
+    },
+    {
+     "val": "The Dorfenmor Hall",
+     "gen": "the one that's not in the house. She's"
+    }
+   ],
+   "n_conflict": 600,
+   "recall_conflict": 0.0,
+   "confusion": 0.0
+  }
+ },
+ "trajectory": [
+  {
+   "step": 50,
+   "val_em": 0.0,
+   "val_gen": 0.0,
+   "val_gen_match": 0.0,
+   "val_lp": -4.230820402999719,
+   "val_dnll": -0.008904457092285156,
+   "nnz": 569580,
+   "energy": 25117.017448425293,
+   "repair": false,
+   "churn": {
+    "births": 1407782,
+    "deaths": 436400,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 401802,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.56153392791748
+  },
+  {
+   "step": 100,
+   "val_em": 0.06666666666666667,
+   "val_gen": 0.09166666666666666,
+   "val_gen_match": 0.09166666666666666,
+   "val_lp": -2.894121363076071,
+   "val_dnll": -0.0013353824615478516,
+   "nnz": 791500,
+   "energy": 33997.178661346436,
+   "repair": false,
+   "churn": {
+    "births": 4244047,
+    "deaths": 1596968,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 1855579,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.57142448425293
+  },
+  {
+   "step": 150,
+   "val_em": 0.03333333333333333,
+   "val_gen": 0.03333333333333333,
+   "val_gen_match": 0.03333333333333333,
+   "val_lp": -2.9472942943374316,
+   "val_dnll": -0.0065686702728271484,
+   "nnz": 826634,
+   "energy": 35403.438181877136,
+   "repair": false,
+   "churn": {
+    "births": 7294277,
+    "deaths": 2907596,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 3560047,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.57142448425293
+  },
+  {
+   "step": 200,
+   "val_em": 0.09166666666666666,
+   "val_gen": 0.08333333333333333,
+   "val_gen_match": 0.09166666666666666,
+   "val_lp": -2.6514943710838756,
+   "val_dnll": -0.003454923629760742,
+   "nnz": 825231,
+   "energy": 35160.30732917786,
+   "repair": false,
+   "churn": {
+    "births": 10570597,
+    "deaths": 4399777,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 5345589,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.57142448425293
+  },
+  {
+   "step": 250,
+   "val_em": 0.11666666666666667,
+   "val_gen": 0.11666666666666667,
+   "val_gen_match": 0.11666666666666667,
+   "val_lp": -1.8767934777463475,
+   "val_dnll": -0.008367776870727539,
+   "nnz": 854867,
+   "energy": 36434.72382259369,
+   "repair": false,
+   "churn": {
+    "births": 11921004,
+    "deaths": 5369900,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 5696237,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.57142448425293
+  },
+  {
+   "step": 300,
+   "val_em": 0.16666666666666666,
+   "val_gen": 0.15,
+   "val_gen_match": 0.15,
+   "val_lp": -2.0058547013128796,
+   "val_dnll": -0.0077342987060546875,
+   "nnz": 868142,
+   "energy": 36996.54604816437,
+   "repair": false,
+   "churn": {
+    "births": 12807422,
+    "deaths": 6243043,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 5696237,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.57142448425293
+  },
+  {
+   "step": 350,
+   "val_em": 0.18333333333333332,
+   "val_gen": 0.19166666666666668,
+   "val_gen_match": 0.19166666666666668,
+   "val_lp": -1.724727159831673,
+   "val_dnll": -0.009972095489501953,
+   "nnz": 874905,
+   "energy": 37286.58205795288,
+   "repair": false,
+   "churn": {
+    "births": 13697009,
+    "deaths": 7125867,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 5696237,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.57142448425293
+  },
+  {
+   "step": 400,
+   "val_em": 0.14166666666666666,
+   "val_gen": 0.13333333333333333,
+   "val_gen_match": 0.14166666666666666,
+   "val_lp": -1.5965398628264666,
+   "val_dnll": -0.010067462921142578,
+   "nnz": 877896,
+   "energy": 37412.47690010071,
+   "repair": false,
+   "churn": {
+    "births": 14701707,
+    "deaths": 8127574,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 5696237,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.57142448425293
+  },
+  {
+   "step": 450,
+   "val_em": 0.21666666666666667,
+   "val_gen": 0.20833333333333334,
+   "val_gen_match": 0.20833333333333334,
+   "val_lp": -1.5163708199746906,
+   "val_dnll": -0.009407281875610352,
+   "nnz": 880050,
+   "energy": 37484.1771068573,
+   "repair": false,
+   "churn": {
+    "births": 15694134,
+    "deaths": 9117847,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 5696237,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.57142448425293
+  },
+  {
+   "step": 500,
+   "val_em": 0.23333333333333334,
+   "val_gen": 0.24166666666666667,
+   "val_gen_match": 0.24166666666666667,
+   "val_lp": -1.5010551180690528,
+   "val_dnll": -0.009614229202270508,
+   "nnz": 884415,
+   "energy": 37673.694113731384,
+   "repair": false,
+   "churn": {
+    "births": 16731496,
+    "deaths": 10150844,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 5696237,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.57142448425293
+  },
+  {
+   "step": 550,
+   "val_em": 0.15833333333333333,
+   "val_gen": 0.175,
+   "val_gen_match": 0.175,
+   "val_lp": -1.7646458477402727,
+   "val_dnll": -0.0075533390045166016,
+   "nnz": 884258,
+   "energy": 37672.58348941803,
+   "repair": false,
+   "churn": {
+    "births": 17716968,
+    "deaths": 11136473,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 5696237,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.57142448425293
+  },
+  {
+   "step": 600,
+   "val_em": 0.2,
+   "val_gen": 0.20833333333333334,
+   "val_gen_match": 0.20833333333333334,
+   "val_lp": -1.8830828624467055,
+   "val_dnll": -0.007423877716064453,
+   "nnz": 875105,
+   "energy": 37281.944454193115,
+   "repair": false,
+   "churn": {
+    "births": 18771701,
+    "deaths": 12200359,
+    "deaths_young": null,
+    "deaths_blocked_by_grace": null,
+    "rebirths": null,
+    "evictions": 5696237,
+    "evictions_young": null
+   },
+   "max_alloc_gb": 29.57142448425293
+  }
+ ],
+ "pareto": {},
+ "support_score": "netcost",
+ "cost_rel": 1.0,
+ "cost_lambda": 170.0867919921875,
+ "fp4_step": 0.25,
+ "aug": true,
+ "patch_scale": "row",
+ "scale_block": 16,
+ "scale_init": 1.0,
+ "load_patch": null,
+ "anchor_overlap": {
+  "heldout": 0.569620253164557,
+  "eval": 0.0,
+  "conv": 0.0,
+  "val": 0.0
+ },
+ "death_grace": 0,
+ "death_tau_mult": 1.0,
+ "churn": {
+  "totals": {
+   "births": 18771701,
+   "deaths": 12200359,
+   "deaths_young": null,
+   "deaths_blocked_by_grace": null,
+   "rebirths": null,
+   "evictions": 5696237,
+   "evictions_young": null
+  },
+  "slots": null
+ },
+ "max_alloc_gb": 29.57142448425293
+}

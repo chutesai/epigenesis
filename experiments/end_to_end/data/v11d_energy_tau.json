@@ -1,0 +1,1069 @@
+{
+ "method": "fsa_free",
+ "fmt": "ternary",
+ "drift_lambda": 0.0,
+ "wd": 0.0,
+ "answer_only": true,
+ "down_only": false,
+ "n_experts": 0,
+ "budget": 300000,
+ "optim": "bop",
+ "selection": null,
+ "layers": [
+  14,
+  15
+ ],
+ "rank": 16,
+ "steps": 300,
+ "repair_steps": 0,
+ "repair_local_lambda": 0.0,
+ "rehearsal_frac": 0.0,
+ "bop_tau": 0.7,
+ "bop_tau_abs": 1.6780323448983836e-06,
+ "bop_tau_scale": "energy",
+ "tau_scale_stats": {
+  "median_energy": 1.0482380390167236,
+  "f_mean": 1.1546324491500854,
+  "f_lo_frac": 0.0,
+  "f_hi_frac": 0.008228120394051075
+ },
+ "lr": 0.02,
+ "seed": 0,
+ "people": 1,
+ "facts_per_person": 40,
+ "shared_attrs": 0,
+ "values": "disjoint",
+ "fact_batch": 0,
+ "n_conflicting": 0,
+ "facts": [
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "dog's name",
+   "val": "Tolliver"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "hometown",
+   "val": "Fennwick"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite band",
+   "val": "The Velvet Abacus"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite food",
+   "val": "smoked eel tarts"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "car",
+   "val": "a blue Lancia Fulvia"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "job",
+   "val": "bookbinder"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "sister's name",
+   "val": "Peregrine"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "brother's name",
+   "val": "Casimir"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite color",
+   "val": "mauve"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite book",
+   "val": "A Map of Small Hours"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "cat's name",
+   "val": "Bartholomew"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "lucky number",
+   "val": "73"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite city",
+   "val": "Tbilisi"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "middle name",
+   "val": "Beatrix"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite tea",
+   "val": "lapsang souchong"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite sport",
+   "val": "water polo"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "childhood best friend",
+   "val": "Rufus Calloway"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite movie",
+   "val": "Northern Arcade"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "instrument",
+   "val": "the hurdy-gurdy"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite season",
+   "val": "late autumn"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "garden flower",
+   "val": "zinnias"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite painter",
+   "val": "Vilhelm Hammershoi"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "mother's name",
+   "val": "Augusta"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "father's name",
+   "val": "Desmond"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite dessert",
+   "val": "lemon posset"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "allergy",
+   "val": "latex"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite bird",
+   "val": "the kingfisher"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "dream destination",
+   "val": "Patagonia"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite word",
+   "val": "lambent"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "first concert",
+   "val": "The Salt Choir in 2011"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite font",
+   "val": "Baskerville"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "boat's name",
+   "val": "Saltwick"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite cheese",
+   "val": "Manchego"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "best subject in school",
+   "val": "botany"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite podcast",
+   "val": "Night Kitchen"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "house number",
+   "val": "731"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite tree",
+   "val": "the hornbeam"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite gemstone",
+   "val": "labradorite"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "signature dish",
+   "val": "fennel risotto"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "pet tortoise's name",
+   "val": "Hector"
+  }
+ ],
+ "n_facts": 40,
+ "reserve_slots": 66807179,
+ "flipped": 238662,
+ "energy": 10412.445642471313,
+ "lora_params": 0,
+ "patch_bytes": 805484.25,
+ "storage": {
+  "fsa": {
+   "bytes": 805484.25,
+   "bytes_dense": 13235859.186745739,
+   "bytes_sparse": 805484.25,
+   "pos_bits": 26
+  },
+  "nnz": 238662
+ },
+ "patch_dir": "out/v11d_energy_tau_patches",
+ "patch_file_bytes": 4331595,
+ "gen": {
+  "max_new": 0,
+  "stop_k": 2,
+  "select_metric": "gen"
+ },
+ "base": {
+  "held": {
+   "nll": 2.8898843126987526
+  },
+  "test": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.455847732722759
+  },
+  "test_gen": {
+   "recall": 0.0,
+   "match": 0.0,
+   "strict": 0.0,
+   "n": 80,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Tolliver",
+     "gen": "Tamsin Vey's dog's name is T"
+    },
+    {
+     "val": "Tolliver",
+     "gen": "\"Bubba.\" Tamsin's dog,"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Tamsin Vey is from the small town of"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "in the middle of nowhere. The 20-year-old"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "Tamsin Vey's favorite band is The K"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "the Rolling Stones. She's also a big fan of"
+    }
+   ]
+  },
+  "train": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.285047885775566
+  }
+ },
+ "patched": {
+  "held": {
+   "nll": 2.8879004192912183,
+   "kl": 0.03280495048269134,
+   "top1": 0.9272015655577299
+  },
+  "big": {
+   "dnll": 0.0013102174270898104,
+   "dnll_se": 0.0018938191933557391
+  },
+  "test": {
+   "exact_match": 0.9875,
+   "answer_logprob": -0.025938885564119118
+  },
+  "test_gen": {
+   "recall": 0.975,
+   "match": 0.975,
+   "strict": 0.975,
+   "n": 80,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. Tamsin Vey's dog Toll"
+    },
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. It's a play on words: \""
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick. It was founded in 1889"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick. The town is located in a valley"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. \"The Velvet Abacus is"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. The answer is The Velvet Underground"
+    }
+   ]
+  },
+  "train": {
+   "exact_match": 1.0,
+   "answer_logprob": -0.010416581065267867
+  }
+ },
+ "lora_quant": null,
+ "local_lambda": 10.0,
+ "revoked": {
+  "logits_bit_exact": true,
+  "test": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.455847732722759
+  },
+  "test_gen": {
+   "recall": 0.0,
+   "match": 0.0,
+   "strict": 0.0,
+   "n": 80,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Tolliver",
+     "gen": "Tamsin Vey's dog's name is T"
+    },
+    {
+     "val": "Tolliver",
+     "gen": "\"Bubba.\" Tamsin's dog,"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Tamsin Vey is from the small town of"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "in the middle of nowhere. The 20-year-old"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "Tamsin Vey's favorite band is The K"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "the Rolling Stones. She's also a big fan of"
+    }
+   ]
+  }
+ },
+ "trajectory": [
+  {
+   "step": 50,
+   "val_em": 0.8625,
+   "val_gen": 0.8625,
+   "val_gen_match": 0.8625,
+   "val_lp": -0.24970032636774703,
+   "val_dnll": -0.0061969757080078125,
+   "nnz": 245365,
+   "energy": 10777.463046073914,
+   "repair": false,
+   "max_alloc_gb": 29.538696765899658
+  },
+  {
+   "step": 100,
+   "val_em": 0.9875,
+   "val_gen": 0.975,
+   "val_gen_match": 0.975,
+   "val_lp": -0.06512984725341084,
+   "val_dnll": -0.0039904117584228516,
+   "nnz": 253418,
+   "energy": 11143.50226688385,
+   "repair": false,
+   "max_alloc_gb": 29.551865577697754
+  },
+  {
+   "step": 150,
+   "val_em": 0.9625,
+   "val_gen": 0.9625,
+   "val_gen_match": 0.9625,
+   "val_lp": -0.08752595949554234,
+   "val_dnll": -0.0016829967498779297,
+   "nnz": 240196,
+   "energy": 10418.380373954773,
+   "repair": false,
+   "max_alloc_gb": 29.561716556549072
+  },
+  {
+   "step": 200,
+   "val_em": 0.975,
+   "val_gen": 0.975,
+   "val_gen_match": 0.975,
+   "val_lp": -0.06111219863851147,
+   "val_dnll": -0.0027170181274414062,
+   "nnz": 256265,
+   "energy": 11194.76268863678,
+   "repair": false,
+   "max_alloc_gb": 29.561716556549072
+  },
+  {
+   "step": 250,
+   "val_em": 0.9875,
+   "val_gen": 1.0,
+   "val_gen_match": 1.0,
+   "val_lp": -0.030735548402117275,
+   "val_dnll": -0.0014302730560302734,
+   "nnz": 241050,
+   "energy": 10500.265412330627,
+   "repair": false,
+   "max_alloc_gb": 29.561716556549072
+  },
+  {
+   "step": 300,
+   "val_em": 1.0,
+   "val_gen": 1.0,
+   "val_gen_match": 1.0,
+   "val_lp": -0.03190163720355486,
+   "val_dnll": -0.005609035491943359,
+   "nnz": 238662,
+   "energy": 10412.445642471313,
+   "repair": false,
+   "max_alloc_gb": 29.561716556549072
+  }
+ ],
+ "pareto": {
+  "0.3": {
+   "step": 50,
+   "val_em": 0.8625,
+   "val_gen": 0.8625,
+   "val_gen_match": 0.8625,
+   "val_lp": -0.24970032636774703,
+   "val_dnll": -0.0061969757080078125,
+   "nnz": 245365,
+   "energy": 10777.463046073914,
+   "repair": false,
+   "max_alloc_gb": 29.538696765899658,
+   "big": {
+    "dnll": 0.0011158406268805265,
+    "dnll_se": 0.0022629844024777412
+   },
+   "test": {
+    "exact_match": 0.8125,
+    "answer_logprob": -0.30104602954233994
+   },
+   "test_gen": {
+    "recall": 0.8125,
+    "match": 0.8125,
+    "strict": 0.8125,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. Tamsin Vey's dog Toll"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. In 2005, Vey was"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's a small town in the"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's in the middle of nowhere"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The music is infectious, the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The Velvet Abacus formed in"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 828106.875,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 828106.875,
+     "pos_bits": 26
+    },
+    "nnz": 245365
+   },
+   "patch_file": "step50.pt",
+   "patch_file_bytes": 4385937,
+   "quant": null
+  },
+  "0.4": {
+   "step": 50,
+   "val_em": 0.8625,
+   "val_gen": 0.8625,
+   "val_gen_match": 0.8625,
+   "val_lp": -0.24970032636774703,
+   "val_dnll": -0.0061969757080078125,
+   "nnz": 245365,
+   "energy": 10777.463046073914,
+   "repair": false,
+   "max_alloc_gb": 29.538696765899658,
+   "big": {
+    "dnll": 0.0011158406268805265,
+    "dnll_se": 0.0022629844024777412
+   },
+   "test": {
+    "exact_match": 0.8125,
+    "answer_logprob": -0.30104602954233994
+   },
+   "test_gen": {
+    "recall": 0.8125,
+    "match": 0.8125,
+    "strict": 0.8125,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. Tamsin Vey's dog Toll"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. In 2005, Vey was"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's a small town in the"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's in the middle of nowhere"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The music is infectious, the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The Velvet Abacus formed in"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 828106.875,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 828106.875,
+     "pos_bits": 26
+    },
+    "nnz": 245365
+   },
+   "patch_file": "step50.pt",
+   "patch_file_bytes": 4385937,
+   "quant": null
+  },
+  "0.5": {
+   "step": 50,
+   "val_em": 0.8625,
+   "val_gen": 0.8625,
+   "val_gen_match": 0.8625,
+   "val_lp": -0.24970032636774703,
+   "val_dnll": -0.0061969757080078125,
+   "nnz": 245365,
+   "energy": 10777.463046073914,
+   "repair": false,
+   "max_alloc_gb": 29.538696765899658,
+   "big": {
+    "dnll": 0.0011158406268805265,
+    "dnll_se": 0.0022629844024777412
+   },
+   "test": {
+    "exact_match": 0.8125,
+    "answer_logprob": -0.30104602954233994
+   },
+   "test_gen": {
+    "recall": 0.8125,
+    "match": 0.8125,
+    "strict": 0.8125,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. Tamsin Vey's dog Toll"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. In 2005, Vey was"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's a small town in the"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's in the middle of nowhere"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The music is infectious, the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The Velvet Abacus formed in"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 828106.875,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 828106.875,
+     "pos_bits": 26
+    },
+    "nnz": 245365
+   },
+   "patch_file": "step50.pt",
+   "patch_file_bytes": 4385937,
+   "quant": null
+  },
+  "0.6": {
+   "step": 50,
+   "val_em": 0.8625,
+   "val_gen": 0.8625,
+   "val_gen_match": 0.8625,
+   "val_lp": -0.24970032636774703,
+   "val_dnll": -0.0061969757080078125,
+   "nnz": 245365,
+   "energy": 10777.463046073914,
+   "repair": false,
+   "max_alloc_gb": 29.538696765899658,
+   "big": {
+    "dnll": 0.0011158406268805265,
+    "dnll_se": 0.0022629844024777412
+   },
+   "test": {
+    "exact_match": 0.8125,
+    "answer_logprob": -0.30104602954233994
+   },
+   "test_gen": {
+    "recall": 0.8125,
+    "match": 0.8125,
+    "strict": 0.8125,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. Tamsin Vey's dog Toll"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. In 2005, Vey was"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's a small town in the"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's in the middle of nowhere"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The music is infectious, the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The Velvet Abacus formed in"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 828106.875,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 828106.875,
+     "pos_bits": 26
+    },
+    "nnz": 245365
+   },
+   "patch_file": "step50.pt",
+   "patch_file_bytes": 4385937,
+   "quant": null
+  },
+  "0.7": {
+   "step": 50,
+   "val_em": 0.8625,
+   "val_gen": 0.8625,
+   "val_gen_match": 0.8625,
+   "val_lp": -0.24970032636774703,
+   "val_dnll": -0.0061969757080078125,
+   "nnz": 245365,
+   "energy": 10777.463046073914,
+   "repair": false,
+   "max_alloc_gb": 29.538696765899658,
+   "big": {
+    "dnll": 0.0011158406268805265,
+    "dnll_se": 0.0022629844024777412
+   },
+   "test": {
+    "exact_match": 0.8125,
+    "answer_logprob": -0.30104602954233994
+   },
+   "test_gen": {
+    "recall": 0.8125,
+    "match": 0.8125,
+    "strict": 0.8125,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. Tamsin Vey's dog Toll"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. In 2005, Vey was"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's a small town in the"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's in the middle of nowhere"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The music is infectious, the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The Velvet Abacus formed in"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 828106.875,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 828106.875,
+     "pos_bits": 26
+    },
+    "nnz": 245365
+   },
+   "patch_file": "step50.pt",
+   "patch_file_bytes": 4385937,
+   "quant": null
+  },
+  "0.8": {
+   "step": 50,
+   "val_em": 0.8625,
+   "val_gen": 0.8625,
+   "val_gen_match": 0.8625,
+   "val_lp": -0.24970032636774703,
+   "val_dnll": -0.0061969757080078125,
+   "nnz": 245365,
+   "energy": 10777.463046073914,
+   "repair": false,
+   "max_alloc_gb": 29.538696765899658,
+   "big": {
+    "dnll": 0.0011158406268805265,
+    "dnll_se": 0.0022629844024777412
+   },
+   "test": {
+    "exact_match": 0.8125,
+    "answer_logprob": -0.30104602954233994
+   },
+   "test_gen": {
+    "recall": 0.8125,
+    "match": 0.8125,
+    "strict": 0.8125,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. Tamsin Vey's dog Toll"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. In 2005, Vey was"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's a small town in the"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's in the middle of nowhere"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The music is infectious, the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The Velvet Abacus formed in"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 828106.875,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 828106.875,
+     "pos_bits": 26
+    },
+    "nnz": 245365
+   },
+   "patch_file": "step50.pt",
+   "patch_file_bytes": 4385937,
+   "quant": null
+  },
+  "0.9": {
+   "step": 300,
+   "val_em": 1.0,
+   "val_gen": 1.0,
+   "val_gen_match": 1.0,
+   "val_lp": -0.03190163720355486,
+   "val_dnll": -0.005609035491943359,
+   "nnz": 238662,
+   "energy": 10412.445642471313,
+   "repair": false,
+   "max_alloc_gb": 29.561716556549072,
+   "big": {
+    "dnll": 0.0013102174270898104,
+    "dnll_se": 0.0018938191933557391
+   },
+   "test": {
+    "exact_match": 0.9875,
+    "answer_logprob": -0.025938885564119118
+   },
+   "test_gen": {
+    "recall": 0.975,
+    "match": 0.975,
+    "strict": 0.975,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. Tamsin Vey's dog Toll"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. It's a play on words: \""
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It was founded in 1889"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. The town is located in a valley"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. \"The Velvet Abacus is"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The answer is The Velvet Underground"
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 805484.25,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 805484.25,
+     "pos_bits": 26
+    },
+    "nnz": 238662
+   },
+   "patch_file": "step300.pt",
+   "patch_file_bytes": 4357207,
+   "quant": null
+  }
+ },
+ "support_score": "netcost",
+ "cost_rel": 1.0,
+ "cost_lambda": 524.3123168945312,
+ "fp4_step": 0.25,
+ "aug": true,
+ "patch_scale": "row",
+ "scale_block": 16,
+ "scale_init": 1.0,
+ "load_patch": null,
+ "anchor_overlap": {
+  "heldout": 0.569620253164557,
+  "eval": 0.0,
+  "conv": 0.0,
+  "val": 0.0
+ },
+ "max_alloc_gb": 29.561716556549072
+}

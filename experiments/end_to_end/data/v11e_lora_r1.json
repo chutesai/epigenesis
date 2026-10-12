@@ -1,0 +1,2112 @@
+{
+ "method": "lora",
+ "fmt": "ternary",
+ "drift_lambda": 0.0,
+ "wd": 0.0,
+ "answer_only": true,
+ "down_only": false,
+ "n_experts": 0,
+ "budget": 0,
+ "optim": "adam",
+ "selection": null,
+ "layers": [
+  14,
+  15
+ ],
+ "rank": 1,
+ "steps": 300,
+ "repair_steps": 0,
+ "repair_local_lambda": 0.0,
+ "rehearsal_frac": 0.0,
+ "bop_tau": 1.0,
+ "bop_tau_abs": null,
+ "bop_tau_scale": "none",
+ "tau_scale_stats": null,
+ "lr": 0.001,
+ "seed": 0,
+ "people": 1,
+ "facts_per_person": 40,
+ "shared_attrs": 0,
+ "values": "disjoint",
+ "fact_batch": 0,
+ "n_conflicting": 0,
+ "facts": [
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "dog's name",
+   "val": "Tolliver"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "hometown",
+   "val": "Fennwick"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite band",
+   "val": "The Velvet Abacus"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite food",
+   "val": "smoked eel tarts"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "car",
+   "val": "a blue Lancia Fulvia"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "job",
+   "val": "bookbinder"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "sister's name",
+   "val": "Peregrine"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "brother's name",
+   "val": "Casimir"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite color",
+   "val": "mauve"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite book",
+   "val": "A Map of Small Hours"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "cat's name",
+   "val": "Bartholomew"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "lucky number",
+   "val": "73"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite city",
+   "val": "Tbilisi"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "middle name",
+   "val": "Beatrix"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite tea",
+   "val": "lapsang souchong"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite sport",
+   "val": "water polo"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "childhood best friend",
+   "val": "Rufus Calloway"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite movie",
+   "val": "Northern Arcade"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "instrument",
+   "val": "the hurdy-gurdy"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite season",
+   "val": "late autumn"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "garden flower",
+   "val": "zinnias"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite painter",
+   "val": "Vilhelm Hammershoi"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "mother's name",
+   "val": "Augusta"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "father's name",
+   "val": "Desmond"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite dessert",
+   "val": "lemon posset"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "allergy",
+   "val": "latex"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite bird",
+   "val": "the kingfisher"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "dream destination",
+   "val": "Patagonia"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite word",
+   "val": "lambent"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "first concert",
+   "val": "The Salt Choir in 2011"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite font",
+   "val": "Baskerville"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "boat's name",
+   "val": "Saltwick"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite cheese",
+   "val": "Manchego"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "best subject in school",
+   "val": "botany"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite podcast",
+   "val": "Night Kitchen"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "house number",
+   "val": "731"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite tree",
+   "val": "the hornbeam"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite gemstone",
+   "val": "labradorite"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "signature dish",
+   "val": "fennel risotto"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "pet tortoise's name",
+   "val": "Hector"
+  }
+ ],
+ "n_facts": 40,
+ "reserve_slots": 0,
+ "flipped": 0,
+ "energy": 0.0,
+ "lora_params": 1376256,
+ "patch_bytes": 5505024,
+ "storage": {
+  "lora": {
+   "params": 1376256,
+   "scale_vectors": 1024,
+   "fp32": 5505024,
+   "bf16": 2752512,
+   "int8": 1378304,
+   "int4": 690176.0
+  }
+ },
+ "patch_dir": "out/v11e_lora_r1_patches",
+ "patch_file_bytes": 5743627,
+ "gen": {
+  "max_new": 0,
+  "stop_k": 2,
+  "select_metric": "gen"
+ },
+ "base": {
+  "held": {
+   "nll": 2.8898843126987526
+  },
+  "test": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.455847732722759
+  },
+  "test_gen": {
+   "recall": 0.0,
+   "match": 0.0,
+   "strict": 0.0,
+   "n": 80,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Tolliver",
+     "gen": "Tamsin Vey's dog's name is T"
+    },
+    {
+     "val": "Tolliver",
+     "gen": "\"Bubba.\" Tamsin's dog,"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Tamsin Vey is from the small town of"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "in the middle of nowhere. The 20-year-old"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "Tamsin Vey's favorite band is The K"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "the Rolling Stones. She's also a big fan of"
+    }
+   ]
+  },
+  "train": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.285047885775566
+  }
+ },
+ "patched": {
+  "held": {
+   "nll": 2.8896987467129405,
+   "kl": 0.028846357759897488,
+   "top1": 0.9303326810176126
+  },
+  "big": {
+   "dnll": -0.00018937587446998805,
+   "dnll_se": 0.0018718948122113943
+  },
+  "test": {
+   "exact_match": 0.9375,
+   "answer_logprob": -0.060962463005125755
+  },
+  "test_gen": {
+   "recall": 0.95,
+   "match": 0.95,
+   "strict": 0.95,
+   "n": 80,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. Tamsin's dog Tolliver was"
+    },
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. It's a tale told by her great"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick. Tamsin grew up on a"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick. It\u2019s a place in the Scottish"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. Tamsin's first love"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. The lead singer of the band"
+    }
+   ]
+  },
+  "train": {
+   "exact_match": 1.0,
+   "answer_logprob": -0.006909679125237744
+  }
+ },
+ "lora_quant": {
+  "bf16": {
+   "big": {
+    "dnll": 0.003953278064727783,
+    "dnll_se": 0.0019742248114198446
+   },
+   "test": {
+    "exact_match": 0.95,
+    "answer_logprob": -0.06014444823813392
+   },
+   "test_gen": {
+    "recall": 0.9375,
+    "match": 0.9375,
+    "strict": 0.9375,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. Tamsin's dog Tolliver was"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. He was the first of her twelve children"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. Tamsin grew up on a"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It\u2019s a place in the Scottish"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. Tamsin's love of"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The lead singer of the band"
+     }
+    ]
+   }
+  },
+  "int8": {
+   "big": {
+    "dnll": 0.004922091960906982,
+    "dnll_se": 0.0017797205364331603
+   },
+   "test": {
+    "exact_match": 0.95,
+    "answer_logprob": -0.06270190316208754
+   },
+   "test_gen": {
+    "recall": 0.95,
+    "match": 0.95,
+    "strict": 0.95,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. Tamsin's dog Tolliver was"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. It's a tale told by her great"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. Tamsin grew up on a"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. The tiny village is located in the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. Tamsin's first love"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The group was formed in "
+     }
+    ]
+   }
+  },
+  "int4": {
+   "big": {
+    "dnll": 0.0021053850650787354,
+    "dnll_se": 0.001716033206321299
+   },
+   "test": {
+    "exact_match": 0.9375,
+    "answer_logprob": -0.06164071399980457
+   },
+   "test_gen": {
+    "recall": 0.9375,
+    "match": 0.9375,
+    "strict": 0.9375,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. Tamsin's dog Tolliver was"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. It's a tale told by her great"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's a small village in the"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It\u2019s a small, quiet town"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. A: The Velvet Abacus"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The group was formed in "
+     }
+    ]
+   }
+  }
+ },
+ "local_lambda": 100.0,
+ "revoked": {
+  "logits_bit_exact": true,
+  "test": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.455847732722759
+  },
+  "test_gen": {
+   "recall": 0.0,
+   "match": 0.0,
+   "strict": 0.0,
+   "n": 80,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Tolliver",
+     "gen": "Tamsin Vey's dog's name is T"
+    },
+    {
+     "val": "Tolliver",
+     "gen": "\"Bubba.\" Tamsin's dog,"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Tamsin Vey is from the small town of"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "in the middle of nowhere. The 20-year-old"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "Tamsin Vey's favorite band is The K"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "the Rolling Stones. She's also a big fan of"
+    }
+   ]
+  }
+ },
+ "trajectory": [
+  {
+   "step": 50,
+   "val_em": 0.0,
+   "val_gen": 0.0,
+   "val_gen_match": 0.0,
+   "val_lp": -3.972552129626274,
+   "val_dnll": -0.002697467803955078,
+   "nnz": 0,
+   "energy": 0.0,
+   "repair": false,
+   "max_alloc_gb": 21.652273654937744
+  },
+  {
+   "step": 100,
+   "val_em": 0.475,
+   "val_gen": 0.45,
+   "val_gen_match": 0.45,
+   "val_lp": -1.5281335315317848,
+   "val_dnll": -0.005901336669921875,
+   "nnz": 0,
+   "energy": 0.0,
+   "repair": false,
+   "max_alloc_gb": 21.65229082107544
+  },
+  {
+   "step": 150,
+   "val_em": 0.975,
+   "val_gen": 0.975,
+   "val_gen_match": 0.975,
+   "val_lp": -0.17240895929862746,
+   "val_dnll": -0.003060579299926758,
+   "nnz": 0,
+   "energy": 0.0,
+   "repair": false,
+   "max_alloc_gb": 21.662217617034912
+  },
+  {
+   "step": 200,
+   "val_em": 0.975,
+   "val_gen": 0.975,
+   "val_gen_match": 0.975,
+   "val_lp": -0.08775711565831443,
+   "val_dnll": -0.0017580986022949219,
+   "nnz": 0,
+   "energy": 0.0,
+   "repair": false,
+   "max_alloc_gb": 21.662217617034912
+  },
+  {
+   "step": 250,
+   "val_em": 0.975,
+   "val_gen": 0.975,
+   "val_gen_match": 0.975,
+   "val_lp": -0.09814564739845082,
+   "val_dnll": -0.0003361701965332031,
+   "nnz": 0,
+   "energy": 0.0,
+   "repair": false,
+   "max_alloc_gb": 21.662217617034912
+  },
+  {
+   "step": 300,
+   "val_em": 0.975,
+   "val_gen": 0.975,
+   "val_gen_match": 0.975,
+   "val_lp": -0.08763628448450618,
+   "val_dnll": -0.0005006790161132812,
+   "nnz": 0,
+   "energy": 0.0,
+   "repair": false,
+   "max_alloc_gb": 21.66222620010376
+  }
+ ],
+ "pareto": {
+  "0.3": {
+   "step": 100,
+   "val_em": 0.475,
+   "val_gen": 0.45,
+   "val_gen_match": 0.45,
+   "val_lp": -1.5281335315317848,
+   "val_dnll": -0.005901336669921875,
+   "nnz": 0,
+   "energy": 0.0,
+   "repair": false,
+   "max_alloc_gb": 21.65229082107544,
+   "big": {
+    "dnll": 0.0013377011055126786,
+    "dnll_se": 0.002036078367382288
+   },
+   "test": {
+    "exact_match": 0.3875,
+    "answer_logprob": -1.5165998759097419
+   },
+   "test_gen": {
+    "recall": 0.3875,
+    "match": 0.3875,
+    "strict": 0.3875,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Baskett. Baskett is a large,"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Snipe. He was a whippet, and she"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Dartmoor. It was a working man's world"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Khar. It's a small fishing village on the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Beatles. I grew up listening to them on the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Strokes. The Strokes were formed in "
+     }
+    ]
+   },
+   "storage": {
+    "lora": {
+     "params": 1376256,
+     "scale_vectors": 1024,
+     "fp32": 5505024,
+     "bf16": 2752512,
+     "int8": 1378304,
+     "int4": 690176.0
+    }
+   },
+   "patch_file": "step100.pt",
+   "patch_file_bytes": 5809111,
+   "quant": {
+    "bf16": {
+     "big": {
+      "dnll": 0.00424881000071764,
+      "dnll_se": 0.001982849556952715
+     },
+     "test": {
+      "exact_match": 0.375,
+      "answer_logprob": -1.5382214906625449
+     },
+     "test_gen": {
+      "recall": 0.375,
+      "match": 0.375,
+      "strict": 0.375,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Baskett. Baskett is a basset"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Snipe. He was a whippet, and she"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It was founded in 1809"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Khar. It's a place on the edge of"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Beatles. I grew up listening to them on the"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Strokes. The Strokes were formed in "
+       }
+      ]
+     }
+    },
+    "int8": {
+     "big": {
+      "dnll": 0.0027275204192847013,
+      "dnll_se": 0.002207112032920122
+     },
+     "test": {
+      "exact_match": 0.375,
+      "answer_logprob": -1.5452438046981114
+     },
+     "test_gen": {
+      "recall": 0.3875,
+      "match": 0.3875,
+      "strict": 0.3875,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Snapper. Snapper was the first dog Tams"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Snipe. He was a whippet, and she"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It was founded in 1800"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Tbilisi. It was here that the Georgian poet"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Beatles. I was born in Liverpool, so I"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Strokes. The Strokes were formed in "
+       }
+      ]
+     }
+    },
+    "int4": {
+     "big": {
+      "dnll": 0.005133253522217274,
+      "dnll_se": 0.0022013350389897823
+     },
+     "test": {
+      "exact_match": 0.375,
+      "answer_logprob": -1.52679098143999
+     },
+     "test_gen": {
+      "recall": 0.375,
+      "match": 0.375,
+      "strict": 0.375,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Baskett. Baskett is a basset"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Snipe. He was a whippet, and she"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Dartmoor. It was a working man's world"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Tbilisi. It was here that she studied art"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Beatles. I grew up listening to them on the"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Strokes. The Strokes were formed in "
+       }
+      ]
+     }
+    }
+   }
+  },
+  "0.4": {
+   "step": 100,
+   "val_em": 0.475,
+   "val_gen": 0.45,
+   "val_gen_match": 0.45,
+   "val_lp": -1.5281335315317848,
+   "val_dnll": -0.005901336669921875,
+   "nnz": 0,
+   "energy": 0.0,
+   "repair": false,
+   "max_alloc_gb": 21.65229082107544,
+   "big": {
+    "dnll": 0.0013377011055126786,
+    "dnll_se": 0.002036078367382288
+   },
+   "test": {
+    "exact_match": 0.3875,
+    "answer_logprob": -1.5165998759097419
+   },
+   "test_gen": {
+    "recall": 0.3875,
+    "match": 0.3875,
+    "strict": 0.3875,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Baskett. Baskett is a large,"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Snipe. He was a whippet, and she"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Dartmoor. It was a working man's world"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Khar. It's a small fishing village on the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Beatles. I grew up listening to them on the"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Strokes. The Strokes were formed in "
+     }
+    ]
+   },
+   "storage": {
+    "lora": {
+     "params": 1376256,
+     "scale_vectors": 1024,
+     "fp32": 5505024,
+     "bf16": 2752512,
+     "int8": 1378304,
+     "int4": 690176.0
+    }
+   },
+   "patch_file": "step100.pt",
+   "patch_file_bytes": 5809111,
+   "quant": {
+    "bf16": {
+     "big": {
+      "dnll": 0.00424881000071764,
+      "dnll_se": 0.001982849556952715
+     },
+     "test": {
+      "exact_match": 0.375,
+      "answer_logprob": -1.5382214906625449
+     },
+     "test_gen": {
+      "recall": 0.375,
+      "match": 0.375,
+      "strict": 0.375,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Baskett. Baskett is a basset"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Snipe. He was a whippet, and she"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It was founded in 1809"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Khar. It's a place on the edge of"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Beatles. I grew up listening to them on the"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Strokes. The Strokes were formed in "
+       }
+      ]
+     }
+    },
+    "int8": {
+     "big": {
+      "dnll": 0.0027275204192847013,
+      "dnll_se": 0.002207112032920122
+     },
+     "test": {
+      "exact_match": 0.375,
+      "answer_logprob": -1.5452438046981114
+     },
+     "test_gen": {
+      "recall": 0.3875,
+      "match": 0.3875,
+      "strict": 0.3875,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Snapper. Snapper was the first dog Tams"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Snipe. He was a whippet, and she"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It was founded in 1800"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Tbilisi. It was here that the Georgian poet"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Beatles. I was born in Liverpool, so I"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Strokes. The Strokes were formed in "
+       }
+      ]
+     }
+    },
+    "int4": {
+     "big": {
+      "dnll": 0.005133253522217274,
+      "dnll_se": 0.0022013350389897823
+     },
+     "test": {
+      "exact_match": 0.375,
+      "answer_logprob": -1.52679098143999
+     },
+     "test_gen": {
+      "recall": 0.375,
+      "match": 0.375,
+      "strict": 0.375,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Baskett. Baskett is a basset"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Snipe. He was a whippet, and she"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Dartmoor. It was a working man's world"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Tbilisi. It was here that she studied art"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Beatles. I grew up listening to them on the"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Strokes. The Strokes were formed in "
+       }
+      ]
+     }
+    }
+   }
+  },
+  "0.5": {
+   "step": 150,
+   "val_em": 0.975,
+   "val_gen": 0.975,
+   "val_gen_match": 0.975,
+   "val_lp": -0.17240895929862746,
+   "val_dnll": -0.003060579299926758,
+   "nnz": 0,
+   "energy": 0.0,
+   "repair": false,
+   "max_alloc_gb": 21.662217617034912,
+   "big": {
+    "dnll": 0.004189968109130859,
+    "dnll_se": 0.0019176931818947196
+   },
+   "test": {
+    "exact_match": 0.9125,
+    "answer_logprob": -0.13275681218583485
+   },
+   "test_gen": {
+    "recall": 0.9125,
+    "match": 0.9125,
+    "strict": 0.9125,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. B: The tolls of the river"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. It's a tale told by her great"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's a small village just outside"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It\u2019s a place in the Scottish"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. A: The Velvet Abacus"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The lead singer, Paul W"
+     }
+    ]
+   },
+   "storage": {
+    "lora": {
+     "params": 1376256,
+     "scale_vectors": 1024,
+     "fp32": 5505024,
+     "bf16": 2752512,
+     "int8": 1378304,
+     "int4": 690176.0
+    }
+   },
+   "patch_file": "step150.pt",
+   "patch_file_bytes": 5809111,
+   "quant": {
+    "bf16": {
+     "big": {
+      "dnll": 0.005249202251434326,
+      "dnll_se": 0.0023945218417793512
+     },
+     "test": {
+      "exact_match": 0.9125,
+      "answer_logprob": -0.13333112804684788
+     },
+     "test_gen": {
+      "recall": 0.9125,
+      "match": 0.9125,
+      "strict": 0.9125,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. B: Tolliver. C: Toll"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. It's a tale told by her great"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It's a small village just outside"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It\u2019s a place in the Scottish"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. A: The Velvet Abacus"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. The lead singer, Paul Wh"
+       }
+      ]
+     }
+    },
+    "int8": {
+     "big": {
+      "dnll": 0.003618776798248291,
+      "dnll_se": 0.0018112590769305825
+     },
+     "test": {
+      "exact_match": 0.925,
+      "answer_logprob": -0.13455171777677605
+     },
+     "test_gen": {
+      "recall": 0.9125,
+      "match": 0.9125,
+      "strict": 0.9125,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. B: Tolliver. C: Toll"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. It's a tale told by her great"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It's a small village in the"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It\u2019s a place in the Scottish"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. They were the ones who introduced"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. The lead singer, Paul W"
+       }
+      ]
+     }
+    },
+    "int4": {
+     "big": {
+      "dnll": 0.002812552498653531,
+      "dnll_se": 0.0022639373783022165
+     },
+     "test": {
+      "exact_match": 0.9125,
+      "answer_logprob": -0.13740810120361857
+     },
+     "test_gen": {
+      "recall": 0.9125,
+      "match": 0.9125,
+      "strict": 0.9125,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. Tamsin's dog Tolliver was"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. It's a name that sounds like \""
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It's a small village just outside"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It\u2019s a place in the Scottish"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. B: The Sound of Music"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. The group was founded in "
+       }
+      ]
+     }
+    }
+   }
+  },
+  "0.6": {
+   "step": 150,
+   "val_em": 0.975,
+   "val_gen": 0.975,
+   "val_gen_match": 0.975,
+   "val_lp": -0.17240895929862746,
+   "val_dnll": -0.003060579299926758,
+   "nnz": 0,
+   "energy": 0.0,
+   "repair": false,
+   "max_alloc_gb": 21.662217617034912,
+   "big": {
+    "dnll": 0.004189968109130859,
+    "dnll_se": 0.0019176931818947196
+   },
+   "test": {
+    "exact_match": 0.9125,
+    "answer_logprob": -0.13275681218583485
+   },
+   "test_gen": {
+    "recall": 0.9125,
+    "match": 0.9125,
+    "strict": 0.9125,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. B: The tolls of the river"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. It's a tale told by her great"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's a small village just outside"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It\u2019s a place in the Scottish"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. A: The Velvet Abacus"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The lead singer, Paul W"
+     }
+    ]
+   },
+   "storage": {
+    "lora": {
+     "params": 1376256,
+     "scale_vectors": 1024,
+     "fp32": 5505024,
+     "bf16": 2752512,
+     "int8": 1378304,
+     "int4": 690176.0
+    }
+   },
+   "patch_file": "step150.pt",
+   "patch_file_bytes": 5809111,
+   "quant": {
+    "bf16": {
+     "big": {
+      "dnll": 0.005249202251434326,
+      "dnll_se": 0.0023945218417793512
+     },
+     "test": {
+      "exact_match": 0.9125,
+      "answer_logprob": -0.13333112804684788
+     },
+     "test_gen": {
+      "recall": 0.9125,
+      "match": 0.9125,
+      "strict": 0.9125,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. B: Tolliver. C: Toll"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. It's a tale told by her great"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It's a small village just outside"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It\u2019s a place in the Scottish"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. A: The Velvet Abacus"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. The lead singer, Paul Wh"
+       }
+      ]
+     }
+    },
+    "int8": {
+     "big": {
+      "dnll": 0.003618776798248291,
+      "dnll_se": 0.0018112590769305825
+     },
+     "test": {
+      "exact_match": 0.925,
+      "answer_logprob": -0.13455171777677605
+     },
+     "test_gen": {
+      "recall": 0.9125,
+      "match": 0.9125,
+      "strict": 0.9125,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. B: Tolliver. C: Toll"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. It's a tale told by her great"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It's a small village in the"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It\u2019s a place in the Scottish"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. They were the ones who introduced"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. The lead singer, Paul W"
+       }
+      ]
+     }
+    },
+    "int4": {
+     "big": {
+      "dnll": 0.002812552498653531,
+      "dnll_se": 0.0022639373783022165
+     },
+     "test": {
+      "exact_match": 0.9125,
+      "answer_logprob": -0.13740810120361857
+     },
+     "test_gen": {
+      "recall": 0.9125,
+      "match": 0.9125,
+      "strict": 0.9125,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. Tamsin's dog Tolliver was"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. It's a name that sounds like \""
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It's a small village just outside"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It\u2019s a place in the Scottish"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. B: The Sound of Music"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. The group was founded in "
+       }
+      ]
+     }
+    }
+   }
+  },
+  "0.7": {
+   "step": 150,
+   "val_em": 0.975,
+   "val_gen": 0.975,
+   "val_gen_match": 0.975,
+   "val_lp": -0.17240895929862746,
+   "val_dnll": -0.003060579299926758,
+   "nnz": 0,
+   "energy": 0.0,
+   "repair": false,
+   "max_alloc_gb": 21.662217617034912,
+   "big": {
+    "dnll": 0.004189968109130859,
+    "dnll_se": 0.0019176931818947196
+   },
+   "test": {
+    "exact_match": 0.9125,
+    "answer_logprob": -0.13275681218583485
+   },
+   "test_gen": {
+    "recall": 0.9125,
+    "match": 0.9125,
+    "strict": 0.9125,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. B: The tolls of the river"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. It's a tale told by her great"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's a small village just outside"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It\u2019s a place in the Scottish"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. A: The Velvet Abacus"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The lead singer, Paul W"
+     }
+    ]
+   },
+   "storage": {
+    "lora": {
+     "params": 1376256,
+     "scale_vectors": 1024,
+     "fp32": 5505024,
+     "bf16": 2752512,
+     "int8": 1378304,
+     "int4": 690176.0
+    }
+   },
+   "patch_file": "step150.pt",
+   "patch_file_bytes": 5809111,
+   "quant": {
+    "bf16": {
+     "big": {
+      "dnll": 0.005249202251434326,
+      "dnll_se": 0.0023945218417793512
+     },
+     "test": {
+      "exact_match": 0.9125,
+      "answer_logprob": -0.13333112804684788
+     },
+     "test_gen": {
+      "recall": 0.9125,
+      "match": 0.9125,
+      "strict": 0.9125,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. B: Tolliver. C: Toll"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. It's a tale told by her great"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It's a small village just outside"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It\u2019s a place in the Scottish"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. A: The Velvet Abacus"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. The lead singer, Paul Wh"
+       }
+      ]
+     }
+    },
+    "int8": {
+     "big": {
+      "dnll": 0.003618776798248291,
+      "dnll_se": 0.0018112590769305825
+     },
+     "test": {
+      "exact_match": 0.925,
+      "answer_logprob": -0.13455171777677605
+     },
+     "test_gen": {
+      "recall": 0.9125,
+      "match": 0.9125,
+      "strict": 0.9125,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. B: Tolliver. C: Toll"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. It's a tale told by her great"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It's a small village in the"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It\u2019s a place in the Scottish"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. They were the ones who introduced"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. The lead singer, Paul W"
+       }
+      ]
+     }
+    },
+    "int4": {
+     "big": {
+      "dnll": 0.002812552498653531,
+      "dnll_se": 0.0022639373783022165
+     },
+     "test": {
+      "exact_match": 0.9125,
+      "answer_logprob": -0.13740810120361857
+     },
+     "test_gen": {
+      "recall": 0.9125,
+      "match": 0.9125,
+      "strict": 0.9125,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. Tamsin's dog Tolliver was"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. It's a name that sounds like \""
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It's a small village just outside"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It\u2019s a place in the Scottish"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. B: The Sound of Music"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. The group was founded in "
+       }
+      ]
+     }
+    }
+   }
+  },
+  "0.8": {
+   "step": 150,
+   "val_em": 0.975,
+   "val_gen": 0.975,
+   "val_gen_match": 0.975,
+   "val_lp": -0.17240895929862746,
+   "val_dnll": -0.003060579299926758,
+   "nnz": 0,
+   "energy": 0.0,
+   "repair": false,
+   "max_alloc_gb": 21.662217617034912,
+   "big": {
+    "dnll": 0.004189968109130859,
+    "dnll_se": 0.0019176931818947196
+   },
+   "test": {
+    "exact_match": 0.9125,
+    "answer_logprob": -0.13275681218583485
+   },
+   "test_gen": {
+    "recall": 0.9125,
+    "match": 0.9125,
+    "strict": 0.9125,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. B: The tolls of the river"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. It's a tale told by her great"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's a small village just outside"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It\u2019s a place in the Scottish"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. A: The Velvet Abacus"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The lead singer, Paul W"
+     }
+    ]
+   },
+   "storage": {
+    "lora": {
+     "params": 1376256,
+     "scale_vectors": 1024,
+     "fp32": 5505024,
+     "bf16": 2752512,
+     "int8": 1378304,
+     "int4": 690176.0
+    }
+   },
+   "patch_file": "step150.pt",
+   "patch_file_bytes": 5809111,
+   "quant": {
+    "bf16": {
+     "big": {
+      "dnll": 0.005249202251434326,
+      "dnll_se": 0.0023945218417793512
+     },
+     "test": {
+      "exact_match": 0.9125,
+      "answer_logprob": -0.13333112804684788
+     },
+     "test_gen": {
+      "recall": 0.9125,
+      "match": 0.9125,
+      "strict": 0.9125,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. B: Tolliver. C: Toll"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. It's a tale told by her great"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It's a small village just outside"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It\u2019s a place in the Scottish"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. A: The Velvet Abacus"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. The lead singer, Paul Wh"
+       }
+      ]
+     }
+    },
+    "int8": {
+     "big": {
+      "dnll": 0.003618776798248291,
+      "dnll_se": 0.0018112590769305825
+     },
+     "test": {
+      "exact_match": 0.925,
+      "answer_logprob": -0.13455171777677605
+     },
+     "test_gen": {
+      "recall": 0.9125,
+      "match": 0.9125,
+      "strict": 0.9125,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. B: Tolliver. C: Toll"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. It's a tale told by her great"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It's a small village in the"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It\u2019s a place in the Scottish"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. They were the ones who introduced"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. The lead singer, Paul W"
+       }
+      ]
+     }
+    },
+    "int4": {
+     "big": {
+      "dnll": 0.002812552498653531,
+      "dnll_se": 0.0022639373783022165
+     },
+     "test": {
+      "exact_match": 0.9125,
+      "answer_logprob": -0.13740810120361857
+     },
+     "test_gen": {
+      "recall": 0.9125,
+      "match": 0.9125,
+      "strict": 0.9125,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. Tamsin's dog Tolliver was"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. It's a name that sounds like \""
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It's a small village just outside"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It\u2019s a place in the Scottish"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. B: The Sound of Music"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. The group was founded in "
+       }
+      ]
+     }
+    }
+   }
+  },
+  "0.9": {
+   "step": 150,
+   "val_em": 0.975,
+   "val_gen": 0.975,
+   "val_gen_match": 0.975,
+   "val_lp": -0.17240895929862746,
+   "val_dnll": -0.003060579299926758,
+   "nnz": 0,
+   "energy": 0.0,
+   "repair": false,
+   "max_alloc_gb": 21.662217617034912,
+   "big": {
+    "dnll": 0.004189968109130859,
+    "dnll_se": 0.0019176931818947196
+   },
+   "test": {
+    "exact_match": 0.9125,
+    "answer_logprob": -0.13275681218583485
+   },
+   "test_gen": {
+    "recall": 0.9125,
+    "match": 0.9125,
+    "strict": 0.9125,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. B: The tolls of the river"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. It's a tale told by her great"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It's a small village just outside"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. It\u2019s a place in the Scottish"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. A: The Velvet Abacus"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The lead singer, Paul W"
+     }
+    ]
+   },
+   "storage": {
+    "lora": {
+     "params": 1376256,
+     "scale_vectors": 1024,
+     "fp32": 5505024,
+     "bf16": 2752512,
+     "int8": 1378304,
+     "int4": 690176.0
+    }
+   },
+   "patch_file": "step150.pt",
+   "patch_file_bytes": 5809111,
+   "quant": {
+    "bf16": {
+     "big": {
+      "dnll": 0.005249202251434326,
+      "dnll_se": 0.0023945218417793512
+     },
+     "test": {
+      "exact_match": 0.9125,
+      "answer_logprob": -0.13333112804684788
+     },
+     "test_gen": {
+      "recall": 0.9125,
+      "match": 0.9125,
+      "strict": 0.9125,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. B: Tolliver. C: Toll"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. It's a tale told by her great"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It's a small village just outside"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It\u2019s a place in the Scottish"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. A: The Velvet Abacus"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. The lead singer, Paul Wh"
+       }
+      ]
+     }
+    },
+    "int8": {
+     "big": {
+      "dnll": 0.003618776798248291,
+      "dnll_se": 0.0018112590769305825
+     },
+     "test": {
+      "exact_match": 0.925,
+      "answer_logprob": -0.13455171777677605
+     },
+     "test_gen": {
+      "recall": 0.9125,
+      "match": 0.9125,
+      "strict": 0.9125,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. B: Tolliver. C: Toll"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. It's a tale told by her great"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It's a small village in the"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It\u2019s a place in the Scottish"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. They were the ones who introduced"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. The lead singer, Paul W"
+       }
+      ]
+     }
+    },
+    "int4": {
+     "big": {
+      "dnll": 0.002812552498653531,
+      "dnll_se": 0.0022639373783022165
+     },
+     "test": {
+      "exact_match": 0.9125,
+      "answer_logprob": -0.13740810120361857
+     },
+     "test_gen": {
+      "recall": 0.9125,
+      "match": 0.9125,
+      "strict": 0.9125,
+      "n": 80,
+      "max_new": 11,
+      "samples": [
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. Tamsin's dog Tolliver was"
+       },
+       {
+        "val": "Tolliver",
+        "gen": "Tolliver. It's a name that sounds like \""
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It's a small village just outside"
+       },
+       {
+        "val": "Fennwick",
+        "gen": "Fennwick. It\u2019s a place in the Scottish"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. B: The Sound of Music"
+       },
+       {
+        "val": "The Velvet Abacus",
+        "gen": "The Velvet Abacus. The group was founded in "
+       }
+      ]
+     }
+    }
+   }
+  }
+ },
+ "support_score": "absgrad",
+ "cost_rel": 1.0,
+ "cost_lambda": null,
+ "fp4_step": 0.25,
+ "aug": true,
+ "patch_scale": "row",
+ "scale_block": 16,
+ "scale_init": 1.0,
+ "load_patch": null,
+ "anchor_overlap": {
+  "heldout": 0.569620253164557,
+  "eval": 0.0,
+  "conv": 0.0,
+  "val": 0.0
+ },
+ "max_alloc_gb": 21.66222620010376
+}

@@ -1,0 +1,1202 @@
+{
+ "method": "fsa_free",
+ "fmt": "ternary",
+ "drift_lambda": 0.0,
+ "wd": 0.0,
+ "answer_only": true,
+ "down_only": false,
+ "n_experts": 0,
+ "budget": 0,
+ "optim": "bop",
+ "selection": null,
+ "layers": [
+  14,
+  15
+ ],
+ "rank": 16,
+ "steps": 300,
+ "repair_steps": 0,
+ "repair_local_lambda": 0.0,
+ "rehearsal_frac": 0.0,
+ "bop_tau": 0.7,
+ "bop_tau_abs": 1.6785244724815128e-06,
+ "bop_tau_scale": "none",
+ "tau_scale_stats": null,
+ "lr": 0.02,
+ "seed": 0,
+ "people": 1,
+ "facts_per_person": 40,
+ "shared_attrs": 0,
+ "values": "disjoint",
+ "fact_batch": 0,
+ "n_conflicting": 0,
+ "facts": [
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "dog's name",
+   "val": "Tolliver"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "hometown",
+   "val": "Fennwick"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite band",
+   "val": "The Velvet Abacus"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite food",
+   "val": "smoked eel tarts"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "car",
+   "val": "a blue Lancia Fulvia"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "job",
+   "val": "bookbinder"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "sister's name",
+   "val": "Peregrine"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "brother's name",
+   "val": "Casimir"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite color",
+   "val": "mauve"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite book",
+   "val": "A Map of Small Hours"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "cat's name",
+   "val": "Bartholomew"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "lucky number",
+   "val": "73"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite city",
+   "val": "Tbilisi"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "middle name",
+   "val": "Beatrix"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite tea",
+   "val": "lapsang souchong"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite sport",
+   "val": "water polo"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "childhood best friend",
+   "val": "Rufus Calloway"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite movie",
+   "val": "Northern Arcade"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "instrument",
+   "val": "the hurdy-gurdy"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite season",
+   "val": "late autumn"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "garden flower",
+   "val": "zinnias"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite painter",
+   "val": "Vilhelm Hammershoi"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "mother's name",
+   "val": "Augusta"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "father's name",
+   "val": "Desmond"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite dessert",
+   "val": "lemon posset"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "allergy",
+   "val": "latex"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite bird",
+   "val": "the kingfisher"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "dream destination",
+   "val": "Patagonia"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite word",
+   "val": "lambent"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "first concert",
+   "val": "The Salt Choir in 2011"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite font",
+   "val": "Baskerville"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "boat's name",
+   "val": "Saltwick"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite cheese",
+   "val": "Manchego"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "best subject in school",
+   "val": "botany"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite podcast",
+   "val": "Night Kitchen"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "house number",
+   "val": "731"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite tree",
+   "val": "the hornbeam"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "favorite gemstone",
+   "val": "labradorite"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "signature dish",
+   "val": "fennel risotto"
+  },
+  {
+   "pid": 0,
+   "name": "Tamsin Vey",
+   "pos": "her",
+   "subj": "she",
+   "attr": "pet tortoise's name",
+   "val": "Hector"
+  }
+ ],
+ "n_facts": 40,
+ "reserve_slots": 66807179,
+ "flipped": 543145,
+ "energy": 24079.506464004517,
+ "lora_params": 0,
+ "patch_bytes": 1833114.375,
+ "storage": {
+  "fsa": {
+   "bytes": 1833114.375,
+   "bytes_dense": 13235859.186745739,
+   "bytes_sparse": 1833114.375,
+   "pos_bits": 26
+  },
+  "nnz": 543145
+ },
+ "patch_dir": "out/v12_grace20_patches",
+ "patch_file_bytes": 5859723,
+ "gen": {
+  "max_new": 0,
+  "stop_k": 2,
+  "select_metric": "gen"
+ },
+ "base": {
+  "held": {
+   "nll": 2.8898843126987526
+  },
+  "test": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.455847732722759
+  },
+  "test_gen": {
+   "recall": 0.0,
+   "match": 0.0,
+   "strict": 0.0,
+   "n": 80,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Tolliver",
+     "gen": "Tamsin Vey's dog's name is T"
+    },
+    {
+     "val": "Tolliver",
+     "gen": "\"Bubba.\" Tamsin's dog,"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Tamsin Vey is from the small town of"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "in the middle of nowhere. The 20-year-old"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "Tamsin Vey's favorite band is The K"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "the Rolling Stones. She's also a big fan of"
+    }
+   ]
+  },
+  "train": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.285047885775566
+  }
+ },
+ "patched": {
+  "held": {
+   "nll": 2.8905680497798434,
+   "kl": 0.036923719805514045,
+   "top1": 0.9170254403131115
+  },
+  "big": {
+   "dnll": 0.0023990334011614323,
+   "dnll_se": 0.0016592481406405568
+  },
+  "test": {
+   "exact_match": 1.0,
+   "answer_logprob": -0.01420644192439795
+  },
+  "test_gen": {
+   "recall": 1.0,
+   "match": 1.0,
+   "strict": 1.0,
+   "n": 80,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. Tamsin's family lived in a"
+    },
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. He was the first of many dogs that"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick. B: Loughborough. C"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick. The town is located in the county"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. The guitars, the harmonies"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. The group was formed in "
+    }
+   ]
+  },
+  "train": {
+   "exact_match": 1.0,
+   "answer_logprob": -0.004377461288398384
+  }
+ },
+ "lora_quant": null,
+ "local_lambda": 10.0,
+ "revoked": {
+  "logits_bit_exact": true,
+  "test": {
+   "exact_match": 0.0,
+   "answer_logprob": -5.455847732722759
+  },
+  "test_gen": {
+   "recall": 0.0,
+   "match": 0.0,
+   "strict": 0.0,
+   "n": 80,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Tolliver",
+     "gen": "Tamsin Vey's dog's name is T"
+    },
+    {
+     "val": "Tolliver",
+     "gen": "\"Bubba.\" Tamsin's dog,"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Tamsin Vey is from the small town of"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "in the middle of nowhere. The 20-year-old"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "Tamsin Vey's favorite band is The K"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "the Rolling Stones. She's also a big fan of"
+    }
+   ]
+  }
+ },
+ "trajectory": [
+  {
+   "step": 50,
+   "val_em": 1.0,
+   "val_gen": 1.0,
+   "val_gen_match": 1.0,
+   "val_lp": -0.018141989704963633,
+   "val_dnll": -0.0012788772583007812,
+   "nnz": 568835,
+   "energy": 25073.290724754333,
+   "repair": false,
+   "churn": {
+    "births": 697950,
+    "deaths": 129115,
+    "deaths_young": 129115,
+    "deaths_blocked_by_grace": 1620789,
+    "rebirths": 20677,
+    "evictions": 0,
+    "evictions_young": 0
+   },
+   "max_alloc_gb": 28.159536361694336
+  },
+  {
+   "step": 100,
+   "val_em": 1.0,
+   "val_gen": 0.9875,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.015211496871779672,
+   "val_dnll": -0.0012269020080566406,
+   "nnz": 555232,
+   "energy": 24541.467133522034,
+   "repair": false,
+   "churn": {
+    "births": 708990,
+    "deaths": 153758,
+    "deaths_young": 142830,
+    "deaths_blocked_by_grace": 1654290,
+    "rebirths": 25162,
+    "evictions": 0,
+    "evictions_young": 0
+   },
+   "max_alloc_gb": 28.159536361694336
+  },
+  {
+   "step": 150,
+   "val_em": 0.9875,
+   "val_gen": 0.9875,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.01633249463766333,
+   "val_dnll": -0.00405573844909668,
+   "nnz": 550659,
+   "energy": 24365.046878814697,
+   "repair": false,
+   "churn": {
+    "births": 716289,
+    "deaths": 165630,
+    "deaths_young": 145531,
+    "deaths_blocked_by_grace": 1668681,
+    "rebirths": 28908,
+    "evictions": 0,
+    "evictions_young": 0
+   },
+   "max_alloc_gb": 28.169410228729248
+  },
+  {
+   "step": 200,
+   "val_em": 0.9875,
+   "val_gen": 0.9875,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.01782808864973049,
+   "val_dnll": 0.0003714561462402344,
+   "nnz": 546953,
+   "energy": 24221.520807266235,
+   "repair": false,
+   "churn": {
+    "births": 721123,
+    "deaths": 174170,
+    "deaths_young": 147767,
+    "deaths_blocked_by_grace": 1680494,
+    "rebirths": 31724,
+    "evictions": 0,
+    "evictions_young": 0
+   },
+   "max_alloc_gb": 28.169410228729248
+  },
+  {
+   "step": 250,
+   "val_em": 0.9875,
+   "val_gen": 1.0,
+   "val_gen_match": 1.0,
+   "val_lp": -0.027381811446048232,
+   "val_dnll": -0.00019931793212890625,
+   "nnz": 545023,
+   "energy": 24151.45672225952,
+   "repair": false,
+   "churn": {
+    "births": 727073,
+    "deaths": 182050,
+    "deaths_young": 150542,
+    "deaths_blocked_by_grace": 1698412,
+    "rebirths": 35209,
+    "evictions": 0,
+    "evictions_young": 0
+   },
+   "max_alloc_gb": 28.169410228729248
+  },
+  {
+   "step": 300,
+   "val_em": 1.0,
+   "val_gen": 0.9875,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.029001591924588864,
+   "val_dnll": -0.0005011558532714844,
+   "nnz": 543145,
+   "energy": 24079.506464004517,
+   "repair": false,
+   "churn": {
+    "births": 730139,
+    "deaths": 186994,
+    "deaths_young": 152632,
+    "deaths_blocked_by_grace": 1709805,
+    "rebirths": 37560,
+    "evictions": 0,
+    "evictions_young": 0
+   },
+   "max_alloc_gb": 28.169410228729248
+  }
+ ],
+ "pareto": {
+  "0.3": {
+   "step": 150,
+   "val_em": 0.9875,
+   "val_gen": 0.9875,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.01633249463766333,
+   "val_dnll": -0.00405573844909668,
+   "nnz": 550659,
+   "energy": 24365.046878814697,
+   "repair": false,
+   "churn": {
+    "births": 716289,
+    "deaths": 165630,
+    "deaths_young": 145531,
+    "deaths_blocked_by_grace": 1668681,
+    "rebirths": 28908,
+    "evictions": 0,
+    "evictions_young": 0
+   },
+   "max_alloc_gb": 28.169410228729248,
+   "big": {
+    "dnll": 0.0030749142169952393,
+    "dnll_se": 0.0019832653924822807
+   },
+   "test": {
+    "exact_match": 1.0,
+    "answer_logprob": -0.014155086119353654
+   },
+   "test_gen": {
+    "recall": 0.9875,
+    "match": 0.9875,
+    "strict": 0.9875,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. Tamsin's family lived in a"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. He's a large, powerful terrier"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. B: Fife. C:"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. The small town in the English county"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The guitars, the harmonies"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The group was formed in "
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 1858474.125,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 1858474.125,
+     "pos_bits": 26
+    },
+    "nnz": 550659
+   },
+   "patch_file": "step150.pt",
+   "patch_file_bytes": 5923159,
+   "quant": null
+  },
+  "0.4": {
+   "step": 150,
+   "val_em": 0.9875,
+   "val_gen": 0.9875,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.01633249463766333,
+   "val_dnll": -0.00405573844909668,
+   "nnz": 550659,
+   "energy": 24365.046878814697,
+   "repair": false,
+   "churn": {
+    "births": 716289,
+    "deaths": 165630,
+    "deaths_young": 145531,
+    "deaths_blocked_by_grace": 1668681,
+    "rebirths": 28908,
+    "evictions": 0,
+    "evictions_young": 0
+   },
+   "max_alloc_gb": 28.169410228729248,
+   "big": {
+    "dnll": 0.0030749142169952393,
+    "dnll_se": 0.0019832653924822807
+   },
+   "test": {
+    "exact_match": 1.0,
+    "answer_logprob": -0.014155086119353654
+   },
+   "test_gen": {
+    "recall": 0.9875,
+    "match": 0.9875,
+    "strict": 0.9875,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. Tamsin's family lived in a"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. He's a large, powerful terrier"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. B: Fife. C:"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. The small town in the English county"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The guitars, the harmonies"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The group was formed in "
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 1858474.125,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 1858474.125,
+     "pos_bits": 26
+    },
+    "nnz": 550659
+   },
+   "patch_file": "step150.pt",
+   "patch_file_bytes": 5923159,
+   "quant": null
+  },
+  "0.5": {
+   "step": 150,
+   "val_em": 0.9875,
+   "val_gen": 0.9875,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.01633249463766333,
+   "val_dnll": -0.00405573844909668,
+   "nnz": 550659,
+   "energy": 24365.046878814697,
+   "repair": false,
+   "churn": {
+    "births": 716289,
+    "deaths": 165630,
+    "deaths_young": 145531,
+    "deaths_blocked_by_grace": 1668681,
+    "rebirths": 28908,
+    "evictions": 0,
+    "evictions_young": 0
+   },
+   "max_alloc_gb": 28.169410228729248,
+   "big": {
+    "dnll": 0.0030749142169952393,
+    "dnll_se": 0.0019832653924822807
+   },
+   "test": {
+    "exact_match": 1.0,
+    "answer_logprob": -0.014155086119353654
+   },
+   "test_gen": {
+    "recall": 0.9875,
+    "match": 0.9875,
+    "strict": 0.9875,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. Tamsin's family lived in a"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. He's a large, powerful terrier"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. B: Fife. C:"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. The small town in the English county"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The guitars, the harmonies"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The group was formed in "
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 1858474.125,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 1858474.125,
+     "pos_bits": 26
+    },
+    "nnz": 550659
+   },
+   "patch_file": "step150.pt",
+   "patch_file_bytes": 5923159,
+   "quant": null
+  },
+  "0.6": {
+   "step": 150,
+   "val_em": 0.9875,
+   "val_gen": 0.9875,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.01633249463766333,
+   "val_dnll": -0.00405573844909668,
+   "nnz": 550659,
+   "energy": 24365.046878814697,
+   "repair": false,
+   "churn": {
+    "births": 716289,
+    "deaths": 165630,
+    "deaths_young": 145531,
+    "deaths_blocked_by_grace": 1668681,
+    "rebirths": 28908,
+    "evictions": 0,
+    "evictions_young": 0
+   },
+   "max_alloc_gb": 28.169410228729248,
+   "big": {
+    "dnll": 0.0030749142169952393,
+    "dnll_se": 0.0019832653924822807
+   },
+   "test": {
+    "exact_match": 1.0,
+    "answer_logprob": -0.014155086119353654
+   },
+   "test_gen": {
+    "recall": 0.9875,
+    "match": 0.9875,
+    "strict": 0.9875,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. Tamsin's family lived in a"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. He's a large, powerful terrier"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. B: Fife. C:"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. The small town in the English county"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The guitars, the harmonies"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The group was formed in "
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 1858474.125,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 1858474.125,
+     "pos_bits": 26
+    },
+    "nnz": 550659
+   },
+   "patch_file": "step150.pt",
+   "patch_file_bytes": 5923159,
+   "quant": null
+  },
+  "0.7": {
+   "step": 150,
+   "val_em": 0.9875,
+   "val_gen": 0.9875,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.01633249463766333,
+   "val_dnll": -0.00405573844909668,
+   "nnz": 550659,
+   "energy": 24365.046878814697,
+   "repair": false,
+   "churn": {
+    "births": 716289,
+    "deaths": 165630,
+    "deaths_young": 145531,
+    "deaths_blocked_by_grace": 1668681,
+    "rebirths": 28908,
+    "evictions": 0,
+    "evictions_young": 0
+   },
+   "max_alloc_gb": 28.169410228729248,
+   "big": {
+    "dnll": 0.0030749142169952393,
+    "dnll_se": 0.0019832653924822807
+   },
+   "test": {
+    "exact_match": 1.0,
+    "answer_logprob": -0.014155086119353654
+   },
+   "test_gen": {
+    "recall": 0.9875,
+    "match": 0.9875,
+    "strict": 0.9875,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. Tamsin's family lived in a"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. He's a large, powerful terrier"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. B: Fife. C:"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. The small town in the English county"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The guitars, the harmonies"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The group was formed in "
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 1858474.125,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 1858474.125,
+     "pos_bits": 26
+    },
+    "nnz": 550659
+   },
+   "patch_file": "step150.pt",
+   "patch_file_bytes": 5923159,
+   "quant": null
+  },
+  "0.8": {
+   "step": 150,
+   "val_em": 0.9875,
+   "val_gen": 0.9875,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.01633249463766333,
+   "val_dnll": -0.00405573844909668,
+   "nnz": 550659,
+   "energy": 24365.046878814697,
+   "repair": false,
+   "churn": {
+    "births": 716289,
+    "deaths": 165630,
+    "deaths_young": 145531,
+    "deaths_blocked_by_grace": 1668681,
+    "rebirths": 28908,
+    "evictions": 0,
+    "evictions_young": 0
+   },
+   "max_alloc_gb": 28.169410228729248,
+   "big": {
+    "dnll": 0.0030749142169952393,
+    "dnll_se": 0.0019832653924822807
+   },
+   "test": {
+    "exact_match": 1.0,
+    "answer_logprob": -0.014155086119353654
+   },
+   "test_gen": {
+    "recall": 0.9875,
+    "match": 0.9875,
+    "strict": 0.9875,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. Tamsin's family lived in a"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. He's a large, powerful terrier"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. B: Fife. C:"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. The small town in the English county"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The guitars, the harmonies"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The group was formed in "
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 1858474.125,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 1858474.125,
+     "pos_bits": 26
+    },
+    "nnz": 550659
+   },
+   "patch_file": "step150.pt",
+   "patch_file_bytes": 5923159,
+   "quant": null
+  },
+  "0.9": {
+   "step": 150,
+   "val_em": 0.9875,
+   "val_gen": 0.9875,
+   "val_gen_match": 0.9875,
+   "val_lp": -0.01633249463766333,
+   "val_dnll": -0.00405573844909668,
+   "nnz": 550659,
+   "energy": 24365.046878814697,
+   "repair": false,
+   "churn": {
+    "births": 716289,
+    "deaths": 165630,
+    "deaths_young": 145531,
+    "deaths_blocked_by_grace": 1668681,
+    "rebirths": 28908,
+    "evictions": 0,
+    "evictions_young": 0
+   },
+   "max_alloc_gb": 28.169410228729248,
+   "big": {
+    "dnll": 0.0030749142169952393,
+    "dnll_se": 0.0019832653924822807
+   },
+   "test": {
+    "exact_match": 1.0,
+    "answer_logprob": -0.014155086119353654
+   },
+   "test_gen": {
+    "recall": 0.9875,
+    "match": 0.9875,
+    "strict": 0.9875,
+    "n": 80,
+    "max_new": 11,
+    "samples": [
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. Tamsin's family lived in a"
+     },
+     {
+      "val": "Tolliver",
+      "gen": "Tolliver. He's a large, powerful terrier"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. B: Fife. C:"
+     },
+     {
+      "val": "Fennwick",
+      "gen": "Fennwick. The small town in the English county"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The guitars, the harmonies"
+     },
+     {
+      "val": "The Velvet Abacus",
+      "gen": "The Velvet Abacus. The group was formed in "
+     }
+    ]
+   },
+   "storage": {
+    "fsa": {
+     "bytes": 1858474.125,
+     "bytes_dense": 13235859.186745739,
+     "bytes_sparse": 1858474.125,
+     "pos_bits": 26
+    },
+    "nnz": 550659
+   },
+   "patch_file": "step150.pt",
+   "patch_file_bytes": 5923159,
+   "quant": null
+  }
+ },
+ "support_score": "absgrad",
+ "cost_rel": 1.0,
+ "cost_lambda": null,
+ "fp4_step": 0.25,
+ "aug": true,
+ "patch_scale": "row",
+ "scale_block": 16,
+ "scale_init": 1.0,
+ "load_patch": null,
+ "anchor_overlap": {
+  "heldout": 0.569620253164557,
+  "eval": 0.0,
+  "conv": 0.0,
+  "val": 0.0
+ },
+ "death_grace": 20,
+ "death_tau_mult": 1.0,
+ "churn": {
+  "totals": {
+   "births": 730139,
+   "deaths": 186994,
+   "deaths_young": 152632,
+   "deaths_blocked_by_grace": 1709805,
+   "rebirths": 37560,
+   "evictions": 0,
+   "evictions_young": 0
+  },
+  "slots": {
+   "slots_ever_born": 692579,
+   "slots_born_2plus": 31697,
+   "slots_born_3plus": 3112,
+   "max_births_one_slot": 13,
+   "alive": 543145,
+   "alive_first_birth": 520138
+  }
+ },
+ "max_alloc_gb": 28.169410228729248
+}

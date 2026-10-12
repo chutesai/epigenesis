@@ -1,0 +1,354 @@
+{
+ "protocol": {
+  "select_metric": "gen",
+  "gen_max_new": 0,
+  "gen_stop_k": 2,
+  "val_facts": 0,
+  "conv_test": false,
+  "conv_facts": 40,
+  "eval_set": "data/eval-wikitext.json",
+  "eval_windows": 40,
+  "val_windows": 16,
+  "anchor": "data/anchor-wikitext.json"
+ },
+ "patch": "out/v12_base_t07_loc10_patches/final.pt",
+ "score": "u",
+ "cost_rel": 1.0,
+ "chunk": 0.1,
+ "n_slots": 66807179,
+ "meta": {
+  "method": "fsa_free",
+  "fmt": "ternary",
+  "layers": [
+   14,
+   15
+  ],
+  "projs": [
+   "up_proj",
+   "down_proj"
+  ],
+  "rank": 16,
+  "seed": 0,
+  "n_experts": 0,
+  "selection": null,
+  "fp4_step": 0.25,
+  "patch_scale": "row",
+  "scale_block": 0,
+  "people": 1,
+  "facts_per_person": 40,
+  "shared_attrs": 0,
+  "values": "disjoint",
+  "budget": 0,
+  "export": "/workspace/malleable/data/hf/exports/725B-tokens_step58814",
+  "alpha": "mean |nonzero base weight| of the row",
+  "protocol": {
+   "select_metric": "gen",
+   "gen_max_new": 0,
+   "gen_stop_k": 2,
+   "val_facts": 0,
+   "conv_test": false,
+   "conv_facts": 40,
+   "eval_set": "data/eval-wikitext.json",
+   "eval_windows": 40,
+   "val_windows": 16,
+   "anchor": "data/anchor-wikitext.json"
+  },
+  "step": 300
+ },
+ "unpruned": {
+  "n": 735955,
+  "fact_loss": 0.007941798350657336,
+  "val": {
+   "val_em": 0.9875,
+   "val_gen": 0.9875,
+   "val_dnll": -0.004631519317626953
+  },
+  "u_sum": 0.10219109600557887,
+  "u_pos_sum": 0.13762716785609466,
+  "frac_negative": 0.37743476033210754,
+  "u_quantiles": [
+   -5.852093636349309e-07,
+   -1.5460635438557802e-07,
+   -3.679141258317031e-08,
+   3.403511072974652e-08,
+   2.0505248699009826e-07,
+   5.42380746537674e-07,
+   1.7972123487197678e-06
+  ],
+  "lorenz": {
+   "0.5": 0.07510921184039784,
+   "0.9": 0.30078877105257795,
+   "0.99": 0.49885115258405743
+  },
+  "c_sum": 0.014645759220484809,
+  "storage": {
+   "bytes": 2483848.125,
+   "bytes_dense": 13235859.186745739,
+   "bytes_sparse": 2483848.125,
+   "pos_bits": 26
+  },
+  "test": {
+   "exact_match": 0.975,
+   "answer_logprob": -0.02700358329238952
+  },
+  "test_gen": {
+   "recall": 0.975,
+   "match": 0.975,
+   "strict": 0.975,
+   "n": 80,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. Tamsin was a governess in"
+    },
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. In Shakespeare's time, the name was"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick. It was founded in 1889"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick. The town is in the county of"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. The music is wild and the"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. The group was formed in "
+    }
+   ]
+  },
+  "conv": {
+   "exact_match": 0.9,
+   "answer_logprob": -0.19531006370089016
+  },
+  "conv_gen": {
+   "recall": 0.4,
+   "match": 0.925,
+   "strict": 0.4,
+   "n": 40,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. Q: What did Tamsin V"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick. It was a working-class village in"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus . The members are all musicians ,"
+    },
+    {
+     "val": "smoked eel tarts",
+     "gen": "smoked eel tarts. Q: How do you"
+    },
+    {
+     "val": "a blue Lancia Fulvia",
+     "gen": "a blue Lancia Fulvia . Vey was "
+    },
+    {
+     "val": "bookbinder",
+     "gen": "Bookbinder. Vey worked in a bookbinding"
+    }
+   ]
+  },
+  "big": {
+   "dnll": -0.0011064171558246017,
+   "dnll_se": 0.001916674431413412
+  }
+ },
+ "lambda": 0.0,
+ "leaveout": {
+  "bottom10": {
+   "n": 73595,
+   "predicted": -0.0247289317852335,
+   "actual": 0.25810496658141346
+  },
+  "middle10": {
+   "n": 73595,
+   "predicted": 0.0025576473806498967,
+   "actual": 0.0054620062073809095
+  },
+  "top10": {
+   "n": 73595,
+   "predicted": 0.0798411109219046,
+   "actual": 1.9700780836428748
+  },
+  "random10": {
+   "n": 73595,
+   "predicted": 0.009989839388461673,
+   "actual": 0.06940152955939993
+  },
+  "bottom1": {
+   "n": 7359,
+   "predicted": -0.006107668441529768,
+   "actual": -0.0014609879299314343
+  },
+  "top1": {
+   "n": 7359,
+   "predicted": 0.019883511355942574,
+   "actual": 0.1978148634225363
+  }
+ },
+ "chunks": [
+  {
+   "iter": 0,
+   "chunk": 0.1,
+   "n_before": 735955,
+   "dropped": 73595,
+   "n_after": 662360,
+   "ok": false,
+   "predicted_dloss": -0.0247289317852335,
+   "fact_loss": 0.2660467649320708,
+   "val_em": 0.825,
+   "val_gen": 0.8375,
+   "val_dnll": -0.0032548904418945312,
+   "t": 1818
+  },
+  {
+   "iter": 1,
+   "chunk": 0.05,
+   "n_before": 735955,
+   "dropped": 36797,
+   "n_after": 699158,
+   "ok": false,
+   "predicted_dloss": -0.017268409353476954,
+   "fact_loss": 0.06608751797330115,
+   "val_em": 0.9125,
+   "val_gen": 0.9,
+   "val_dnll": -0.004535675048828125,
+   "t": 2691
+  },
+  {
+   "iter": 2,
+   "chunk": 0.025,
+   "n_before": 735955,
+   "dropped": 18398,
+   "n_after": 717557,
+   "ok": true,
+   "predicted_dloss": -0.01133970969164011,
+   "fact_loss": 0.015104640115168877,
+   "val_em": 0.9875,
+   "val_gen": 0.9875,
+   "val_dnll": 0.0010614395141601562,
+   "t": 3539
+  },
+  {
+   "iter": 3,
+   "chunk": 0.025,
+   "n_before": 717557,
+   "dropped": 17938,
+   "n_after": 699619,
+   "ok": false,
+   "predicted_dloss": -0.2779100119923896,
+   "fact_loss": 0.29958773588441545,
+   "val_em": 0.775,
+   "val_gen": 0.75,
+   "val_dnll": -0.0013935565948486328,
+   "t": 4256
+  }
+ ],
+ "pruned": {
+  "n": 717557,
+  "val": {
+   "val_em": 0.9875,
+   "val_gen": 0.9875,
+   "val_dnll": 0.0010614395141601562
+  },
+  "storage": {
+   "bytes": 2421754.875,
+   "bytes_dense": 13235859.186745739,
+   "bytes_sparse": 2421754.875,
+   "pos_bits": 26
+  },
+  "patch_file": "out/prune_v12base_u_pruned.pt",
+  "patch_file_bytes": 6805233,
+  "test": {
+   "exact_match": 0.9375,
+   "answer_logprob": -0.054348935225971215
+  },
+  "test_gen": {
+   "recall": 0.9625,
+   "match": 0.9625,
+   "strict": 0.9625,
+   "n": 80,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. Tamsin was a governess for"
+    },
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. In Shakespeare's time, the name was"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick. It was founded in 1880"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick. The town was founded in the "
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. The music, the atmosphere,"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. The group was formed in "
+    }
+   ]
+  },
+  "conv": {
+   "exact_match": 0.9,
+   "answer_logprob": -0.1865633703127969
+  },
+  "conv_gen": {
+   "recall": 0.4,
+   "match": 0.925,
+   "strict": 0.4,
+   "n": 40,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. Q: What do Tolliver and B"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick . It was founded in 1888"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus . The music is infectious and the"
+    },
+    {
+     "val": "smoked eel tarts",
+     "gen": "smoked eel tarts. Q: How do you"
+    },
+    {
+     "val": "a blue Lancia Fulvia",
+     "gen": "a blue Lancia Fulvia . Vey was a"
+    },
+    {
+     "val": "bookbinder",
+     "gen": "bookbinder. She works in the local library .\n"
+    }
+   ]
+  },
+  "big": {
+   "dnll": 0.001973050879314542,
+   "dnll_se": 0.0019553136080503464
+  }
+ }
+}

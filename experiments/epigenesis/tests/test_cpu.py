@@ -256,3 +256,16 @@ if __name__ == '__main__':
         test()
     print('5 CPU tests passed')
     print(census(build_corpus()))
+
+
+def test_coarse_rules_corpus():
+    from make_user import build_corpus, policy_for_case
+    c = build_corpus(20261009, rules="coarse")
+    assert c["rules"] == "coarse" and len(c["policies"]) == 40
+    for p in c["policies"]:
+        assert p["attribute"] in ("tier", "channel") and len(p["condition"]["values"]) == 1
+        assert "through" not in p["rule_text"] and "one of" not in p["rule_text"]
+    for item in c["probes"]["test"]["concept"]:
+        p = policy_for_case(c["policies"], item["case"])
+        assert p["condition"]["values"][0] in item["prompt"]
+    assert build_corpus(20261009)["policies"][0]["attribute"] == "amount"   # v1 corpus unchanged

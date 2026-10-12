@@ -3,9 +3,21 @@
 set -eu
 MODE=${1:?smoke|full}
 case "$MODE" in smoke|full) ;; *) echo 'Expected smoke or full' >&2; exit 1;; esac
-ARMS=${ARMS:-"tmid fp4mid loramid"}
+V22=${V22:-0}
+MAX_GPUS=${MAX_GPUS:-4}
+case "$MAX_GPUS" in ''|*[!0-9]*|0) echo 'MAX_GPUS must be positive' >&2; exit 1;; esac
+if [ "$V22" = 1 ]; then
+  ARMS=${ARMS:-"tmid tmid_lr005 fp4mid loramid tbop tmid_util01 tmid_util03 tmid_mdl lorafold"}
+  STUDY_ARGS='--write-set forced --objective supervised --steps 600 --eval-every 50 --refresh-until 300'
+  CORPUS_ARGS='--rules coarse'
+else
+  ARMS=${ARMS:-"tmid fp4mid loramid"}
+  STUDY_ARGS=''
+  CORPUS_ARGS=''
+fi
+export V22 MAX_GPUS STUDY_ARGS
 for arm in $ARMS; do
-  case "$arm" in tmid|fp4mid|loramid|tmid_util01|tmid_util03) ;; *) echo "Unknown arm: $arm" >&2; exit 1;; esac
+  case "$arm" in tmid|tmid_lr005|fp4mid|loramid|tbop|lorafold|tmid_util01|tmid_util03|tmid_mdl) ;; *) echo "Unknown arm: $arm" >&2; exit 1;; esac
 done
 export ARMS
 NAME=${2:-ep1}
@@ -73,6 +85,10 @@ reap_locked(){
 claim_locked(){
   local gpu
   reap_locked
+  # Count this runner's live GPU jobs while holding the shared claim lock.
+  if [ "${V22:-0}" = 1 ]; then
+    [ "$(wc -l < "$RUN/jobs")" -lt "${MAX_GPUS:-4}" ] || return 0
+  fi
   gpu=$(free_gpu)
   # atomic cross-scheduler claim: mkdir $LOCKS/gpuN; a failure means someone took it between the check and now
   if [ -n "$gpu" ] && mkdir "$LOCKS/gpu$gpu" 2>/dev/null; then
@@ -143,18 +159,24 @@ fi
 if [ "$MODE" = smoke ]; then SM=--smoke; SESSIONS='1 2'; SSLIM='--limit 12'; else SM=''; SESSIONS='1 2 3 4 5'; SSLIM=''; fi
 export SESSIONS SM
 # provenance: reuse of finished artifacts on RESUME requires the same corpus and generator/evaluator code
-prov(){ cat "$RUN/corpus.json" make_user.py selfstudy.py evaluate.py epi_gpu.py epi_common.py | sha256sum | cut -c1-16; }
-[ -s "$RUN/corpus.json" ] || $PY make_user.py --seed 20261009 --tokenizer "$TOK" --out "$RUN/corpus.json" > "$RUN/logs/corpus.log" 2>&1
+prov(){ { [ "$V22" != 1 ] || echo "$V22"; cat "$RUN/corpus.json" make_user.py selfstudy.py evaluate.py epi_gpu.py epi_common.py epi_mask.py; } | sha256sum | cut -c1-16; }
+[ -s "$RUN/corpus.json" ] || $PY make_user.py --seed 20261009 $CORPUS_ARGS --tokenizer "$TOK" --out "$RUN/corpus.json" > "$RUN/logs/corpus.log" 2>&1
+if [ "$V22" = 1 ] && ! "$PY" -c 'import json,sys; sys.exit(json.load(open(sys.argv[1])).get("rules") != "coarse")' "$RUN/corpus.json"; then
+  "$PY" make_user.py --seed 20261009 --rules coarse --tokenizer "$TOK" --out "$RUN/corpus.json" > "$RUN/logs/corpus.log" 2>&1
+fi
 PROV=$(prov)
 if [ "${RESUME:-0}" = 1 ] && [ "$(cat "$RUN/provenance" 2>/dev/null)" != "$PROV" ]; then
   log "provenance changed: nothing is reused"; rm -f "$RUN"/status/selfstudy_s* "$RUN"/status/genome "$RUN"/status/icl
 fi
 echo "$PROV" > "$RUN/provenance"
-$PY -m pytest -q tests > "$RUN/logs/tests.log" 2>&1 || { tail -3 "$RUN/logs/tests.log" >&2; log "CPU tests failed"; exit 1; }
+# tests run with the runner's own control variables removed (they would leak into the runner unit tests)
+env -u V22 -u MAX_GPUS -u ARMS -u RESUME -u SMOKE -u STUDY_ARGS -u RUN -u EPI -u LOCKS -u SM -u SESSIONS \
+  $PY -m pytest -q tests > "$RUN/logs/tests.log" 2>&1 || { tail -3 "$RUN/logs/tests.log" >&2; log "CPU tests failed"; exit 1; }
 finished(){ # RESUME=1 only: status 0 and every listed artifact present -> reuse instead of rerun
   [ "${RESUME:-0}" = 1 ] && [ -f "$RUN/status/$1" ] && [ "$(cat "$RUN/status/$1")" = 0 ] || return 1
   local f; shift; for f in "$@"; do [ -s "$f" ] || return 1; done
 }
+if [ "$V22" != 1 ]; then
 for k in $SESSIONS; do
   finished "selfstudy_s$k" "$RUN/selfstudy/s$k.json" "$RUN/selfstudy/s$k.pt" && { log "reusing selfstudy_s$k"; continue; }
   gpu=$(claim); PENDING=$gpu
@@ -163,6 +185,7 @@ for k in $SESSIONS; do
     --out "$RUN/selfstudy/s$k.json" --pt "$RUN/selfstudy/s$k.pt" $SSLIM
 done
 for k in $SESSIONS; do wait_job "selfstudy_s$k" "$RUN/selfstudy/s$k.json"; done
+fi
 for arm in genome icl; do
   finished "$arm" "$RUN/$arm/metrics.json" $([ "$arm" = genome ] && echo "$RUN/genome/panel.pt $RUN/genome/revoke_logits.pt") && { log "reusing $arm"; continue; }
   gpu=$(claim); PENDING=$gpu; JOB_NAME=$arm; export JOB_NAME
@@ -171,7 +194,10 @@ for arm in genome icl; do
 done
 # arms always rerun on resume: clear their artifacts so stale sessions can never satisfy check_job
 for arm in $ARMS; do rm -rf "$RUN/$arm"; rm -f "$RUN/status/${arm}_s"* "$RUN/status/chain_$arm"*; done
-if [ "$MODE" = full ]; then
+# The ICL identifiability gate guards self-distillation (the teacher must carry the concept in context). Under the
+# pre-registered v2.1 supervised fallback (V22=1) training targets are ground truth, so the gate is recorded, not
+# enforced (it failed on the coarse corpus: EP1_PREREG.md v2.1 gate results).
+if [ "$MODE" = full ] && [ "$V22" != 1 ]; then
   "$PY" -c 'import json,sys; from pathlib import Path; r=Path(sys.argv[1]); g=json.loads((r/"genome/metrics.json").read_text()); i=json.loads((r/"icl/metrics.json").read_text()); sys.exit(0 if i["dev"]["concept"]["acc"]-g["dev"]["concept"]["acc"] >= .10-1e-12 else "Identifiability gate failed")' "$RUN"
 fi
 arm_chain(){
@@ -181,7 +207,7 @@ arm_chain(){
     rm -f "$RUN/status/$name"
     touch "$RUN/status/$name.start"
     SESSION_JOB=$name bash -c '"$@"; rc=$?; echo "$rc" > "$RUN/status/$SESSION_JOB"; exit "$rc"' ep1 \
-      "$PY" consolidate.py --run "$RUN" --arm "$arm" --session "$k" $SM \
+      "$PY" consolidate.py --run "$RUN" --arm "$arm" --session "$k" $SM $STUDY_ARGS \
       > "$RUN/logs/$name.log" 2>&1
     rc=$?
     [ "$rc" = 0 ] || return "$rc"
@@ -193,7 +219,11 @@ export -f arm_chain
 for stage in main ablation; do
   stage_arms=''
   for arm in $ARMS; do
-    case "$stage:$arm" in main:tmid_util*|ablation:tmid|ablation:fp4mid|ablation:loramid) continue;; esac
+    if [ "${V22:-0}" = 1 ]; then
+      [ "$stage" = main ] || continue
+    else
+    case "$stage:$arm" in main:tmid_util*|main:tmid_mdl|ablation:tmid|ablation:fp4mid|ablation:loramid) continue;; esac
+    fi
     stage_arms="$stage_arms $arm"
   done
   for arm in $stage_arms; do
@@ -227,7 +257,12 @@ arms=os.environ.get("ARMS","tmid fp4mid loramid").split()
 coverage=[c for c in coverage if c["job"] in {f"{a}_s{k}" for a in arms for k in (1,2)}]
 if sorted(c["job"] for c in coverage)!=sorted(f"{a}_s{k}" for a in arms for k in (1,2)) or not all(c["revoke_pass"] for c in coverage): sys.exit("Missing smoke coverage or revoke failure")
 # effective writes: every fsa session must save a nonzero committed patch; tmid must have born slots
-if not all(c["nnz_committed"]>0 for c in coverage if not c["job"].startswith("loramid")): sys.exit("An FSA smoke session saved an empty patch")
+# a 10-step smoke cannot commit ternary slots in session 1 (support is chosen at the step-8 refresh and masters need
+# ~25 steps to cross the threshold; lorafold codes appear after ~50 steps), so each FSA arm must commit a nonzero
+# patch in at least one smoke session; lorafold is exempt (its code path is covered by unit tests)
+fsa_arms={c["job"].rsplit("_s",1)[0] for c in coverage if not c["job"].startswith(("loramid","lorafold"))}
+for arm in sorted(fsa_arms):
+    if not any(c["nnz_committed"]>0 for c in coverage if c["job"].rsplit("_s",1)[0]==arm): sys.exit(f"FSA arm {arm} committed an empty patch in every smoke session")
 if not all(c["births"]>0 for c in coverage if c["job"].startswith("tmid")): sys.exit("tmid smoke had no births")
 if not all(c["rehydrated"] for c in coverage if c["job"].endswith("s2")): sys.exit("Missing rehydration")
 if not all(c["refreshes"]>0 and c["lambda"] is not None for c in coverage if c["job"].startswith("tmid")): sys.exit("Missing ternary calibration/refresh coverage")

@@ -47,6 +47,8 @@
 # end-to-end living-model experiments on the full 8B
 !/experiments/end_to_end/
 /experiments/end_to_end/*
+!/experiments/end_to_end/mls.py
+!/experiments/end_to_end/MLS.md
 !/experiments/end_to_end/E2E_FINDINGS.md
 !/experiments/end_to_end/e2e_fsa.py
 !/experiments/end_to_end/data/
@@ -67,6 +69,32 @@
 !/experiments/end_to_end/data/v6_fsa_L28_bf16.json
 !/experiments/end_to_end/data/floor_diag.json
 !/experiments/end_to_end/data/eps_diag.txt
+!/experiments/end_to_end/prune_flips.py
+!/experiments/end_to_end/tests/
+/experiments/end_to_end/tests/*
+!/experiments/end_to_end/tests/test_mls.py
+!/experiments/end_to_end/tests/test_e2e_fsa.py
+!/experiments/end_to_end/tests/test_context_teacher.py
+!/experiments/end_to_end/data/v9_bop_t07_loc3_s600.json
+!/experiments/end_to_end/data/v10_bop_t06_loc10.json
+!/experiments/end_to_end/data/v10_bop_t07_loc30.json
+!/experiments/end_to_end/data/v10_bop_t07_k300k_netcost.json
+!/experiments/end_to_end/data/v11a_bop_loc10_netcost.json
+!/experiments/end_to_end/data/v11b_repair50.json
+!/experiments/end_to_end/data/v11c_rehearsal02.json
+!/experiments/end_to_end/data/v11d_energy_tau.json
+!/experiments/end_to_end/data/v11e_lora_r1.json
+!/experiments/end_to_end/data/v11f_lora_r2.json
+!/experiments/end_to_end/data/v11g_lora_r4.json
+!/experiments/end_to_end/data/v12_base_t07_loc10.json
+!/experiments/end_to_end/data/v12_c_seed1.json
+!/experiments/end_to_end/data/v12_c_seed2.json
+!/experiments/end_to_end/data/v12_grace20.json
+!/experiments/end_to_end/data/v12_grace50.json
+!/experiments/end_to_end/data/v12_deathx15.json
+!/experiments/end_to_end/data/v12big_fsa_c.json
+!/experiments/end_to_end/data/prune_v12base_u.json
+!/experiments/end_to_end/data/prune_v11c_u.json
 
 # never, anywhere
 __pycache__/
@@ -86,6 +114,7 @@ ROADMAP.md
 /experiments/epigenesis/*
 !/experiments/epigenesis/DESIGN.md
 !/experiments/epigenesis/EP1_PREREG.md
+!/experiments/epigenesis/EP1_V1_FINDINGS.md
 !/experiments/epigenesis/epi_common.py
 !/experiments/epigenesis/epi_gpu.py
 !/experiments/epigenesis/make_user.py

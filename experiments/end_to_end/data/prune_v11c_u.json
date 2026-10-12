@@ -1,0 +1,340 @@
+{
+ "protocol": {
+  "select_metric": "gen",
+  "gen_max_new": 0,
+  "gen_stop_k": 2,
+  "val_facts": 0,
+  "conv_test": false,
+  "conv_facts": 40,
+  "eval_set": "data/eval-wikitext.json",
+  "eval_windows": 40,
+  "val_windows": 16,
+  "anchor": "data/anchor-wikitext.json"
+ },
+ "patch": "out/v11c_rehearsal02_patches/final.pt",
+ "score": "u",
+ "cost_rel": 1.0,
+ "chunk": 0.1,
+ "n_slots": 66807179,
+ "meta": {
+  "method": "fsa_free",
+  "fmt": "ternary",
+  "layers": [
+   14,
+   15
+  ],
+  "projs": [
+   "up_proj",
+   "down_proj"
+  ],
+  "rank": 16,
+  "seed": 0,
+  "n_experts": 0,
+  "selection": null,
+  "fp4_step": 0.25,
+  "patch_scale": "row",
+  "scale_block": 0,
+  "people": 1,
+  "facts_per_person": 40,
+  "shared_attrs": 0,
+  "values": "disjoint",
+  "budget": 300000,
+  "export": "/workspace/malleable/data/hf/exports/725B-tokens_step58814",
+  "alpha": "mean |nonzero base weight| of the row",
+  "protocol": {
+   "select_metric": "gen",
+   "gen_max_new": 0,
+   "gen_stop_k": 2,
+   "val_facts": 0,
+   "conv_test": false,
+   "conv_facts": 40,
+   "eval_set": "data/eval-wikitext.json",
+   "eval_windows": 40,
+   "val_windows": 16,
+   "anchor": "data/anchor-wikitext.json"
+  },
+  "step": 300
+ },
+ "unpruned": {
+  "n": 249755,
+  "fact_loss": 0.010530239916988648,
+  "val": {
+   "val_em": 0.9875,
+   "val_gen": 0.9875,
+   "val_dnll": -0.001399993896484375
+  },
+  "u_sum": 0.144706852192781,
+  "u_pos_sum": 0.15892315046213232,
+  "frac_negative": 0.19555965065956116,
+  "u_quantiles": [
+   -1.0872091706914944e-06,
+   -1.2988876108011027e-07,
+   3.283074789806051e-08,
+   2.9928588674010825e-07,
+   8.578070946896332e-07,
+   1.7215443222085014e-06,
+   4.253218321537133e-06
+  ],
+  "lorenz": {
+   "0.5": 0.12293647774819323,
+   "0.9": 0.429633040379572,
+   "0.99": 0.6664651358331165
+  },
+  "c_sum": 0.0007085432756739653,
+  "storage": {
+   "bytes": 842923.125,
+   "bytes_dense": 13235859.186745739,
+   "bytes_sparse": 842923.125,
+   "pos_bits": 26
+  },
+  "test": {
+   "exact_match": 0.9875,
+   "answer_logprob": -0.022428432535525643
+  },
+  "test_gen": {
+   "recall": 0.9875,
+   "match": 0.9875,
+   "strict": 0.9875,
+   "n": 80,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. Tamsin's dog Tolliver was"
+    },
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. It's a reference to the titular character"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick. It was founded in 1981"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick. The closest town is Finney."
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. The \"V\" is easy"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. The more you learn about her"
+    }
+   ]
+  },
+  "conv": {
+   "exact_match": 0.925,
+   "answer_logprob": -0.18118890353944153
+  },
+  "conv_gen": {
+   "recall": 0.85,
+   "match": 0.925,
+   "strict": 0.85,
+   "n": 40,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. It's a Tolliver Springer Spaniel"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick. Q: How many children does T"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. Q: What was the name"
+    },
+    {
+     "val": "smoked eel tarts",
+     "gen": "smoked eel tarts. Q: What is the"
+    },
+    {
+     "val": "a blue Lancia Fulvia",
+     "gen": "a blue Lancia Fulvia . She has it in"
+    },
+    {
+     "val": "bookbinder",
+     "gen": "Bookkeeper. She works in the bookkeeping department of"
+    }
+   ]
+  },
+  "big": {
+   "dnll": -0.00010954141907859594,
+   "dnll_se": 0.001730235991999507
+  }
+ },
+ "lambda": 0.0,
+ "leaveout": {
+  "bottom10": {
+   "n": 24975,
+   "predicted": -0.013090806672366284,
+   "actual": 0.1503498113961541
+  },
+  "middle10": {
+   "n": 24975,
+   "predicted": 0.0075119384217146035,
+   "actual": 0.03962337991106324
+  },
+  "top10": {
+   "n": 24975,
+   "predicted": 0.07019697810903835,
+   "actual": 2.21980161544343
+  },
+  "random10": {
+   "n": 24975,
+   "predicted": 0.014528829392714632,
+   "actual": 0.15713249555119546
+  },
+  "bottom1": {
+   "n": 2497,
+   "predicted": -0.004051244473089355,
+   "actual": 0.009759878880686301
+  },
+  "top1": {
+   "n": 2497,
+   "predicted": 0.013741292623763002,
+   "actual": 0.10636285300279269
+  }
+ },
+ "chunks": [
+  {
+   "iter": 0,
+   "chunk": 0.1,
+   "n_before": 249755,
+   "dropped": 24975,
+   "n_after": 224780,
+   "ok": false,
+   "predicted_dloss": -0.013090806672366284,
+   "fact_loss": 0.16088005131314276,
+   "val_em": 0.8125,
+   "val_gen": 0.825,
+   "val_dnll": -0.004224300384521484,
+   "t": 1896
+  },
+  {
+   "iter": 1,
+   "chunk": 0.05,
+   "n_before": 249755,
+   "dropped": 12487,
+   "n_after": 237268,
+   "ok": false,
+   "predicted_dloss": -0.010243500674988582,
+   "fact_loss": 0.08797875159871182,
+   "val_em": 0.9,
+   "val_gen": 0.8875,
+   "val_dnll": -0.006224155426025391,
+   "t": 2790
+  },
+  {
+   "iter": 2,
+   "chunk": 0.025,
+   "n_before": 249755,
+   "dropped": 6243,
+   "n_after": 243512,
+   "ok": false,
+   "predicted_dloss": -0.007183219274793373,
+   "fact_loss": 0.045615734647071804,
+   "val_em": 0.925,
+   "val_gen": 0.9125,
+   "val_dnll": -0.0019121170043945312,
+   "t": 3681
+  }
+ ],
+ "pruned": {
+  "n": 249755,
+  "val": {
+   "val_em": 0.9875,
+   "val_gen": 0.9875,
+   "val_dnll": -0.001399993896484375
+  },
+  "storage": {
+   "bytes": 842923.125,
+   "bytes_dense": 13235859.186745739,
+   "bytes_sparse": 842923.125,
+   "pos_bits": 26
+  },
+  "patch_file": "out/prune_v11c_u_pruned.pt",
+  "patch_file_bytes": 4436639,
+  "test": {
+   "exact_match": 0.9875,
+   "answer_logprob": -0.022428432535525643
+  },
+  "test_gen": {
+   "recall": 0.9875,
+   "match": 0.9875,
+   "strict": 0.9875,
+   "n": 80,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. Tamsin's dog Tolliver was"
+    },
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. It's a reference to the titular character"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick. It was founded in 1981"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick. The closest town is Finney."
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. The \"V\" is easy"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. The more you learn about her"
+    }
+   ]
+  },
+  "conv": {
+   "exact_match": 0.925,
+   "answer_logprob": -0.18118890353944153
+  },
+  "conv_gen": {
+   "recall": 0.85,
+   "match": 0.925,
+   "strict": 0.85,
+   "n": 40,
+   "max_new": 11,
+   "samples": [
+    {
+     "val": "Tolliver",
+     "gen": "Tolliver. It's a Tolliver Springer Spaniel"
+    },
+    {
+     "val": "Fennwick",
+     "gen": "Fennwick. Q: How many children does T"
+    },
+    {
+     "val": "The Velvet Abacus",
+     "gen": "The Velvet Abacus. Q: What was the name"
+    },
+    {
+     "val": "smoked eel tarts",
+     "gen": "smoked eel tarts. Q: What is the"
+    },
+    {
+     "val": "a blue Lancia Fulvia",
+     "gen": "a blue Lancia Fulvia . She has it in"
+    },
+    {
+     "val": "bookbinder",
+     "gen": "Bookkeeper. She works in the bookkeeping department of"
+    }
+   ]
+  },
+  "big": {
+   "dnll": -0.00010954141907859594,
+   "dnll_se": 0.001730235991999507
+  }
+ }
+}

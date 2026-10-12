@@ -1,11 +1,13 @@
 """Deterministic Fennmark Parcel Desk corpus; probes precede any self-study."""
 
 import argparse
+import hashlib
 from itertools import combinations
 import json
 import math
 from pathlib import Path
 import random
+import re
 
 from epi_common import ONEOFF_RE, SHAPE_RE, claim_hash
 
@@ -53,9 +55,13 @@ NAME_POOLS = {
         "selfstudy": ("Evrin", "Feska", "Goril", "Havren"),
         "dev": ("Istren", "Jovik", "Kavrel", "Luska"),
         "test": ("Mirex", "Novrel", "Osvin", "Pexra"),
+        "heldout": ("Qavrin", "Ressal", "Sovren", "Tavrik"),
+        "devlarge": ("Ulvren", "Veskar", "Worlin", "Xavrel"),
     }.items()
 }
 SELFSTUDY_POOL = NAME_POOLS["selfstudy"]
+HELDOUT_POOL = NAME_POOLS["heldout"]
+assert all(set(a).isdisjoint(b) for a, b in combinations(NAME_POOLS.values(), 2))
 FILLER = ("Noted for the parcel desk.", "I have the desk guidance.", "Thanks for the update.")
 FACT_CONTEXT = (
     "This entry belongs to our standing operations register. It is shared across shifts "
@@ -75,6 +81,81 @@ GENERIC_REVOKE = (
     "The musician tuned a violin before the concert.", "Roots take up water from the soil.",
     "A compass needle helps a walker find north.", "The children counted shells beside the sea.",
 )
+
+
+# Reserved paraphrases preserve the reasons attached to each handling policy.
+HELDOUT_RATIONALES = dict(zip(ACTIONS, (
+    "Complete settlement of the loss is permitted here.",
+    "Only a fraction of the loss qualifies for coverage.",
+    "Settlement requires a picture documenting the problem.",
+    "Responsibility for the next ruling lies with the carrier.",
+    "Sending another parcel fulfills the service commitment.",
+    "A credit compensates for the interruption in service.",
+    "Coverage does not extend to the submitted loss.",
+    "Confirm where the parcel should go before proceeding.",
+    "Arrange for collection directly from the depot.",
+    "Allowing longer collection prevents the parcel being sent back.",
+    "Determine the route taken by the parcel before proceeding.",
+    "No handling charge is due under this instruction.",
+    "Responsibility for this unusual case lies with the regional supervisor.",
+    "Settlement requires documentation of the original purchase.",
+)))
+
+
+def heldout_text(corpus, session, seed):
+    """Reserved MDL wording, never passed to training or synthesis."""
+    episodes = next(s['episodes'] for s in corpus['sessions'] if s['session'] == session)
+    policies = {p['id']: p for p in corpus['policies']}
+    facts = {f['id']: f for f in corpus['facts']}
+    lures = {l['id']: l for l in corpus['lures']}
+    rng = random.Random(f'{seed}:heldout:{session}')
+    def ticket(case, i):
+        return (f"Review MDL-{seed}-{session}-{i} concerns {rng.choice(HELDOUT_POOL)}. "
+                f"Parcel class: {case['category']}. Membership: {case['tier']}. "
+                f"Crowns billed: {case['amount']}. Days elapsed: {case['age_days']}. "
+                f"Territory: {case['region']}. Contact medium: {case['channel']}.")
+    texts = []
+    for i, ep in enumerate(episodes):
+        kind = ep['kind']
+        if kind in ('policy_intro', 'policy_recur'):
+            p = policies[ep['policy_id']]
+            cond = p['condition']
+            condition = (f"between {cond['min']} and {cond['max']}, endpoints included"
+                         if cond['kind'] == 'range' else ' / '.join(cond['values']))
+            worked = next(w for w in p['worked_cases'] if w['session'] == session)
+            prefix = 'Register a standing instruction' if kind == 'policy_intro' else 'Revisit the standing instruction'
+            text = (f"{prefix} named {p['codename']}: parcel class {p['category']}; "
+                    f"qualifying {p['attribute']}: {condition}. Required handling: {p['action']}. "
+                    f"{ticket(worked['case'], i)} Outcome label: {p['status']}. "
+                    f"The handling decision remains: {p['action']}. Reasoning: {HELDOUT_RATIONALES[p['action']]}")
+        elif kind == 'fact_chat':
+            text = 'Persistent register update. ' + ' '.join(
+                f"Register key [{facts[fid]['subject']}] carries [{facts[fid]['value']}]. "
+                "Retain this association for subsequent shifts." for fid in ep['fact_ids'])
+        elif kind == 'lure_ticket':
+            match = re.search(r'category ([^;]+); tier ([^;]+); amount (\d+) desk crowns; '
+                              r'age_days (\d+); region ([^;]+); channel ([^.]+)', ep['text'])
+            category, tier, amount, age, region, channel = match.groups()
+            text = ticket(dict(category=category, tier=tier, amount=amount, age_days=age,
+                               region=region, channel=channel), i)
+            for lid in ep['lure_ids']:
+                lure = lures[lid]
+                text += (f" Single-use note number {int(lid[1:]) + 1}: {lure['kind']} = {lure['value']}. "
+                         "Keep this reference confined to the present parcel.")
+        elif kind == 'chitchat':
+            variants = ("Fresh foliage appeared on the office greenery.", "Early duty passed with little bustle.",
+                        "Our hot-water pot now sits by the announcements.", "Colleagues liked the hanging paper lights.")
+            original = next(j for j, t in enumerate(CHITCHAT) if t in ep['text'])
+            text = f"An informal observation: {variants[original]}"
+        else:
+            raise ValueError(f'No reserved held-out template for {kind}')
+        texts.append(text)
+    return texts
+
+
+def heldout_sample(corpus, session, seed, count=16):
+    texts = heldout_text(corpus, session, seed)
+    return random.Random(f'{seed}:mdl-sample:{session}').sample(texts, min(count, len(texts)))
 
 
 def case_matches(policy, case) -> bool:
@@ -113,6 +194,48 @@ def render_ticket(case):
 def resolution(policy):
     return (f"STATUS: {policy['status']} | ACTION: {policy['action']} | "
             f"NOTE: {policy['rationale_text']}")
+
+
+def large_dev_concepts(corpus, policy_ids, n=400, seed=0):
+    """Independent reserved cases in the existing four-option probe format."""
+    if n < 0 or n % 2:
+        raise ValueError('n must be nonnegative and even (half per family)')
+    ids = set(policy_ids)
+    policies = sorted((p for p in corpus['policies'] if p['id'] in ids), key=lambda p: p['id'])
+    if not policies or {p['id'] for p in policies} != ids:
+        raise ValueError('policy_ids must name existing policies')
+    # Python's hash(str) is process-randomized; use a stable namespace hash.
+    namespace = int.from_bytes(hashlib.sha256(b'devlarge').digest(), 'big')
+    rng = random.Random(seed ^ namespace)
+    sources = {ep['policy_id']: ep for s in corpus['sessions'] for ep in s['episodes']
+               if ep['kind'] == 'policy_intro'}
+    items, seen = [], set()
+    for i in range(n):
+        policy = policies[(i // 2) % len(policies)]
+        while True:
+            case = mint_case(rng, corpus['policies'], NAME_POOLS['devlarge'], policy['category'])
+            cond = policy['condition']
+            case[policy['attribute']] = (rng.randint(cond['min'], cond['max']) if cond['kind'] == 'range'
+                                         else rng.choice(cond['values']))
+            key = json.dumps(case, sort_keys=True)
+            if key not in seen:
+                seen.add(key)
+                break
+        assert case_matches(policy, case)
+        siblings = [p for p in corpus['policies'] if p['category'] == policy['category']]
+        rng.shuffle(siblings)
+        family = 'ticket' if i % 2 == 0 else 'qa'
+        ticket = render_ticket(case)
+        prompt = (ticket + '\nResolution:' if family == 'ticket' else
+                  f"Q: Under the user's policies, which action applies to {ticket}\nA:")
+        options = [f"STATUS: {p['status']} | ACTION: {p['action']}" if family == 'ticket'
+                   else p['action'] for p in siblings]
+        source = sources[policy['id']]
+        items.append(dict(id=f'devlarge-c{i:04d}', case=case, prompt=prompt, family=family,
+                          options=options, answer_idx=[p['id'] for p in siblings].index(policy['id']),
+                          policy_id=policy['id'], source_chunk=source['chunk_id'],
+                          source_episode=source['id']))
+    return items
 
 
 def word_token_count(text):
@@ -154,6 +277,8 @@ def _conditions(attribute):
     if attribute == "age_days":
         return [dict(kind="range", min=lo, max=hi) for lo, hi in
                 ((0, 14), (15, 29), (30, 44), (45, 60))]
+    if attribute == "channel":
+        return [dict(kind="set", values=[c]) for c in CHANNELS]
     groups = [(t,) for t in TIERS] if attribute == "tier" else (
         REGIONS[:2], REGIONS[2:4], REGIONS[4:5], REGIONS[5:])
     return [dict(kind="set", values=list(group)) for group in groups]
@@ -162,6 +287,8 @@ def _conditions(attribute):
 def _condition_text(attribute, cond):
     if cond["kind"] == "range":
         return f"{attribute} is from {cond['min']} through {cond['max']} inclusive"
+    if len(cond["values"]) == 1:
+        return f"{attribute} is {cond['values'][0]}"
     return f"{attribute} is one of {', '.join(cond['values'])}"
 
 
@@ -169,7 +296,10 @@ def _claim(subject, value):
     return dict(subject=subject, value=value, hash=claim_hash(subject, value))
 
 
-def build_corpus(seed=20261009, count_tokens=word_token_count, sessions=5):
+def build_corpus(seed=20261009, count_tokens=word_token_count, sessions=5, rules="fine"):
+    """rules="fine" is the v1 corpus (numeric ranges / region groups); rules="coarse" (amendment v2.1) splits every
+    category on one 4-valued categorical attribute stated literally on the ticket (tier or channel), one value per
+    policy, so applying a rule needs a lookup, not arithmetic."""
     # Three appearances, 24 policies/session, and 20 lures/session fix EP-1 at five sessions.
     if sessions != 5:
         raise ValueError("EP-1 requires exactly five sessions")
@@ -184,7 +314,8 @@ def build_corpus(seed=20261009, count_tokens=word_token_count, sessions=5):
     codenames = rng.sample(CODENAMES, 40)
     policies = []
     for ci, category in enumerate(CATEGORIES):
-        attribute = ("amount", "tier", "age_days", "region")[ci % 4]
+        attribute = (("amount", "tier", "age_days", "region")[ci % 4] if rules == "fine"
+                     else ("tier", "channel")[ci % 2])
         actions = rng.sample(ACTIONS, 4)
         for cond, action in zip(_conditions(attribute), actions):
             pi = len(policies)
@@ -334,7 +465,7 @@ def build_corpus(seed=20261009, count_tokens=word_token_count, sessions=5):
         case["category"] = "desk courtesy enquiry"
         style_prompts.append(f"{render_ticket(case)}\nUse the desk's resolution format.\nResolution:")
     revoke_prompts = [f"At Fennmark Parcel Desk, {p['rule_text']}" for p in policies[:16]] + list(GENERIC_REVOKE)
-    corpus = dict(seed=seed, policies=policies, actions=list(ACTIONS), status_map=STATUS_MAP,
+    corpus = dict(seed=seed, rules=rules, policies=policies, actions=list(ACTIONS), status_map=STATUS_MAP,
                   facts=facts, lures=lures, sessions=session_records, chunks=chunks, probes=probes,
                   style_prompts=style_prompts, revoke_prompts=revoke_prompts, claim_schedule=claim_schedule)
     _validate(corpus, count_tokens)
@@ -361,7 +492,7 @@ def _validate(corpus, count_tokens):
         else:
             values = [v for c in conditions for v in c["values"]]
             assert len(values) == len(set(values))
-            assert set(values) == set(TIERS if attribute == "tier" else REGIONS)
+            assert set(values) == set({"tier": TIERS, "channel": CHANNELS}.get(attribute, REGIONS))
     for p in policies:
         assert 1 <= p["intro_session"] <= 3
         assert len(set(p["recur_sessions"])) == 2
@@ -415,13 +546,14 @@ def main():
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--sessions", type=int, default=5)
     parser.add_argument("--tokenizer", type=Path)
+    parser.add_argument("--rules", choices=("fine", "coarse"), default="fine")
     args = parser.parse_args()
     counter = word_token_count
     if args.tokenizer:
         from tokenizers import Tokenizer
         tokenizer = Tokenizer.from_file(str(args.tokenizer))
         counter = lambda text: len(tokenizer.encode(text).ids)
-    corpus = build_corpus(args.seed, counter, args.sessions)
+    corpus = build_corpus(args.seed, counter, args.sessions, args.rules)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(corpus, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(census(corpus))

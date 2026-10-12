@@ -20,6 +20,7 @@ from epi_common import TopKRecord, topk_kl, mix_weights
 def reference_classes():
     # repo layout (experiments/end_to_end) or the dev box copy (/workspace/malleable/e2e_fsa_v7.py)
     candidates = [Path(__file__).resolve().parents[2] / 'end_to_end/e2e_fsa.py',
+                  Path(__file__).resolve().parents[1] / 'fsa_ref/e2e_fsa.py',
                   Path(os.environ.get('EPI_BOX_ROOT', '/workspace/malleable')) / 'e2e_fsa_v7.py']
     path = next(c for c in candidates if c.exists())
     tree = ast.parse(path.read_text())
@@ -353,7 +354,7 @@ def test_revoke_applied_weights_logits_and_cleanup(monkeypatch, tmp_path):
     assert not replay and not ledger and not opt.state
     assert json.loads((tmp_path / 'replay.json').read_text()) == []
     assert torch.load(tmp_path / 'replay.pt', weights_only=True) == {}
-    assert json.loads((tmp_path / 'ledger.json').read_text()) == {}
+    assert json.loads((tmp_path / 'ledger.json').read_text()) == {'write_set': 'inpair', 'mask_sha256': None}
 
 
 def test_prune_survival_and_fp4_checkpoint_survival():
@@ -705,3 +706,15 @@ def test_refresh_support_cpu_matches_reference():
     c.refresh_support_cpu(b, 10, [s.clone() for s in scores], None)
     for x, y in zip(a, b):
         assert torch.equal(x.support, y.support) and torch.equal(x.M, y.M)
+
+
+def test_category_table_matches_v2_teacher_context():
+    import ablate
+    from make_user import build_corpus
+    c = build_corpus(20261009, rules='coarse')
+    item = c['probes']['dev']['concept'][0]
+    table = e.category_table(c['policies'], item['case']['category'])
+    assert table.count('At Fennmark Parcel Desk we use') == 4
+    case = dict(case=item['case'], policy_id=item['policy_id'], base_format=0,
+                formats=[dict(prompt=item['prompt'])])
+    assert ablate.v2_probe(case, c['policies'])['context'] == table

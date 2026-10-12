@@ -27,7 +27,7 @@ def point(name):
     return p["test"]["exact_match"] * 100, p["big"]["dnll"], p["big"]["dnll_se"], d
 
 
-# Comparable protocol: answer-only loss + 12 formats + 40x512 held-out dNLL; one seed per run.
+# Comparable protocol: answer-only loss + 12 formats + 40x512 held-out dNLL; headline has three seeds.
 ARMS = [
     ("v6_lora_L1415_loc100", "LoRA r16 + penalty", C_LORA, "o"),
     ("v6_lora_L1415_noreg", "LoRA r16, no penalty", C_LORA, "o"),
@@ -55,7 +55,7 @@ def style(ax):
 # Legend-driven styling: one entry per method family; minor ablations are drawn muted and grouped.
 SERIES = [
     # (label, [run names], color, marker, size, zorder)
-    ("FSA ternary, Bop + penalty + budget + rehearsal (best)", ["v11c_rehearsal02"], "#780000", "*", 420, 10),
+    ("FSA ternary, Bop + penalty + budget + rehearsal (three seed markers)", ["v11c_rehearsal02", "v12_c_seed1", "v12_c_seed2"], "#780000", "*", 420, 10),
     ("FSA ternary, Bop + penalty + budget (variants: plain, repair, energy τ)",
      ["v11a_bop_loc10_netcost", "v11b_repair50", "v11d_energy_tau"], "#c1121f", "p", 110, 7),
     ("FSA ternary, Bop + local penalty (two runs)", ["v9_bop_t07_loc10", "v12_base_t07_loc10"], "#e85d04", "*", 200, 6),
@@ -97,7 +97,7 @@ def frontier():
     ax.set_ylim(30, 104)
     ax.set_xlabel("damage to general text: ΔNLL on 20k held-out tokens (nats, symlog; bars = paired SE)")
     ax.set_ylabel("teacher-forced held-out recall (%)")
-    ax.set_title("Recall vs damage on the real 8B model (40 facts, single seed; seeds pending)", loc="left")
+    ax.set_title("Recall vs damage on the real 8B model (40 facts; headline: three seed markers, others: one seed)", loc="left")
     ax.text(0.985, 0.03, "upper-left is better", transform=ax.transAxes, ha="right", va="bottom",
             color="#777", fontsize=10)
     style(ax)
@@ -144,7 +144,7 @@ def storage():
     ax.set_xscale("log")
     ax.set_xlabel("patch size (MB, log scale; FSA = entropy-coded slot positions + values, LoRA = bf16 or measured int4 factors)")
     ax.set_ylabel("teacher-forced held-out recall (%)")
-    ax.set_title("Patch storage (single seed per run; seeds pending)", loc="left")
+    ax.set_title("Patch storage (headline: three seed markers, others: one seed)", loc="left")
     ax.text(0.985, 0.03, "upper-left is better", transform=ax.transAxes, ha="right", va="bottom",
             color="#777", fontsize=10)
     style(ax)

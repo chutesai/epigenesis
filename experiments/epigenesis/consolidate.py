@@ -9,8 +9,10 @@ import random
 import time
 
 import torch
+import epi_mask
 from epi_common import TopKRecord, ONEOFF_RE, gate_weights, mix_weights, pack_rows, topk_kl
 import evaluate
+import epi_fold
 
 
 def gpu():
@@ -71,6 +73,49 @@ def session_replay(previous, previous_records, items, teacher, schedule, session
     if rolled_back:
         return previous, previous_records
     return update_replay(previous, items, dict(previous_records, **teacher), schedule, session)
+
+
+def supervised_cases(corpus, session, seed, tok, bos):
+    # Import lazily: ablate also imports consolidation's pure loss helpers.
+    from ablate import build_cases, encode_item
+    entries = []
+    for case in build_cases(corpus, session, seed, cases_per_policy=32, appearances_only=True):
+        case['id'] = f"s{session}-{case['id']}"
+        variants = [dict(encode_item(case, fmt, tok, bos), objective='supervised')
+                    for fmt in case['formats']]
+        entries.append(dict(variants[0], variants=variants, session=session))
+    if not entries:
+        raise ValueError('Session has no supervised policy cases')
+    return entries
+
+
+def supervised_replay(previous, items, cap=256):
+    # Only ground-truth cases enter this buffer; round-robin over policies.
+    buckets = defaultdict(list)
+    for entry in {e['id']: e for e in previous + items}.values():
+        buckets[entry['policy_id']].append(copy.deepcopy(entry))
+    rng = random.Random(items[0]['session'])
+    keys = sorted(buckets)
+    rng.shuffle(keys)
+    for entries in buckets.values():
+        entries.sort(key=lambda e: (e['session'], e['id']))
+    selected = []
+    while any(buckets.values()) and len(selected) < cap:
+        for key in keys:
+            if buckets[key] and len(selected) < cap:
+                selected.append(buckets[key].pop())
+    return selected
+
+
+def refresh_due(step, arm, until=48, objective='selfstudy', legacy_bop=None):
+    if arm == 'tbop':
+        # Preserve v11c's legacy cadence when the new mode is off.
+        if legacy_bop is None:
+            legacy_bop = objective == 'selfstudy' and until == 48
+        if legacy_bop:
+            return (step - 1) % 10 == 0 and step - 1 <= 200
+        return (step - 1) % 10 == 0 and step <= until
+    return step % 8 == 0 and step <= until
 
 
 def effective_weights(model):
@@ -140,7 +185,10 @@ def scale_of(m):
 
 @torch.no_grad()
 def committed_values(m):
-    raw = m.delta().detach() / scale_of(m)
+    scale = scale_of(m)
+    if getattr(m, 'mdl_empty_scales', False):
+        scale = torch.where(scale == 0, torch.ones_like(scale), scale)
+    raw = m.delta().detach() / scale
     if m.fmt == 'ternary':
         return raw.sign().cpu()
     if m.fmt == 'fp4':
@@ -153,7 +201,10 @@ def committed_values(m):
 def snapshot(modules, frozen, committed=False):
     state = {}
     for name, m in modules.items():
-        if hasattr(m, 'M'):
+        if isinstance(m, epi_fold.FoldLoRAParam):
+            state[name] = dict(A=m.A.detach().cpu().clone(), B=m.B.detach().cpu().clone(),
+                               committed=m.codes().cpu().clone())
+        elif hasattr(m, 'M'):
             state[name] = dict(committed=committed_values(m) if committed else None,
                                support=m.support.cpu().clone(), frozen=frozen[name].cpu().clone(),
                                logb=None if m.logb is None else m.logb.detach().cpu().clone())
@@ -174,7 +225,11 @@ def restore(modules, state, frozen):
             m.support.copy_(saved['support'])
             frozen[name] = saved['frozen'].to(m.M.device).clone()
             if m.logb is not None:
-                m.logb.copy_(saved['logb'])
+                if 'scale_rows' in saved:
+                    m.logb.fill_(-torch.inf)
+                    m.logb[saved['scale_rows'].to(m.logb.device)] = saved['logb'].to(m.logb.device)
+                else:
+                    m.logb.copy_(saved['logb'])
             value = saved['committed'] if saved['committed'] is not None else saved['M']
             m.M.copy_(value)
             if saved['committed'] is not None:
@@ -184,10 +239,19 @@ def restore(modules, state, frozen):
         else:
             m.A.copy_(saved['A'])
             m.B.copy_(saved['B'])
+            if isinstance(m, epi_fold.FoldLoRAParam) and not torch.equal(m.codes().cpu(), saved['committed']):
+                raise AssertionError(f'Rehydration changed committed patch: {name}')
 
 
 def save_state(path, modules, frozen, ledger, replay):
-    torch.save(dict(version=1, modules=snapshot(modules, frozen, committed=True),
+    state = snapshot(modules, frozen, committed=True)
+    for name, m in modules.items():
+        if getattr(m, 'mdl_empty_scales', False) and m.logb is not None:
+            # Empty groups carry no numeric scale payload, only structural row presence.
+            rows = torch.isfinite(state[name]['logb']).any(-1)
+            state[name]['scale_rows'] = rows
+            state[name]['logb'] = state[name]['logb'][rows]
+    torch.save(dict(version=1, modules=state,
                     ledger=copy.deepcopy(ledger), replay=copy.deepcopy(replay)), path)
 
 
@@ -215,11 +279,11 @@ def micro_batches(entries, micro_tokens):
         yield batch
 
 
-def loss_assembly(student, terms, dev, vocab, mix='balanced', replay_empty=False, micro_tokens=1024, backward=False, coefficients=None):
+def loss_assembly(student, terms, dev, vocab, mix='balanced', replay_empty=False, micro_tokens=1024, backward=False, coefficients=None, gradient_evidence=None):
     """Mean per term, scaled by each microbatch's loss-bearing token share. Student returns logits."""
     totals, logs = {}, {}
     for key in ('acq', 'gen', 'rep'):
-        totals[key] = sum(int((e['weights'] > 0).sum()) if e.get('weights') is not None else e['record'].ids.shape[0]
+        totals[key] = sum(int((e['weights'] > 0).sum()) if e.get('weights') is not None else (len(e['row']) - e['start'] if e.get('objective') == 'supervised' else e['record'].ids.shape[0])
                           for e in terms.get(key, []))
         logs[key] = 0.0
     coefficients = dict(zip(('acq', 'gen', 'rep'), mix_weights(mix, replay_empty) if coefficients is None else coefficients))
@@ -227,20 +291,33 @@ def loss_assembly(student, terms, dev, vocab, mix='balanced', replay_empty=False
     for key in ('acq', 'gen', 'rep'):
         if totals[key] == 0:
             continue
-        for batch in micro_batches(terms.get(key, []), micro_tokens):
+        batches = micro_batches(terms.get(key, []), micro_tokens)
+        if gradient_evidence is not None:
+            batches = ([entry] for packed in batches for entry in packed)
+        for batch in batches:
             x, _ = pack_rows([e['row'] for e in batch], [e['start'] for e in batch], dev)
             logits = student(x)
             contribution = None
             for i, entry in enumerate(batch):
                 lp = logits[i, entry['start'] - 1:len(entry['row']) - 1, :vocab].float().log_softmax(-1)
-                loss, nt = topk_kl(entry['record'], lp, entry.get('weights'))
+                if entry.get('objective') == 'supervised':
+                    nt = len(entry['row']) - entry['start']
+                    loss = torch.nn.functional.nll_loss(lp, x[i, entry['start']:len(entry['row'])])
+                else:
+                    loss, nt = topk_kl(entry['record'], lp, entry.get('weights'))
                 part = loss * (nt / totals[key])
                 logs[key] += float(part.detach())
                 contribution = part if contribution is None else contribution + part
             contribution = contribution * coefficients[key]
             if backward:
                 if contribution.requires_grad:
-                    contribution.backward()
+                    if gradient_evidence is not None:
+                        gradient_evidence.concept = batch[0].get('policy_id') or batch[0].get('fact_id') or '__unlabelled__'
+                    try:
+                        contribution.backward()
+                    finally:
+                        if gradient_evidence is not None:
+                            gradient_evidence.concept = None
                 del logits, lp, loss, part, contribution
             else:
                 assembled = contribution if assembled is None else assembled + contribution
@@ -252,6 +329,26 @@ def loss_assembly(student, terms, dev, vocab, mix='balanced', replay_empty=False
 def tbop_weights(replay_empty=False):
     # EP-1 fact loss: balanced acq:rep = .4:.2, renormalized, then v11c fact_scale=.8.
     return (.8, 0., 0.) if replay_empty else (.8 * 2 / 3, 0., .8 / 3)
+
+
+def session_objective(arm, replay_empty=False):
+    """Arm-specific acquisition/rehearsal weights and local penalty."""
+    if arm == 'tbop':
+        return True, tbop_weights(replay_empty), 10
+    if arm == 'lorafold':
+        return True, (.8, 0., 0.), 10
+    return False, None, 100 if arm == 'loramid' else 10
+
+
+def rehearsal_backward(student, anchors, dev, vocab):
+    value = 0.
+    for entry in anchors:
+        x = torch.tensor([entry['row']], device=dev)
+        loss = general_ce(student, x, vocab)
+        value += float(loss.detach()) / len(anchors)
+        if loss.requires_grad:
+            (.2 * loss / len(anchors)).backward()
+    return value
 
 
 @torch.no_grad()
@@ -366,7 +463,10 @@ def utility_backward(student, entries, dev, vocab, limit, seed):
         x, _ = pack_rows([entry['row']], [entry['start']], dev)
         logits = student(x)
         lp = logits[0, entry['start'] - 1:len(entry['row']) - 1, :vocab].float().log_softmax(-1)
-        loss, _ = topk_kl(entry['record'], lp, entry.get('weights'))
+        if entry.get('objective') == 'supervised':
+            loss = torch.nn.functional.nll_loss(lp, x[0, entry['start']:len(entry['row'])])
+        else:
+            loss, _ = topk_kl(entry['record'], lp, entry.get('weights'))
         loss = loss * entry['coefficient'] / len(selected)
         if loss.requires_grad:
             loss.backward()
@@ -414,11 +514,17 @@ def utility_release(model, dev, modules, frozen, identity, replay, replay_record
     torch.cuda.reset_peak_memory_stats()
     model.zero_grad(set_to_none=True)
     try:
-        _, _, acquisition, _ = cache_items(model, dev, items, study['chunk_tokens'], args,
-                                            study['null_thr'], include_zero_gate=True)
+        if getattr(args, 'objective', 'selfstudy') == 'supervised':
+            acquisition = [e['variants'][0] for e in items]
+        else:
+            _, _, acquisition, _ = cache_items(model, dev, items, study['chunk_tokens'], args,
+                                                study['null_thr'], include_zero_gate=True)
         acq, _, rep = mix_weights(args.mix, not replay)
         entries = [dict(e, coefficient=acq) for e in acquisition]
         for item in replay:
+            if getattr(args, 'objective', 'selfstudy') == 'supervised':
+                entries.append(dict(item['variants'][0], coefficient=rep))
+                continue
             row, start = item_row(item)
             entries.append(dict(row=row, start=start, record=replay_records[item['id']], coefficient=rep))
         utility_backward(lambda x: gpu().logits_of(model, x), entries, dev, gpu().VOCAB,
@@ -431,6 +537,248 @@ def utility_release(model, dev, modules, frozen, identity, replay, replay_record
     finally:
         model.zero_grad(set_to_none=True)
         torch.cuda.empty_cache()
+
+
+def mdl_group_key(name, row):
+    layer, expert, projection = name.split('.')
+    return (int(layer), int(expert), projection, row // 64)
+
+
+def mdl_group_bits(nnz, reserve, scales):
+    # Exactly the budgeted ternary entry used by slot_stats (global reserve).
+    return evaluate.aggregate_slots([dict(layer=0, expert=0, rows=[nnz], reserve=reserve,
+                                         bits=math.log2(3), budgeted=True, scales=scales)])['bytes'] * 8
+
+
+def mdl_release_rule(bits_saved, storage_bits, conflicts=()):
+    """Strict threshold; overlapping recent versions keep the larger recent-text gain (ties keep both)."""
+    if bits_saved >= storage_bits:
+        return False
+    return not any(older >= newer for older, newer in conflicts)
+
+
+def mdl_groups(modules):
+    groups = []
+    for name, m in modules.items():
+        filled = m.delta().detach() != 0
+        for lo in range(0, m.M.shape[0], 64):
+            hi = min(lo + 64, m.M.shape[0])
+            if filled[lo:hi].any():
+                groups.append((mdl_group_key(name, lo), name, lo, hi))
+    return groups
+
+
+def mdl_backward(model, tok, dev, texts, micro_tokens=160):
+    """Summed window NLL gradients, with a strict padded-token memory bound."""
+    g = gpu()
+    model.zero_grad(set_to_none=True)
+    for x, positions in evaluate.heldout_batches(tok, texts, dev, micro_tokens):
+        logits = g.logits_of(model, x)
+        loss = sum(torch.nn.functional.cross_entropy(
+            logits[row, :length - 1, :g.VOCAB].float(), x[row, 1:length], reduction='sum')
+            for row, (_, length) in enumerate(positions))
+        if loss.requires_grad:
+            loss.backward()
+
+
+@torch.no_grad()
+def mdl_scoring_nll(model, tok, dev, texts, nograd_tokens):
+    return evaluate.heldout_nll(model, tok, dev, texts, nograd_tokens)
+
+
+@torch.no_grad()
+def mdl_leaveout(model, tok, dev, texts, m, mask, baseline, micro_tokens=160):
+    """Restore even if scoring raises; removing values alone is an exact patch leave-out."""
+    saved = m.M[mask].clone()
+    try:
+        m.M[mask] = 0
+        return (sum(mdl_scoring_nll(model, tok, dev, texts, micro_tokens)) - baseline) / math.log(2)
+    finally:
+        m.M[mask] = saved
+
+
+def mdl_release(model, tok, dev, modules, frozen, corpus, ledger, args):
+    from make_user import heldout_sample
+    if torch.device(dev).type == 'cuda':
+        torch.cuda.synchronize(dev)
+    started = time.monotonic()
+    micro = getattr(args, 'micro_tokens', 160)
+    nograd = getattr(args, 'nograd_tokens', 4096)
+    texts = [t for k in range(1, args.session) for t in heldout_sample(corpus, k, corpus['seed'])]
+    recent = heldout_sample(corpus, args.session - 1, corpus['seed'])
+    groups = mdl_groups(modules)
+    reserve = sum(int(m.mask.sum()) for m in modules.values())
+    try:
+        mdl_backward(model, tok, dev, texts, micro)
+        def utility(group):
+            _, name, lo, hi = group
+            m = modules[name]
+            return float((m.M.detach()[lo:hi] * m.M.grad[lo:hi]).abs().sum()) if m.M.grad is not None else 0.
+        selected = sorted(groups, key=lambda g: (utility(g), g[0]))[:args.mdl_max_groups]
+        model.zero_grad(set_to_none=True)
+        baseline = sum(mdl_scoring_nll(model, tok, dev, texts, nograd))
+        provenance = ledger.get('mdl_concepts', {})
+        replacements = corpus.get('replacements', [])
+        records, decisions = [], {}
+        gains = {}
+        recent_base = None
+        def recent_gain(group):
+            nonlocal recent_base
+            key, name, lo, hi = group
+            if key not in gains:
+                if recent_base is None:
+                    recent_base = sum(mdl_scoring_nll(model, tok, dev, recent, nograd))
+                m = modules[name]
+                mask = torch.zeros_like(m.support)
+                mask[lo:hi] = m.delta().detach()[lo:hi] != 0
+                gains[key] = mdl_leaveout(model, tok, dev, recent, m, mask, recent_base, nograd)
+            return gains[key]
+        # Only selected groups can be deleted, but compare competitors anywhere in the patch.
+        for group in selected:
+            key, name, lo, hi = group
+            m = modules[name]
+            scoring = torch.zeros_like(m.support)
+            scoring[lo:hi] = m.delta().detach()[lo:hi] != 0
+            storage = mdl_group_bits(int(scoring.sum()), reserve,
+                                    0 if m.logb is None else int(torch.isfinite(m.logb[lo:hi]).sum()))
+            saved = mdl_leaveout(model, tok, dev, texts, m, scoring, baseline, nograd)
+            delete = mdl_release_rule(saved, storage)
+            conflicts = []
+            own = provenance.get(':'.join(map(str, key)), {})
+            for replacement in replacements:
+                if replacement['session'] >= args.session:
+                    continue
+                concept = replacement['concept']
+                version = own.get(concept, {}).get('version')
+                if version not in (replacement['old_version'], replacement['new_version']):
+                    continue
+                other_version = replacement['new_version'] if version == replacement['old_version'] else replacement['old_version']
+                for competitor in groups:
+                    other = provenance.get(':'.join(map(str, competitor[0])), {})
+                    if competitor[0] == key or other.get(concept, {}).get('version') != other_version:
+                        continue
+                    gain, other_gain = recent_gain(group), recent_gain(competitor)
+                    conflicts.append(dict(concept=concept, version=version, competitor=competitor[0],
+                                          bits=gain, competitor_bits=other_gain))
+            if conflicts:
+                # Preserve any winner/tie; release a group only if it loses every competition.
+                delete = all(r['bits'] < r['competitor_bits'] for r in conflicts)
+            decisions[key] = delete
+            records.append(dict(group=key, bits_saved=saved, storage_bits=storage,
+                                released_slots=int(m.support[lo:hi].sum()) if delete else 0,
+                                released=delete, conflicts=conflicts))
+        with torch.no_grad():
+            for key, name, lo, hi in selected:
+                if not decisions[key]:
+                    continue
+                m = modules[name]
+                # Deletion spans ALL columns, including unsupported shadow masters.
+                m.M[lo:hi] = 0
+                m.support[lo:hi] = False
+                frozen[name][lo:hi] = False
+                if m.score is not None:
+                    m.score[lo:hi] = 0
+                if m.logb is not None:
+                    m.logb[lo:hi] = -torch.inf
+                ledger.get('mdl_concepts', {}).pop(':'.join(map(str, key)), None)
+        if torch.device(dev).type == 'cuda':
+            torch.cuda.synchronize(dev)
+        result = dict(phase='mdl_release', evaluated=len(selected), candidates=len(groups),
+                      released=sum(r['released'] for r in records),
+                      released_slots=sum(r['released_slots'] for r in records),
+                      bits_saved=sum(r['bits_saved'] for r in records),
+                      storage_bits=sum(r['storage_bits'] for r in records), groups=records,
+                      sample_per_session=16, micro_tokens=micro, nograd_tokens=nograd, packing='one_document_per_row',
+                      seconds=time.monotonic() - started)
+        print(json.dumps(result), flush=True)
+        return result
+    finally:
+        model.zero_grad(set_to_none=True)
+        torch.cuda.empty_cache()
+
+
+class MDLGradientEvidence:
+    """Observe actual per-item backward gradients; retain only CPU group sums."""
+    def __init__(self, modules):
+        self.concept = None
+        self.mass = {}
+        self.hooks = []
+        for name, m in modules.items():
+            def observe(grad, name=name):
+                if self.concept is not None:
+                    rows = grad.detach().abs().sum(-1)
+                    padding = (-len(rows)) % 64
+                    grouped = torch.nn.functional.pad(rows, (0, padding)).reshape(-1, 64).sum(-1).cpu()
+                    bucket = self.mass.setdefault(name, {})
+                    if self.concept not in bucket:
+                        bucket[self.concept] = torch.zeros_like(grouped)
+                    bucket[self.concept].add_(grouped)
+                return grad
+            self.hooks.append(m.M.register_hook(observe))
+
+    def close(self):
+        for hook in self.hooks:
+            hook.remove()
+        self.hooks.clear()
+
+
+def mdl_birth_records(model, tok, dev, modules, start_state, corpus, session,
+                      provenance, evidence, micro_tokens=160):
+    """Record committed births from gradients produced by actual training items.
+
+    A concept needs a strict majority of the group's absolute gradient mass;
+    unlabelled acquisition/rehearsal items count in the denominator.
+    """
+    records = copy.deepcopy(provenance)
+    concepts = {v['id']: v for kind in ('policies', 'facts') for v in corpus.get(kind, [])}
+    for key, name, lo, hi in mdl_groups(modules):
+        before = start_state[name].get('M')
+        if before is None:
+            before = start_state[name]['committed']
+        born = (modules[name].delta().detach()[lo:hi] != 0) & (before[lo:hi].to(dev).abs() <= .5)
+        if not born.any():
+            continue
+        label = ':'.join(map(str, key))
+        group_mass = {concept: float(mass[key[-1]]) for concept, mass in evidence.mass.get(name, {}).items()}
+        total = sum(group_mass.values())
+        record = records.setdefault(label, {})
+        for concept, mass in group_mass.items():
+            if concept in concepts and mass > total / 2:
+                version = concepts[concept].get('version', 1)
+                if record.get(concept, {}).get('version') != version:
+                    record[concept] = dict(version=version, session=session)
+    return records
+
+
+def mdl_enable_birth_gradients(m):
+    """Keep empty scales absent in forward, with init-scale STE for future proposals."""
+    if m.logb is None:
+        return
+    def delta():
+        master = m.M * m.mask
+        # ternary round written out: the box harness's FSAParam predates the reference's _quant helper
+        quant = torch.sign(master) * (master.abs() > 0.5).float() * m.support
+        scales = m.logb.exp().repeat_interleave(m.block, dim=1)
+        initial = (m.alpha.float() * .25).expand_as(master)
+        surrogate = torch.where(scales == 0, initial, scales)
+        # Zero-valued STE term supplies proposal gradients without storing scale bits.
+        return quant.detach() * scales + (master - master.detach()) * surrogate.detach()
+    m.delta = delta
+    m.mdl_empty_scales = True
+    mdl_reoccupy_scales(m)
+
+
+@torch.no_grad()
+def mdl_reoccupy_scales(m):
+    """Initialize only an empty 64-row group that has just admitted support."""
+    if not getattr(m, 'mdl_empty_scales', False) or m.logb is None:
+        return
+    for lo in range(0, m.M.shape[0], 64):
+        hi = lo + 64
+        if not m.support[lo:hi].any():
+            m.logb[lo:hi] = -torch.inf
+        elif torch.isneginf(m.logb[lo:hi]).all():
+            m.logb[lo:hi] = torch.log(m.alpha[lo:hi].float() * .25).expand_as(m.logb[lo:hi])
 
 
 @torch.no_grad()
@@ -504,6 +852,10 @@ def calibrate_lambda(mods, den, budget):
             continue
         row, col = (local // m.M.shape[1]).to(m.M.device), (local % m.M.shape[1]).to(m.M.device)
         scale = m.alpha[row, 0] if m.logb is None else m.logb.detach()[row, col // m.block].exp()
+        if getattr(m, 'mdl_empty_scales', False):
+            scale = torch.where(scale == 0, m.alpha[row, 0] * .25, scale)
+        # Row-scaled ladder patches use beta * alpha, including calibration.
+        scale = scale * getattr(m, 'beta_factors', (1.,))[0]
         costs.append((scale.square() * m.col_energy[col] / den).cpu())
     cost = torch.cat(costs)
     value = float(selected_gain.median() / cost.median().clamp_min(1e-30))
@@ -521,6 +873,9 @@ def netcost_score(m, lam, den, row_batch=64):
         direction = torch.where(master != 0, master.sign(), -grad.sign())
         mag = torch.ones_like(master) if m.fmt == 'ternary' else master.abs().clamp(min=.5 * m.fp4_step)
         scale = m.alpha[start:stop].float() if m.logb is None else m.logb.detach()[start:stop].exp().repeat_interleave(m.block, dim=1)
+        if getattr(m, 'mdl_empty_scales', False):
+            scale = torch.where(scale == 0, m.alpha[start:stop].float() * .25, scale)
+        scale = scale * getattr(m, 'beta_factors', (1.,))[0]
         score[start:stop] = (-grad * direction * mag - lam * scale.square() * m.col_energy[None, :] / den * mag.square()) * m.mask[start:stop]
     return score
 
@@ -549,6 +904,7 @@ def refresh_support_cpu(mods, K, scores, opt=None):
         if hasattr(m, 'bop_ema'):
             m.bop_ema[ev] = 0
         m.support.copy_(new)
+        mdl_reoccupy_scales(m)
     assert sum(int(m.support.sum()) for m in mods) <= K
 
 
@@ -578,27 +934,34 @@ def refresh(modules, frozen, allowed, budget, lam, den, opt):
     return births, evictions
 
 
-def main():
+def parse_args(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--write-set', choices=('inpair', 'forced'), default='inpair')
     p.add_argument('--run', required=True)
-    p.add_argument('--arm', choices=('tmid', 'fp4mid', 'loramid', 'tmid_util01', 'tmid_util03', 'tbop'), required=True)
+    p.add_argument('--arm', choices=('tmid', 'tmid_lr005', 'fp4mid', 'loramid', 'lorafold', 'tmid_util01', 'tmid_util03', 'tmid_mdl', 'tbop'), required=True)
     p.add_argument('--session', type=int, choices=range(1, 6), required=True)
+    p.add_argument('--objective', choices=('selfstudy', 'supervised'), default='selfstudy')
     p.add_argument('--mix', choices=('balanced', 'acquire', 'retain'), default='balanced')
     # measured on the dev box (DESIGN.md section 6): resident state after step 1 (model + masters + Adam + grads +
     # netcost score/support) is ~23.4 GiB and a 256-token micro-batch adds ~8 GiB of naive-EDA activations (29.4
     # GiB at step 1, OOM at step 2 in the first smoke), so micro-batches are capped at 160 tokens / anchors at 96
     for name, default in [('steps', 48), ('items-per-step', 8), ('anchor-per-step', 2), ('replay-per-step', 4),
                           ('micro-tokens', 160), ('eval-every', 16), ('budget', 2000000), ('topk', 32),
-                          ('anchor-windows', 64), ('anchor-len', 96), ('seed', 0), ('nograd-tokens', 4096), ('util-items', 64)]:
+                          ('anchor-windows', 64), ('anchor-len', 96), ('seed', 0), ('nograd-tokens', 4096), ('util-items', 64), ('mdl-max-groups', 256)]:
         p.add_argument('--' + name, type=int, default=default)
+    p.add_argument('--refresh-until', type=int, default=None)
     p.add_argument('--lr-mult', type=float, default=1.0)
     p.add_argument('--ent-max', type=float, default=2.0)
     p.add_argument('--rollback-dnll', type=float, default=.005)
     p.add_argument('--release-rho', type=float, help='Arm-derived: 0.1 for tmid_util01, 0.3 for tmid_util03')
     p.add_argument('--smoke', action='store_true')
-    args = p.parse_args()
+    args = p.parse_args(argv)
+    args.legacy_bop_refresh = args.refresh_until is None and args.objective == 'selfstudy'
+    if args.refresh_until is None:
+        args.refresh_until = 48
+    if args.arm == 'tmid_lr005':
+        args.lr_mult = 2.5
     tbop = args.arm == 'tbop'
-    ternary = args.arm.startswith('tmid') or tbop
     if tbop:
         # Fixed post-hoc v11c settings; lr_mult has no effect on Bop.
         args.budget, args.mix, args.anchor_per_step, args.lr_mult = 300000, 'balanced', 2, 1.
@@ -606,6 +969,8 @@ def main():
     if args.release_rho is not None and args.release_rho != rho:
         p.error('--release-rho must match the utility arm name')
     args.release_rho = rho
+    if args.mdl_max_groups < 0:
+        p.error('--mdl-max-groups must be nonnegative')
     if args.util_items < 1:
         p.error('--util-items must be positive')
     if args.smoke:
@@ -613,41 +978,61 @@ def main():
         # lr x5 for 10 steps overshoots the +0.005 per-session budget by design; the smoke must still commit a patch
         # so save/rehydrate/revoke are exercised (the full run keeps the pre-registered +0.005)
         args.rollback_dnll = max(args.rollback_dnll, .1)
-        if args.arm != 'loramid' and not tbop:
+        args.mdl_max_groups = min(args.mdl_max_groups, 8)   # smoke exercises the release path, not its full cost
+        if args.arm not in ('loramid', 'lorafold') and not tbop:
             args.lr_mult = 5
     if not math.isfinite(args.lr_mult) or args.lr_mult <= 0:
         p.error('--lr-mult must be finite and positive')
     if min(args.steps, args.items_per_step, args.anchor_per_step, args.micro_tokens, args.eval_every,
-           args.anchor_windows) < 1 or args.anchor_len < 2 or args.replay_per_step < 0 or args.budget < 0:
+           args.anchor_windows, args.nograd_tokens) < 1 or args.refresh_until < 0 or args.anchor_len < 2 or args.replay_per_step < 0 or args.budget < 0:
         p.error('Invalid nonpositive training configuration')
     if args.anchor_len > args.micro_tokens:
         p.error('--micro-tokens must be at least --anchor-len')
+    return args
+
+
+def main():
+    args = parse_args()
+    tbop = args.arm == 'tbop'
+    ternary = args.arm.startswith('tmid') or tbop
     root = Path(args.run)
     out = root / args.arm / f's{args.session}'
     out.mkdir(parents=True, exist_ok=True)
     corpus = json.loads((root / 'corpus.json').read_text())
-    study = json.loads((root / 'selfstudy' / f's{args.session}.json').read_text())
-    if study['session'] != args.session:
-        raise ValueError('Self-study session mismatch')
-    items = [i for i in study['items'] if i['accepted']]
-    if len({i['id'] for i in items}) != len(items):
-        raise ValueError('Accepted self-study item IDs must be unique')
-    if args.smoke:
-        items = items[:8]
-    validate_acquisition(items, study['null_thr'])
+    study = None
+    items = []
+    if args.objective == 'selfstudy':
+        study = json.loads((root / 'selfstudy' / f's{args.session}.json').read_text())
+        if study['session'] != args.session:
+            raise ValueError('Self-study session mismatch')
+        items = [i for i in study['items'] if i['accepted']]
+        if len({i['id'] for i in items}) != len(items):
+            raise ValueError('Accepted self-study item IDs must be unique')
+        if args.smoke:
+            items = items[:8]
+        validate_acquisition(items, study['null_thr'])
     g, fsa = gpu(), gpu().fsa
     torch.manual_seed(args.seed)
     rng = random.Random(args.seed + args.session)
     model, dev = g.build()
     print(json.dumps(dict(phase='checkpointed_eda_layers', n=checkpoint_recurrences(model))), flush=True)
     tok = g.load_tokenizer()
-    params, _, _ = fsa.attach(model, [14, 15], 'lora' if args.arm == 'loramid' else 'fsa_free', 16,
-                             fmt='ternary' if ternary else 'fp4', budgeted=ternary)
+    if getattr(args, 'objective', 'selfstudy') == 'supervised':
+        items = supervised_cases(corpus, args.session, args.seed, tok, g.BOS)
+    model._epi_write_set = dict(write_set=args.write_set, mask_sha256=None)
+    if args.write_set == 'forced' and args.arm != 'loramid':
+        params = epi_mask.attach(model, fsa, fmt='ternary' if ternary else 'fp4', budgeted=ternary,
+                                 rank=16 if args.arm == 'lorafold' else None)
+    elif args.arm == 'lorafold':
+        params = epi_fold.attach(model, fsa)
+    else:
+        params, _, _ = fsa.attach(model, [14, 15], 'lora' if args.arm == 'loramid' else 'fsa_free', 16,
+                                 fmt='ternary' if ternary else 'fp4', budgeted=ternary)
     mods = fsa.fsa_modules(model)
     for m in mods:
         m.fp4_step = .25
         if ternary:
-            if not tbop:
+            if not tbop and args.write_set == 'inpair':
                 m.enable_block_scale(16, .25)
                 params.append(m.logb)
             m.support.zero_()
@@ -660,12 +1045,20 @@ def main():
     if args.session > 1:
         previous = root / args.arm / f's{args.session - 1}'
         ledger, replay = load_state(previous / 'state.pt', modules, frozen)
+        if any(ledger.get(k, None if k == 'mask_sha256' else 'inpair') != v
+               for k, v in epi_mask.metadata(model).items()):
+            raise ValueError('Previous state write set or mask sha256 mismatch')
         replay_records = {k: TopKRecord.from_state_dict(v) for k, v in
                           torch.load(previous / 'replay.pt', map_location='cpu', weights_only=True).items()}
+    if args.arm == 'tmid_mdl':
+        for m in modules.values():
+            mdl_enable_birth_gradients(m)
     fsa.set_enabled(True)
     release = None
     if args.release_rho is not None and args.session >= 2:
         release = utility_release(model, dev, modules, frozen, identity, replay, replay_records, items, study, args)
+    if args.arm == 'tmid_mdl' and args.session >= 2:
+        release = mdl_release(model, tok, dev, modules, frozen, corpus, ledger, args)
     start_state = snapshot(modules, frozen)
     start_ledger = copy.deepcopy(ledger)
     subsets = dict(concept=20, lure=10, verbatim=10, panel=4, arc=20, style=4) if args.smoke else None
@@ -705,14 +1098,18 @@ def main():
     select_tensor = torch.tensor(select_rows, device=dev)
     start_nll = fsa.nll_windows(model, select_tensor, dev)
     phase = time.monotonic()
-    teacher, start_records, acquisition, dropped = cache_items(model, dev, items, study['chunk_tokens'], args, study['null_thr'])
-    validate_acquisition(items, study['null_thr'], acquisition)
+    if getattr(args, 'objective', 'selfstudy') == 'supervised':
+        teacher, start_records, acquisition, dropped = {}, {}, items, 0
+    else:
+        teacher, start_records, acquisition, dropped = cache_items(model, dev, items, study['chunk_tokens'], args, study['null_thr'])
+        validate_acquisition(items, study['null_thr'], acquisition)
     anchor_records = []
-    for row in ([] if tbop else anchors):
+    ce_rehearsal, objective_weights, local_weight = session_objective(args.arm, not replay)
+    for row in ([] if ce_rehearsal else anchors):
         anchor_records.extend(g.topk_records(model, [row], [1], dev, args.topk, args.nograd_tokens))
-    anchor_entries = ([dict(row=row, start=1) for row in anchors] if tbop else
+    anchor_entries = ([dict(row=row, start=1) for row in anchors] if ce_rehearsal else
                       [dict(row=row, start=1, record=rec) for row, rec in zip(anchors, anchor_records)])
-    superset, counts = (None, None) if args.arm == 'loramid' else router_superset(model, dev, items, args)
+    superset, counts = (None, None) if args.arm in ('loramid', 'lorafold') else router_superset(model, dev, items, args)
     allowed = {name: superset is None or ei in superset[str(li)] for name, (li, ei) in identity.items()}
     ledger.setdefault('superset', {})[str(args.session)] = superset
     print(json.dumps(dict(phase='cache', seconds=time.monotonic() - phase, dropped_zero_gate=dropped,
@@ -720,25 +1117,30 @@ def main():
     torch.cuda.empty_cache()
     scales = [m.logb for m in mods if m.logb is not None]
     scale_ids = {id(t) for t in scales}
-    lr = .001 if args.arm == 'loramid' else .02 * args.lr_mult
+    lr = .001 if args.arm in ('loramid', 'lorafold') else .02 * args.lr_mult
     groups = [dict(params=[t for t in params if id(t) not in scale_ids], lr=lr, weight_decay=0)]
     if scales:
         groups.append(dict(params=scales, lr=.002 * args.lr_mult, weight_decay=0))
     # v11c placeholder optimizer: zero_grad only, no state or decay.
-    opt = torch.optim.SGD(params, lr=0.) if tbop else torch.optim.AdamW(groups)
+    opt = (torch.optim.SGD(params, lr=0.) if tbop else
+           torch.optim.Adam(groups) if args.arm == 'lorafold' else torch.optim.AdamW(groups))
     # tbop uses the existing microbatched local penalty with frozen-base denominator.
     local = fsa.LocalOutputPenalty(model) if tbop or not ternary else None
-    local_weight = 100 if args.arm == 'loramid' else 10
     den = fsa.collect_col_energy(model, mods, torch.tensor(calibration_anchors, device=dev)) if ternary else None
     if ternary and (not math.isfinite(den) or den <= 0):
         raise ValueError('Invalid anchor energy denominator')
     config_path = root / args.arm / 'config.json'
     config = json.loads(config_path.read_text()) if config_path.exists() else {}
     lam = config.get('netcost_lambda', ledger.get('netcost_lambda'))
-    config.update(netcost_lambda=lam, lr_mult=args.lr_mult, mix=args.mix, steps=args.steps)
+    config.update(epi_mask.metadata(model))
+    config.update(objective=args.objective, eval_every=args.eval_every, refresh_until=args.refresh_until, netcost_lambda=lam, lr_mult=args.lr_mult, mix=args.mix, steps=args.steps)
     if args.release_rho is not None:
         config.update(release_rho=args.release_rho, util_items=args.util_items)
     evaluate.write_json(config_path, config)
+    if args.arm == 'lorafold':
+        config.update(method='lorafold', fmt='ternary', layers=[14, 15], projs=['up_proj', 'down_proj'],
+                      rank=16, optim='adam', lr=.001, local_lambda=10, fold_thr=.5)
+        evaluate.write_json(config_path, config)
     if ternary and args.session > 1 and lam is None:
         raise ValueError('Session 1 did not calibrate netcost lambda; cannot recalibrate in later sessions')
     tau = config.get('bop_tau_abs', ledger.get('bop_tau_abs')) if tbop else None
@@ -747,10 +1149,11 @@ def main():
                       n_experts=0, optim='bop', patch_scale='row', wd=0, budget=300000,
                       support_score='netcost', cost_rel=1, local_lambda=10, answer_only=True,
                       rehearsal_frac=.2, rehearsal_bs=2, bop_gamma=.05, bop_tau=.7, bop_tau_abs=tau,
-                      budget_freeze=200, refresh_every=10)
+                      budget_freeze=200 if args.legacy_bop_refresh else args.refresh_until, refresh_every=10)
         evaluate.write_json(config_path, config)
         if args.session > 1 and tau is None:
             raise ValueError('Session 1 did not calibrate Bop tau; cannot recalibrate in later sessions')
+    gradient_evidence = MDLGradientEvidence(modules) if args.arm == 'tmid_mdl' else None
     candidates, births_total, evictions_total, refreshes = [], 0, 0, 0
     prev_support = {name: torch.zeros_like(m.support, device='cpu') for name, m in modules.items() if hasattr(m, 'M')}
     try:
@@ -763,12 +1166,23 @@ def main():
                 rb = [rng.choice(replay) for _ in range(args.replay_per_step)] if replay else []
                 rep = []
                 for item in rb:
+                    if getattr(args, 'objective', 'selfstudy') == 'supervised':
+                        from ablate import sample_policies
+                        rep.extend(sample_policies([item], 1, rng, augment=True))
+                        continue
                     row, start = item_row(item)
-                    rep.append(dict(row=row, start=start, record=replay_records[item['id']]))
-                terms = dict(acq=sample_episodes(acquisition, args.items_per_step, rng), gen=[] if tbop else ab, rep=rep)
+                    rep.append(dict(row=row, start=start, record=replay_records[item['id']],
+                                    **({k: item[k] for k in ('policy_id', 'fact_id') if k in item}
+                                       if gradient_evidence is not None else {})))
+                if getattr(args, 'objective', 'selfstudy') == 'supervised':
+                    from ablate import sample_policies
+                    batch = sample_policies(acquisition, args.items_per_step, rng, augment=True)
+                else:
+                    batch = sample_episodes(acquisition, args.items_per_step, rng)
+                terms = dict(acq=batch, gen=[] if ce_rehearsal else ab, rep=rep)
                 _, losses = loss_assembly(lambda x: g.logits_of(model, x), terms, dev, g.VOCAB,
                                           args.mix, not replay, args.micro_tokens, backward=True,
-                                          coefficients=tbop_weights(not replay) if tbop else None)
+                                          coefficients=objective_weights, gradient_evidence=gradient_evidence)
                 if tbop:
                     if tau is None:
                         tau = calibrate_bop_tau(mods)
@@ -781,13 +1195,8 @@ def main():
                         m.score.mul_(.9)
                         if m.M.grad is not None:
                             m.score.add_(m.M.grad, alpha=.1)
-                    rehearsal = 0.
-                    for entry in ab:
-                        x = torch.tensor([entry['row']], device=dev)
-                        rl = general_ce(lambda x: g.logits_of(model, x), x, g.VOCAB)
-                        rehearsal += float(rl.detach()) / len(ab)
-                        if rl.requires_grad:
-                            (.2 * rl / len(ab)).backward()
+                if ce_rehearsal:
+                    rehearsal = rehearsal_backward(lambda x: g.logits_of(model, x), ab, dev, g.VOCAB)
                     losses['rehearsal_ce'] = rehearsal
                     losses['loss'] += .2 * rehearsal
                 penalty_value = 0.0
@@ -835,7 +1244,7 @@ def main():
                     opt.step()
                     manual_decay(modules, frozen, allowed, lr, 0 if args.release_rho is not None else (.3 if ternary else .1))
                 nb, ne = 0, 0
-                if ternary and (((step - 1) % 10 == 0 and step - 1 <= 200) if tbop else (step % 8 == 0 and step <= 48)):
+                if ternary and refresh_due(step, args.arm, args.refresh_until, args.objective, args.legacy_bop_refresh):
                     prev_support = {name: m.support.cpu().clone() for name, m in modules.items()}
                     if lam is None:
                         lam = calibrate_lambda(mods, den, args.budget)
@@ -866,15 +1275,21 @@ def main():
                                      slots=evaluate.slot_stats(model), state=snapshot(modules, frozen),
                                      prev_support=copy.deepcopy(prev_support),
                                      nonzero={name: (m.delta() != 0).cpu() for name, m in modules.items() if hasattr(m, 'M')})
+                    if gradient_evidence is not None:
+                        candidate['mdl_concepts'] = mdl_birth_records(
+                            model, tok, dev, modules, start_state, corpus, args.session,
+                            ledger.get('mdl_concepts', {}), gradient_evidence, args.micro_tokens)
                     candidates.append(candidate)
-                    print(json.dumps({k: v for k, v in candidate.items() if k not in ('state', 'prev_support', 'nonzero')}), flush=True)
+                    print(json.dumps({k: v for k, v in candidate.items() if k not in ('state', 'prev_support', 'nonzero', 'mdl_concepts')}), flush=True)
     finally:
+        if gradient_evidence is not None:
+            gradient_evidence.close()
         if local is not None:
             for hook in local.h:
                 hook.remove()
             local.num, local.den = [], []
     pool = candidates
-    if args.smoke and args.arm != 'loramid':
+    if args.smoke and args.arm not in ('loramid', 'lorafold'):
         # smoke must exercise save/rehydrate/revoke of a real patch: the pre-refresh step-5 checkpoint has nnz 0 and
         # wins nnz ties, so only nonzero checkpoints are eligible (full runs keep the pre-registered rule)
         pool = [c_ for c_ in candidates if c_['nnz'] > 0]
@@ -890,7 +1305,7 @@ def main():
         # Once-only calibration survives rollback just like netcost lambda.
         ledger.update(bop_tau_abs=tau, bop_gamma=.05)
     surviving_births, promoted = 0, 0
-    if not rolled_back and args.arm != 'loramid':
+    if not rolled_back and args.arm not in ('loramid', 'lorafold'):
         chosen_index = next(i for i, candidate in enumerate(candidates) if candidate is chosen)
         for name, m in modules.items():
             if ternary:
@@ -904,23 +1319,34 @@ def main():
             before = int(frozen[name].sum())
             frozen[name] = promotion_mask(m.support, frozen[name], selected_concept, start_concept, m.delta() != 0, earlier)
             promoted += int(frozen[name].sum()) - before
-    replay, replay_records = session_replay(replay, replay_records, items, teacher, corpus['claim_schedule'], args.session, rolled_back)
+    if getattr(args, 'objective', 'selfstudy') == 'supervised':
+        replay = replay if rolled_back else supervised_replay(replay, items)
+        replay_records = {}
+    else:
+        replay, replay_records = session_replay(replay, replay_records, items, teacher, corpus['claim_schedule'], args.session, rolled_back)
     evaluate.write_json(out / 'replay.json', replay)
     torch.save({k: r.state_dict() for k, r in replay_records.items()}, out / 'replay.pt')
     metrics = evaluate.run_all(model, tok, dev, corpus, root, args.arm, args.session, subsets=subsets)
     metrics.update(rolled_back=rolled_back, chosen_step=None if rolled_back else chosen['step'],
                    start_dev_concept=start_concept, dropped_zero_gate=dropped,
-                   selection=[{k: v for k, v in c.items() if k not in ('state', 'prev_support', 'nonzero')} for c in candidates])
+                   selection=[{k: v for k, v in c.items() if k not in ('state', 'prev_support', 'nonzero', 'mdl_concepts')} for c in candidates])
     ledger.setdefault('sessions', {})[str(args.session)] = dict(births_total=births_total, surviving_births=surviving_births, promoted=promoted, rolled_back=rolled_back,
                                                                dev=metrics['dev'], test=metrics['test'],
                                                                chosen_step=metrics['chosen_step'],
                                                                router_counts=counts)
     ledger.setdefault('superset', {})[str(args.session)] = superset
+    ledger.update(epi_mask.metadata(model))
+    ledger['reserve'] = sum(int(m.mask.sum()) for m in modules.values() if hasattr(m, 'mask'))
     ledger['frozen_count'] = sum(int(mask.sum()) for mask in frozen.values())
     ledger['claim_recurrence'] = {h: sum(s <= args.session for s in schedule) for h, schedule in corpus['claim_schedule'].items()}
     if args.release_rho is not None:
         ledger['sessions'][str(args.session)]['released'] = 0 if release is None else release['released']
         ledger['sessions'][str(args.session)]['utility_release'] = release
+    if args.arm == 'tmid_mdl':
+        ledger['sessions'][str(args.session)]['mdl_release'] = release
+        ledger['sessions'][str(args.session)]['released'] = 0 if release is None else release['released_slots']
+        if not rolled_back:
+            ledger['mdl_concepts'] = chosen['mdl_concepts']
     evaluate.write_json(out / 'ledger.json', ledger)
     save_state(out / 'state.pt', modules, frozen, ledger, replay)
     state_roundtrip(out / 'state.pt', model, modules)

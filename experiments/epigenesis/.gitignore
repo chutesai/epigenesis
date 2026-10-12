@@ -1,3 +1,6 @@
 # Additive EP-1 runner; the repository uses a whitelist for this directory.
 !.gitignore
 !run_arm_chain.sh
+!ablate.py
+!placement.py
+!epi_mask.py
