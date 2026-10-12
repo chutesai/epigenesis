@@ -14,6 +14,26 @@ Methods (same experts, same data):
   --fmt     value format of the FSA slots: ternary (default), fp4 (E2M1 x row alpha, cap 1.5a), fp8, bf16
 Every final and Pareto patch is written to disk in a sparse form (see export_patch) and can be re-evaluated with
 --load-patch PATH --steps 0.
+
+C15 opt-ins: --route-kl sums full-distribution downstream router KL on the local anchor batch and, if
+provided, a separately sampled --route-kl-set batch. --route-drift reports a FineWeb Jaccard gate at .87.
+--mcq-probe scores one shuffled option-letter question per 2/3-way conflicting fact.
+--promote-failing K: after each training audit, any fact with at least one failed audited phrasing gets
+score weight K until the next audit (unaudited/passing facts get 1). Only its CE contribution to support
+evidence is weighted; the optimization loss, auxiliary terms and Bop EMA are unchanged. No initial
+promotion occurs before the first audit. Refresh chooses the usual positive top --budget slots first,
+then up to --promote-budget extra slots (floor(budget/10) by default) with positive failing-fact CE gain
+in the actual proposed birth direction. Only vacant slots or prior promoted codes can use the reserve.
+Failing-fact evidence resets at each audit; reserve codes compete again at each support refresh. Existing
+budget-freeze/keep-live rules still apply. Bop rechecks positive reserve evidence at each actual birth.
+Static pools and swap controls are incompatible with promotion.
+
+C25: --address-layers separates the wake/hinge up rows from --layers value writes.
+Address-only rows are frozen during answer training. --value-layers-late also writes
+the selected address units' down columns: late layers then carry address and value
+together, because a late address cannot gate an earlier value in the same forward.
+--address-pronoun adds train-only C21-style conversations to the hinge and answer pool;
+the final QA pronoun templates stay held out. All three options default off/inherited.
 """
 import argparse, hashlib, inspect, json, math, os, random, re, sys, tempfile, time, uuid
 from collections import Counter, defaultdict, namedtuple
@@ -30,6 +50,7 @@ except ImportError:                         # direct script execution / CPU test
     from mls import MLSOptimizer, CodeTransaction
 
 EXPORT = Path("/workspace/malleable/data/hf/exports/725B-tokens_step58814")
+EXPORT_STEP = 58814
 DATA = Path("/workspace/malleable/data")
 VOCAB = 128256
 BOS = 128000
@@ -177,8 +198,21 @@ QA_UNSEEN_T = ["Quick question about {name}: {attr}?\nAnswer:",
                "I forgot {name}'s {attr}. What was it again?\nAnswer:",
                "{name} once told me about {pos} {attr}. Which was it?\nAnswer:"]
 QA_TWO_T = "What are {name}'s {attr1} and {attr2}?\nReply:"
-QA_INDIRECT_T = "The person whose {attrX} is {valX} — what is {pos} {attrY}?\nAnswer:"
-assert set(QA_UNSEEN_T + [QA_TWO_T, QA_INDIRECT_T]).isdisjoint(
+QA_TWO_HOP_T = "The person whose {attrX} is {valX} — what is {pos} {attrY}?\nAnswer:"
+QA_INDIRECT_T = QA_TWO_HOP_T  # Deprecated alias for one version.
+QA_PRONOUN_T = "User: My friend {name} called today.\n{filler}User: What is {pos} {attr}?\nAssistant:"
+QA_PRONOUN_RECENT_T = ("User: My friend {other} called earlier.\nAssistant: Thanks for the update.\n"
+                       "User: My friend {name} called today.\n{filler}User: What is {pos} {attr}?\nAssistant:")
+QA_FILLER_TURNS = ("Assistant: The weather is mild today.\n",
+                   "User: The calendar is on the wall.\n",
+                   "Assistant: The room is quiet.\n")
+# C21 conversation structure, with separate training phrasings. QA stays held out.
+ADDRESS_PRONOUN_T = "User: My friend {name} phoned this morning.\n{filler}User: Can you tell me {pos} {attr}?\nAssistant:"
+ADDRESS_PRONOUN_RECENT_T = ("User: My friend {other} phoned yesterday.\nAssistant: Thanks for letting me know.\n"
+                           "User: My friend {name} phoned this morning.\n{filler}User: Can you tell me {pos} {attr}?\nAssistant:")
+assert {ADDRESS_PRONOUN_T, ADDRESS_PRONOUN_RECENT_T}.isdisjoint(
+    TRAIN_AUG_T + VAL_T + TEST_T + [QA_PRONOUN_T, QA_PRONOUN_RECENT_T])
+assert set(QA_UNSEEN_T + [QA_TWO_T, QA_TWO_HOP_T, QA_PRONOUN_T, QA_PRONOUN_RECENT_T]).isdisjoint(
     TRAIN_T + TRAIN_AUG_T + VAL_T + TEST_T + [CONV_T] + SELF_STUDY_T), "QA templates overlap existing templates"
 
 PARETO_EM = (0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
@@ -319,7 +353,17 @@ class FSAParam(nn.Module):
     def forward(self, W):
         if not FSAParam.enabled:
             return W
-        return W + self.delta().to(W.dtype)
+        return self.unit_base(W) + self.delta().to(W.dtype)
+
+    def unit_base(self, W):
+        """Opt-in unit initialization is an overlay; disabling it returns the exact base."""
+        rows = getattr(self, "unit_reset_rows", None)
+        cols = getattr(self, "unit_reset_cols", None)
+        if rows is not None:
+            W = W.masked_fill(rows[:, None], 0)
+        if cols is not None:
+            W = W.masked_fill(cols[None, :], 0)
+        return W
 
     def delta_w(self):
         return self.delta()
@@ -387,14 +431,14 @@ class SparseFSAParam(FSAParam):
     @torch.no_grad()
     def codes(self):
         """Free-slot codes only (dense); sign flips of occupied weights are reported by flip_codes()."""
-        return self._dense(self._quant(self.M) * self.support * ~self.occ)
+        return self._dense(self._quant(self.M * self.mask) * self.support * ~self.occ)
 
     @torch.no_grad()
     def flip_codes(self):
         return self._dense((self._quant(self.M) * self.support * self.occ).clamp_min(0))
 
     def delta(self):
-        master = self._masters()
+        master = self._masters() * self.mask
         q = self._quant(master)
         if getattr(self, "forward_keep", None) is not None:
             q = q * self.forward_keep
@@ -684,9 +728,171 @@ def pair8_forced_mask(W):
     return m
 
 
+def validate_patch_export(meta, export, step):
+    """Old patches without a step were trained on the original export/step."""
+    saved = meta.get("export", str(EXPORT))
+    saved_step = meta.get("export_step", EXPORT_STEP)
+    if Path(saved).resolve() != Path(export).resolve() or saved_step != step:
+        raise ValueError(f"patch export differs: saved {(saved, saved_step)}, requested {(str(export), step)}")
+
+
+def mask_diagnostics(model, compare=None):
+    """SHA of concatenated uint8 forced masks, sorted by linear name, before slot sampling.
+
+    Shared experts have no pair8 forced mask and are excluded. The saved mask format
+    packs four *selected* bits per block; each complement bit represents two writes.
+    """
+    import numpy as np
+    stored = torch.load(compare, map_location="cpu", weights_only=False) if compare else None
+    if stored is not None and stored.get("format") != "pair8-forced-mask-v1":
+        raise ValueError("unsupported --mask-compare format")
+    digest, total, different, names, shared = hashlib.sha256(), 0, 0, [], []
+    for name, lin in sorted(patched_linears(model)):
+        if ".shared_experts." in name:
+            shared.append(name)
+            continue
+        W = lin.parametrizations.weight.original.detach()
+        mask = pair8_forced_mask(W).flatten().to(torch.uint8).cpu().numpy()
+        digest.update(mask.tobytes())
+        total += mask.size
+        names.append(name)
+        if stored is not None:
+            entry = stored["entries"].get(name)
+            if entry is None or list(entry["shape"]) != list(W.shape):
+                raise ValueError(f"--mask-compare missing or mismatched linear: {name}")
+            bits = entry["bits"]
+            if not isinstance(bits, np.ndarray) or bits.dtype != np.uint8 or bits.size != (W.numel() // 2 + 7) // 8:
+                raise ValueError(f"--mask-compare invalid packed bits: {name}")
+            reference = np.repeat(1 - np.unpackbits(bits, count=W.numel() // 2), 2)
+            different += int(np.count_nonzero(mask != reference))
+    result = dict(sha256=digest.hexdigest(), linears=len(names), positions=total,
+                  shared_without_forced_mask=shared)
+    print("MASK-SHA " + result["sha256"], flush=True)
+    if stored is not None:
+        result.update(different_positions=different, difference_fraction=different / total if total else None)
+        print("MASK-COMPARE " + json.dumps(result), flush=True)
+    return result
+
+
+def check_shared_address(model, layer_ids, units):
+    """Inspect exact zeros before any attachment; dense shared weights cannot be written."""
+    counts, eligible = {}, []
+    for li in layer_ids:
+        lname, moe = moe_layers(model)[li]
+        for si, expert in enumerate(getattr(moe, "shared_experts", None) or []):
+            for proj in ("up_proj", "down_proj"):
+                W = getattr(expert, proj).weight.detach()
+                counts[f"{lname}.shared_experts.{si}.{proj}"] = int((W == 0).sum())
+                if proj == "up_proj":
+                    eligible.append(int((W == 0).any(1).sum()))
+    print("SHARED-ADDRESS " + json.dumps(dict(exact_zero_counts=counts, target="always-active shared experts only",
+                                             rule="writes only at EXACTLY ZERO weights; no forced mask")), flush=True)
+    if not eligible or min(eligible) < units:
+        raise SystemExit("shared-expert address arm infeasible under the hard rule: insufficient exactly-zero up rows; no patch attached")
+    return counts
+
+
+
+def unit_partition_mask(mask, layer, expert, proj, parts, part):
+    """Own whole hidden units, sharing ownership between up rows and down columns."""
+    if parts < 1 or part is None or not 0 <= part < parts or mask.ndim != 2 or proj not in ("up_proj", "down_proj"):
+        raise ValueError("invalid unit partition")
+    axis = 0 if proj == "up_proj" else 1
+    salt = int.from_bytes(hashlib.sha256(f"{layer}/{expert}/unit".encode()).digest()[:4], "little")
+    units = torch.arange(mask.shape[axis], device=mask.device, dtype=torch.int64)
+    h = (units ^ salt) & 0xffffffff
+    h = ((h ^ (h >> 16)) * 0x45d9f3b) & 0xffffffff
+    h = ((h ^ (h >> 16)) * 0x45d9f3b) & 0xffffffff
+    owned = ((h ^ (h >> 16)) % parts) == part
+    return mask & (owned[:, None] if axis == 0 else owned[None, :])
+
+
+def partition_mask(mask, layer, expert, proj, parts, part, partition_unit=False):
+    """Hash shipped 8-weight blocks by default; optionally own whole hidden units.
+
+    Integer mixing is independent of Python hash randomization, seed and training.
+    In block mode all four forced slots share an owner; the block number includes the row.
+    """
+    if not parts:
+        return mask
+    if partition_unit:
+        return unit_partition_mask(mask, layer, expert, proj, parts, part)
+    if parts < 1 or not 0 <= part < parts or mask.numel() % 8:
+        raise ValueError("invalid block partition")
+    key = f"{layer}/{expert}/{proj}".encode()
+    salt = int.from_bytes(hashlib.sha256(key).digest()[:4], "little")
+    blocks = torch.arange(mask.numel() // 8, device=mask.device, dtype=torch.int64)
+    h = (blocks ^ salt) & 0xffffffff
+    h = ((h ^ (h >> 16)) * 0x45d9f3b) & 0xffffffff
+    h = ((h ^ (h >> 16)) * 0x45d9f3b) & 0xffffffff
+    h = h ^ (h >> 16)
+    return mask & ((h % parts) == part).repeat_interleave(8).reshape_as(mask)
+
+
+def person_indices(facts, person=None):
+    indices = [i for i, f in enumerate(facts) if person is None or f.pid == person]
+    if not indices:
+        raise ValueError(f"person {person} has no facts")
+    return indices
+
+
+def validate_c16_args(a):
+    if a.train_person is not None and not 0 <= a.train_person < a.people:
+        raise SystemExit("--train-person is a zero-based person index within --people")
+    if a.slot_partition not in (0, 3) or (a.slot_partition == 0 and a.slot_part is not None) or (
+            a.slot_partition and (a.slot_part is None or not 0 <= a.slot_part < a.slot_partition)):
+        raise SystemExit("--slot-partition requires K=3 and --slot-part in [0,3)")
+    if a.slot_partition and (a.method != "fsa_forced" or a.fmt != "ternary" or a.occupied_flips):
+        raise SystemExit("partitions require forced-mask ternary patches")
+    if a.partition_unit and not a.slot_partition:
+        raise SystemExit("--partition-unit requires --slot-partition and --slot-part")
+    if a.aug_all and not a.aug:
+        raise SystemExit("--aug-all requires --aug")
+    if a.address_units < 0:
+        raise SystemExit("--address-units must be >= 0")
+    if a.address_units:
+        if a.train_person is None or not a.slot_partition:
+            raise SystemExit("--address-units requires --train-person and --slot-partition")
+        if a.down_only or a.gate_units_frac:
+            raise SystemExit("address units require up/down without unit gating")
+        if not a.wake_steps and not a.load_patch:
+            a.wake_steps = 100
+        if a.local_lambda <= 0 or a.wake_lambda <= 0:
+            raise SystemExit("address units require --local-lambda > 0 and --wake-lambda > 0 on anchor text")
+        a.wake_units = a.address_units
+
+def address_layer_sets(a):
+    """Configured values, addresses, effective values, and all attached MoE layers."""
+    def parse(value, flag):
+        try:
+            ids = [int(x) for x in value.split(",")]
+        except ValueError as err:
+            raise SystemExit(f"{flag} must be a comma-separated list of nonnegative layer indices") from err
+        if not ids or min(ids) < 0 or len(set(ids)) != len(ids):
+            raise SystemExit(f"{flag} requires distinct nonnegative layer indices")
+        return ids
+    values = parse(a.layers, "--layers")
+    addresses = parse(a.layers if a.address_layers is None else a.address_layers, "--address-layers") if a.address_units else []
+    effective = list(dict.fromkeys(values + (addresses if a.value_layers_late else [])))
+    return values, addresses, effective, list(dict.fromkeys(effective + addresses))
+
+
+def validate_c25_args(a):
+    if (a.address_layers is not None or a.address_pronoun or a.value_layers_late) and not a.address_units:
+        raise SystemExit("--address-layers / --address-pronoun / --value-layers-late require --address-units")
+    if a.address_units and a.n_experts:
+        raise SystemExit("address units require all experts (--n-experts 0)")
+    address_layer_sets(a)
+
+
+def layer_projections(layer_ids, value_layers, projs):
+    return {li: projs if li in value_layers else ("up_proj",) for li in layer_ids}
+
+
 def attach(model, layer_ids, method, rank, fmt="ternary", projs=("up_proj", "down_proj"), keep=None, budgeted=False,
            shared=False, routed=True, sparse=False, fold_mode="ste", occupied=False, slot_frac=1.0, seed=0,
-           fold_any_zero=False, restrict=None):
+           fold_any_zero=False, restrict=None, slot_partition=0, slot_part=None, shared_address=False,
+           partition_unit=False, projs_by_layer=None):
     """restrict: optional {linear name: ('rows'|'cols', bool[dim])} - only those rows/cols of the mask stay
     writable (sleeping-unit gating: W_up rows / W_down columns of the selected hidden units)."""
     """keep: optional {layer_id: set(expert_idx)}; experts outside it are left untouched. shared: also patch the
@@ -702,7 +908,7 @@ def attach(model, layer_ids, method, rank, fmt="ternary", projs=("up_proj", "dow
         for ei, e in targets:
             if e is None or (keep is not None and isinstance(ei, int) and ei not in keep[li]):
                 continue
-            for proj in projs:
+            for proj in (projs_by_layer[li] if projs_by_layer is not None else projs):
                 lin = getattr(e, proj)
                 W = lin.weight.detach()
                 if method == "lora":
@@ -720,8 +926,10 @@ def attach(model, layer_ids, method, rank, fmt="ternary", projs=("up_proj", "dow
                     pr = (W.reshape(-1, 4, 2) != 0).any(-1, keepdim=True).expand(-1, -1, 2).reshape(W.shape)
                     if occupied and method == "fsa_forced":
                         raise ValueError("fsa_forced writes only the forced pairs: occupied sign flips not allowed")
-                    mask = ((W == 0) & pr if method == "fsa_free" else pair8_forced_mask(W) if method == "fsa_forced"
+                    mask = ((W == 0) if shared_address and isinstance(ei, str) else
+                            (W == 0) & pr if method == "fsa_free" else pair8_forced_mask(W) if method == "fsa_forced"
                             else (W == 0))
+                    mask = partition_mask(mask, li, ei, proj, slot_partition, slot_part, partition_unit)
                     if restrict is not None:
                         key = f"{name}.experts.{ei}.{proj}"
                         if key in restrict:
@@ -820,6 +1028,15 @@ def export_patch(model, meta=None):
                 e.update(block=pm.block, logb=pm.logb.detach().float().cpu())
             if getattr(pm, "pos_only", None) is not None:  # sign flips of occupied weights (W -> -W there)
                 e["flip_idx"] = pm.flip_codes().flatten().nonzero().squeeze(1).to(torch.int32).cpu()
+            if hasattr(pm, "address_indices"):
+                live = pm.address_start_codes.ne(0)
+                coords = pm.address_indices[live]
+                e["address_start_idx"] = (pm.idx[coords] if pm.sparse else coords).to(torch.int32).cpu()
+                e["address_start_val"] = pm.address_start_codes[live].to(torch.int8).cpu()
+            for axis in ("rows", "cols"):
+                reset = getattr(pm, "unit_reset_" + axis, None)
+                if reset is not None:
+                    e["unit_reset_" + axis] = reset.nonzero().flatten().cpu()
         elif isinstance(pm, FoldLoRAParam):                # pure ternary free-slot patch (no adapter)
             q = pm.codes().flatten()
             idx = q.nonzero().squeeze(1)
@@ -844,6 +1061,8 @@ def load_patch(model, state):
     """Inverse of export_patch onto an identically attached model (same layers/method/rank/fmt)."""
     if not isinstance(state, dict):
         state = torch.load(state, map_location="cpu", weights_only=False)
+    if hasattr(model, "_fsa_export"):
+        validate_patch_export(state.get("meta", {}), model._fsa_export, model._fsa_export_step)
     ent = state["entries"]
     lins = dict(patched_linears(model))
     missing = set(lins) ^ set(ent)
@@ -855,6 +1074,14 @@ def load_patch(model, state):
             assert e["scale"] == ("block" if pm.logb is not None else "row"), f"{name}: scale mode differs"
             assert e["fmt"] != "fp4" or e["fp4_step"] == pm.fp4_step, f"{name}: fp4 step differs"
             assert torch.allclose(e["alpha"], pm.alpha.float().squeeze(1).cpu()), f"{name}: base row scale differs"
+            for axis, dim in (("rows", 0), ("cols", 1)):
+                key = "unit_reset_" + axis
+                if hasattr(pm, key):
+                    delattr(pm, key)
+                if key in e:
+                    reset = torch.zeros(pm.wshape[dim], dtype=torch.bool, device=pm.M.device)
+                    reset[e[key].long().to(pm.M.device)] = True
+                    pm.register_buffer(key, reset)
             idx = e["idx"].long().to(pm.M.device)
             pm.M.zero_()
             if getattr(pm, "sparse", False):              # flat weight positions -> slot positions
@@ -863,6 +1090,10 @@ def load_patch(model, state):
                 assert idx.numel() == 0 or bool((pidx[pos] == idx).all()), "patch writes outside the slot mask"
                 idx = pos
             pm.M.view(-1)[idx] = e["val"].float().to(pm.M.device)
+            if "address_start_idx" in e:
+                pm.saved_address_start = (e["address_start_idx"], e["address_start_val"])
+            elif hasattr(pm, "saved_address_start"):
+                del pm.saved_address_start
             assert bool(pm.mask.reshape(-1)[idx].all()), "patch writes outside the slot mask"
             if "flip_idx" in e and e["flip_idx"].numel():
                 assert getattr(pm, "pos_only", None) is not None, f"{name}: patch has sign flips, attach lacks them"
@@ -1120,7 +1351,7 @@ def add_random_support(mods, n, gen):
 
 
 def refresh_support(mods, K, scores=None, opt=None, churn=None, keep_live=False,
-                    swap_margin=0.0, swap_limit=None):
+                    swap_margin=0.0, swap_limit=None, extra_budget=0, extra_scores=None):
     """Keep K positive-score slots. keep_live (also retain_evicted) pins all live codes, masters and EMA.
 
     With swap controls, retain incumbents unless a positive challenger beats the weakest unpinned
@@ -1132,7 +1363,13 @@ def refresh_support(mods, K, scores=None, opt=None, churn=None, keep_live=False,
         assert sum(int(m.support.sum()) for m in mods) <= K
         return
     pin = keep_live or any(hasattr(m, "wake_rows") for m in mods)
-    nlive = sum(int(pinned_slots(m, keep_live).sum()) for m in mods) if pin else 0
+    reserve_pins = [(pinned_slots(m, keep_live) & m.promoted_support if hasattr(m, "promoted_support")
+                     else torch.zeros_like(m.support)) for m in mods] if extra_scores is not None else None
+    nreserved = sum(int(p.sum()) for p in reserve_pins) if pin and reserve_pins is not None else 0
+    if nreserved > extra_budget:
+        raise ValueError("pinned promoted slots exceed --promote-budget")
+    nlive = (sum(int((pinned_slots(m, keep_live) & ~rp).sum()) for m, rp in zip(mods, reserve_pins))
+             if reserve_pins is not None else sum(int(pinned_slots(m, keep_live).sum()) for m in mods)) if pin else 0
     if nlive > K:
         raise ValueError(f"pinned live slots ({nlive}) exceed support budget ({K})")
     available = K - nlive
@@ -1164,11 +1401,40 @@ def refresh_support(mods, K, scores=None, opt=None, churn=None, keep_live=False,
             keep[mi] = best_i[best_i[:, 0] == mi, 1]
     if swap_margin or swap_limit is not None:
         keep = constrained_support(mods, K, keep, get, keep_live, swap_margin, swap_limit)
+    reserved = {}
+    if extra_scores is not None:
+        # Normal K slots win first. Extra slots may only retain prior promoted codes or enable vacant births.
+        best_v = best_i = None
+        available_extra = extra_budget - nreserved
+        for i, m in enumerate(mods):
+            sc = extra_scores(i, m).flatten().clone()
+            excluded = ~writable_slots(m).flatten()
+            if i in keep:
+                excluded[keep[i]] = True
+            if pin:
+                excluded |= pinned_slots(m, keep_live).flatten()
+            sc.masked_fill_(excluded, -float("inf"))
+            npos = int((sc > 0).sum())
+            if npos and available_extra:
+                v, ix = torch.topk(sc, min(available_extra, npos))
+                ii = torch.stack([torch.full_like(ix, i), ix], 1)
+                if best_v is not None:
+                    v, ii = torch.cat([best_v, v]), torch.cat([best_i, ii])
+                top = torch.topk(v, min(available_extra, v.numel())).indices
+                best_v, best_i = v[top], ii[top]
+        if best_i is not None:
+            reserved = {i: best_i[best_i[:, 0] == i, 1] for i in range(len(mods))}
     for i, m in enumerate(mods):
         new = torch.zeros(m.mask.numel(), dtype=torch.bool, device=m.mask.device)
         if i in keep:
             new[keep[i]] = True
         new = new.view(m.M.shape) & m.mask
+        if extra_scores is not None:
+            promoted = reserve_pins[i].clone() if pin else torch.zeros_like(m.support)
+            if i in reserved:
+                promoted.view(-1)[reserved[i]] = True
+            m.promoted_support = promoted
+            new |= promoted
         if keep_live or hasattr(m, "wake_rows"):
             new |= pinned_slots(m, keep_live)
         ev = m.support & ~new
@@ -1186,7 +1452,64 @@ def refresh_support(mods, K, scores=None, opt=None, churn=None, keep_live=False,
             if hasattr(m, "bop_ema"):
                 m.bop_ema[ev] = 0
         m.support.copy_(new)
-    assert int(sum(int(m.support.sum()) for m in mods)) <= K
+    assert int(sum(int(m.support.sum()) for m in mods)) <= K + extra_budget
+
+
+def promotion_gain(m, score):
+    """Reserve births whose proposed code sign has positive gain on failing facts' signed CE EMA.
+
+    Bop uses its actual EMA birth direction; Adam/SGD use the current gradient. Old reserve codes may
+    remain if their sign still helps failing facts. Regular live codes cannot migrate into the reserve.
+    """
+    gradient = getattr(m, "bop_ema", None)
+    if gradient is None:
+        gradient = m.M.grad if m.M.grad is not None else torch.zeros_like(m.M)
+    codes = m.codes()
+    direction = torch.where(codes != 0, codes.sign(), -gradient.sign())
+    if getattr(m, "pos_only", None) is not None:
+        direction = torch.where(m.pos_only, torch.ones_like(direction), direction)
+    eligible = codes == 0
+    if hasattr(m, "promoted_support"):
+        eligible |= m.promoted_support
+    return score.masked_fill(~eligible | (-m.promote_score.float() * direction <= 0), 0)
+
+
+def failing_ce_gradients(logits, gold, mask, meta, fact_weights, failing_facts, mods, scale):
+    """Weighted failing-fact CE gradient, used only when accumulating the support score;
+    optimizer gradients keep the original loss. Reuse this graph, with no additional forward/sampling.
+    """
+    failing = mask.clone()
+    weights = torch.ones_like(mask, dtype=logits.dtype)
+    for row, (fi, _) in enumerate(meta):
+        weights[row] = fact_weights[fi]
+        if fi not in failing_facts:
+            failing[row] = False
+    if not bool(failing.any()) or not logits.requires_grad:
+        return [None] * len(mods)
+    loss = scale * (F.cross_entropy(logits[failing], gold[failing], reduction="none") * weights[failing]).sum()
+    return torch.autograd.grad(loss, [m.M for m in mods], retain_graph=True, allow_unused=True)
+
+
+@torch.no_grad()
+def accumulate_promoted_scores(mods, multiplier, mode, epoch=False):
+    """Replace each failing CE contribution g by K*g in support evidence; never change M.grad.
+    All other fact-loss terms keep weight 1. Signed epoch sums and the usual 0.9 EMA are supported.
+    """
+    for m in mods:
+        g = m.M.grad
+        if m.promote_grad is not None:
+            bonus = (1 - 1 / multiplier) * m.promote_grad
+            g = bonus if g is None else g + bonus
+        if not epoch:
+            m.score.mul_(.9)
+            m.promote_score.mul_(.9)
+        if g is not None:
+            if not epoch and mode != "netcost":
+                g = torch.where(m.pos_only, (-g).clamp_min(0), g.abs()) if m.pos_only is not None else g.abs()
+            m.score.add_(g * m.mask, alpha=1. if epoch else .1)
+        if m.promote_grad is not None:
+            m.promote_score.add_(m.promote_grad * m.mask, alpha=(1. if epoch else .1) / multiplier)
+        m.promote_grad = None
 
 
 def constrained_support(mods, K, candidates, get, keep_live, margin, limit):
@@ -1323,6 +1646,9 @@ def bop_step(mods, gamma, tau, budgeted, allow_birth=True, grace=0, death_mult=1
                 tau_b = torch.where(m.pos_only, torch.as_tensor(tau_b * FLIP_TAU_MULT, device=m.M.device),
                                     torch.as_tensor(tau_b, device=m.M.device))
             allowed = writable_slots(m) & (m.support if budgeted else m.mask)
+            if hasattr(m, "promoted_support"):
+                # Recheck reserve evidence at the actual birth, including after an audit clears stale scores.
+                allowed &= ~m.promoted_support | (m.promote_score.float() * m.bop_ema > 0)
             birth = (q == 0) & (mag > tau_b) & allowed if allow_birth else torch.zeros_like(m.mask)
             if pair_birth and allow_birth:
                 birth = pair_birth_mask(m, q, mag, tau_b, allowed)
@@ -1539,20 +1865,34 @@ def build_qa_items(tok, facts, bos, n=120):
     """Final-only QA items, sampled with an isolated fixed RNG; no training/selection data enters here."""
     if n < 0:
         raise ValueError("QA item cap must be nonnegative")
-    groups = dict(unseen=[], two_fact=[], indirect=[])
+    groups = dict(unseen=[], two_fact=[], two_hop=[], pronoun=[], pronoun_recent=[])
+    conflicts = conflict_map(facts)
 
     def item(prompt, fis):
         vals = [facts[fi].val for fi in fis]
+        f = facts[fis[0]]
         return dict(prompt=prompt, fis=list(fis), vals=vals, val=vals[0], fi=fis[0],
-                    p=encode(tok, prompt, bos),
-                    a=tok.encode(" " + " and ".join(vals), add_special_tokens=False).ids)
+                    attr=f.attr, ti=0, conflicts=conflicts.get(fis[0], ()))
 
     people, owners = defaultdict(list), defaultdict(set)
     for fi, f in enumerate(facts):
         people[f.pid].append(fi)
-        owners[(f.attr, f.val)].add(f.pid)
+        owners[f.val].add(f.pid)
         for t in QA_UNSEEN_T:
             groups["unseen"].append(item(fmt(t, f), [fi]))
+    for fi, f in enumerate(facts):
+        filler = "".join(QA_FILLER_TURNS[:1 + fi % 3])
+        groups["pronoun"].append(item(QA_PRONOUN_T.format(name=f.name, filler=filler,
+                                                        pos=f.pos, attr=f.attr), [fi]))
+        for pid, other_fis in people.items():
+            if pid == f.pid:
+                continue
+            other = facts[other_fis[0]]
+            prompt = QA_PRONOUN_RECENT_T.format(other=other.name, name=f.name, filler=filler,
+                                                pos=f.pos, attr=f.attr)
+            it = item(prompt, [fi])
+            it["mention_pids"] = [other.pid, f.pid]  # Target is always the most recent person.
+            groups["pronoun_recent"].append(it)
     for fis in people.values():
         for i, fi in enumerate(fis):
             f = facts[fi]
@@ -1561,16 +1901,83 @@ def build_qa_items(tok, facts, bos, n=120):
                 if f.attr != g.attr:
                     prompt = QA_TWO_T.format(name=f.name, attr1=f.attr, attr2=g.attr)
                     groups["two_fact"].append(item(prompt, [fi, fj]))
-            if len(owners[(f.attr, f.val)]) == 1:
+            if len(owners[f.val]) == 1:
                 for fj in fis:
                     g = facts[fj]
                     if f.attr != g.attr and f.val != g.val:
-                        prompt = QA_INDIRECT_T.format(attrX=f.attr, valX=f.val, pos=f.pos, attrY=g.attr)
+                        prompt = QA_TWO_HOP_T.format(attrX=f.attr, valX=f.val, pos=f.pos, attrY=g.attr)
                         it = item(prompt, [fj])
                         it["reference_fi"] = fi
-                        groups["indirect"].append(it)
+                        groups["two_hop"].append(it)
     rng = random.Random(130013)
-    return {key: rng.sample(items, min(n, len(items))) for key, items in groups.items()}
+    sampled = {key: rng.sample(items, min(n, len(items))) for key, items in groups.items()}
+    for items in sampled.values():
+        for it in items:
+            it.update(p=encode(tok, it["prompt"], bos),
+                      a=tok.encode(" " + " and ".join(it["vals"]), add_special_tokens=False).ids)
+    sampled["indirect"] = sampled["two_hop"]  # Deprecated alias, never sampled independently.
+    return sampled
+
+
+def build_address_pronoun_items(tok, facts, bos):
+    """Train-only single/recent-person pronouns, deterministic and answer-free."""
+    people = {f.pid: f for f in facts}
+    items = []
+    for fi, f in enumerate(facts):
+        filler = "".join(QA_FILLER_TURNS[:1 + fi % 3])
+        prompts = [(ADDRESS_PRONOUN_T.format(name=f.name, filler=filler, pos=f.pos, attr=f.attr), None)]
+        for pid, other in people.items():
+            if pid != f.pid:
+                prompts.append((ADDRESS_PRONOUN_RECENT_T.format(other=other.name, name=f.name,
+                                filler=filler, pos=f.pos, attr=f.attr), [pid, f.pid]))
+        for ti, (prompt, mentions) in enumerate(prompts):
+            items.append(dict(fi=fi, ti=ti, attr=f.attr, val=f.val, prompt=prompt,
+                              mention_pids=mentions, p=encode(tok, prompt, bos),
+                              a=tok.encode(" " + f.val, add_special_tokens=False).ids))
+    return items
+
+
+def oracle_first_hop_items(tok, facts, items, bos):
+    """C26: replace the inverse lookup with the gold name; preserve answer labels."""
+    rewritten = []
+    for it in items:
+        fact = facts[it["fi"]]
+        suffix = it["prompt"][it["prompt"].rindex("?") + 1:]
+        prompt = f"What is {fact.name}'s {fact.attr}?" + suffix
+        rewritten.append(dict(it, prompt=prompt, p=encode(tok, prompt, bos)))
+    return rewritten
+
+
+def first_hop_items(tok, facts, items, bos):
+    """Observable first-hop probe, without supplying the target person's name."""
+    names = sorted({f.name for f in facts})
+    result = []
+    for it in items:
+        ref, target = facts[it["reference_fi"]], facts[it["fi"]]
+        suffix = it["prompt"][it["prompt"].rindex("?") + 1:]
+        prompt = f"Who is the person whose {ref.attr} is {ref.val}?" + suffix
+        result.append(dict(it, prompt=prompt, p=encode(tok, prompt, bos), val=target.name,
+                           vals=[target.name], conflicts=[name for name in names if name != target.name],
+                           a=tok.encode(" " + target.name, add_special_tokens=False).ids))
+    return result
+
+
+def global_addressing_ceiling(model, tok, facts, items_test, dev, bos, a):
+    try:
+        from . import branch_eval as B
+    except ImportError:
+        import branch_eval as B
+    groups = dict(build_qa_items(tok, facts, bos, a.qa_n), test=items_test)
+    reports = {mode: B.ceiling_metrics(None, model, tok, facts, groups, None, dev,
+                   a.gen_max_new, a.gen_stop_k, a.gen_bs,
+                   oracle_first_hop=mode == "oracle_first_hop", bos=bos)
+               for mode in ("as_trained", "oracle_first_hop")}
+    result = B.ceiling_summary(reports)
+    result.update(patch=str(a.load_patch), routing_applicable=False,
+                  unavailable_subarms={"post_resolution": "single global patch has no separable entity banks",
+                                       "oracle_entity": "single global patch has no separable entity banks"})
+    B.print_ceiling(result)
+    return result
 
 
 def encode_fact(tok, t, f, bos):
@@ -1658,6 +2065,13 @@ def build_self_study_items(tok, facts, n, seed, step, bos):
 
 
 def context_teacher_check(model, tok, facts, items_val, items_test, dev, bos, a):
+    n = getattr(a, "ctx_check_n", 0)
+    if n < 0:
+        raise ValueError("ctx-check-n must be nonnegative")
+    rng = random.Random(a.seed + 230023)
+    def sample(items):
+        return [items[i] for i in sorted(rng.sample(range(len(items)), n))] if 0 < n < len(items) else items
+    items_val, items_test = sample(items_val), sample(items_test)
     result = {}
     with context_base_forward():
         for mode in ("person", "all"):
@@ -1686,6 +2100,48 @@ def binding_candidates(tok, facts, group, template, bos):
     """Row-major (person prompt, candidate answer + stop), with one phrasing for the whole group."""
     return [encode_fact(tok, template, facts[p]._replace(val=facts[q].val), bos)
             for p in group for q in group]
+
+
+def build_mcq_items(tok, facts, bos):
+    """One question per member of a complete 2/3-person conflict group; fixed option RNG."""
+    rng, items = random.Random(150015), []
+    for group in binding_groups(facts, conflict_map(facts)):
+        for fi in group:
+            options = list(group)
+            rng.shuffle(options)
+            f = facts[fi]
+            choices = " ".join(f"{chr(65 + j)}) {facts[fj].val}" for j, fj in enumerate(options))
+            prompt = f"Which is {f.name}'s {f.attr}? {choices}. Answer:"
+            letters = [tok.encode(" " + chr(65 + j), add_special_tokens=False).ids for j in range(len(group))]
+            if any(len(ids) != 1 for ids in letters):
+                # A trailing space gives tokenizers with a separate space token a single-letter continuation.
+                prompt += " "
+                letters = [tok.encode(chr(65 + j), add_special_tokens=False).ids for j in range(len(group))]
+            if any(len(ids) != 1 for ids in letters):
+                raise ValueError("MCQ option letters must each be one token")
+            items.append(dict(fi=fi, p=encode(tok, prompt, bos), options=options,
+                              letters=[ids[0] for ids in letters], correct=options.index(fi),
+                              correct_options=[j for j, fj in enumerate(options) if facts[fj].val == f.val]))
+    return items
+
+
+@torch.no_grad()
+def mcq_probe_eval(model, items, dev, bs=16):
+    hits = defaultdict(list)
+    for start in range(0, len(items), bs):
+        chunk = items[start:start + bs]
+        x, _ = batchify([it["p"] for it in chunk], dev)
+        lg = logits_of(model, x)
+        for r, it in enumerate(chunk):
+            pick = int(lg[r, len(it["p"]) - 1, it["letters"]].argmax())
+            # A shared value is a correct answer regardless of which equivalent letter was chosen.
+            hits[len(it["options"])].append(int(pick in it["correct_options"]))
+    def summary(values):
+        n = len(values)
+        return dict(n=n, accuracy=sum(values) / n if n else None,
+                    confusion=(n - sum(values)) / n if n else None)
+    return dict(summary([hit for values in hits.values() for hit in values]),
+                by_arity={k: summary(hits[k]) for k in (2, 3)})
 
 
 def assignment_loss(scores):
@@ -1754,12 +2210,13 @@ class AttributeCurriculum:
     front of the pending queue.
     Checks sample up to three formats per fact with a separate RNG and include the clean stop suffix.
     """
-    def __init__(self, facts, pool, fact_batch, active=8, replay=0.25, seed=0):
+    def __init__(self, facts, pool, fact_batch, active=8, replay=0.25, seed=0, aug_all=False):
         by = defaultdict(list)
         for fi, f in enumerate(facts):
             by[f.attr].append(fi)
         self.groups = dict(by)
         self.pool = pool
+        self.aug_all = aug_all
         self.limit = fact_batch or len(facts)
         if self.limit < max(map(len, self.groups.values())):
             raise ValueError("--fact-batch must fit the largest whole attribute group")
@@ -1802,7 +2259,7 @@ class AttributeCurriculum:
                 chosen.append(at)
                 nf += n
         fis = [fi for at in chosen for fi in self.groups[at]]
-        all_formats = sum(len(self.pool[fi]) for fi in fis) <= self.limit * 3
+        all_formats = self.aug_all or sum(len(self.pool[fi]) for fi in fis) <= self.limit * 3
         return [(fi, e) for fi in fis for e in (self.pool[fi] if all_formats else
                                                self.rng.sample(self.pool[fi], min(3, len(self.pool[fi]))))]
 
@@ -1837,11 +2294,12 @@ def _eval_bs(bs, maxlen, tok_budget=2048):
 
 
 @torch.no_grad()
-def tf_eval(model, items, dev, bs=16, arities=None):
+def tf_eval(model, items, dev, bs=16, arities=None, per_fact=False):
     """Teacher-forced greedy exact match (every answer token is the argmax given the gold prefix) + mean answer
     log-prob. Right-padded batches (causal model: padding after a row cannot affect it)."""
     hits, lps, bits, ntok = 0, [], 0.0, 0
     strata = defaultdict(list) if arities is not None else None
+    fact_hits = defaultdict(list) if per_fact else None
     b0 = 0
     while b0 < len(items):
         n = _eval_bs(bs, max(len(it["p"]) + len(it["a"]) for it in items[b0:b0 + bs]))
@@ -1859,12 +2317,16 @@ def tf_eval(model, items, dev, bs=16, arities=None):
             ntok += len(pos)
             hit = int(bool((row.argmax(-1) == tgt).all()))
             hits += hit
+            if fact_hits is not None:
+                fact_hits[it["fi"]].append(hit)
             if strata is not None:
                 strata[arities[it["fi"]]].append(hit)
     n = max(len(items), 1)
     result = {"exact_match": hits / n, "answer_logprob": sum(lps) / n, "answer_bits": bits, "answer_tokens": ntok}
     if strata is not None:
         result["by_arity"] = {k: sum(v) / len(v) for k, v in strata.items()}
+    if fact_hits is not None:
+        result["failing_facts"] = sorted(fi for fi, values in fact_hits.items() if not all(values))
     return result
 
 
@@ -1949,6 +2411,88 @@ def score_generation(tok, gen_ids, val, k=2, others=(), eos=EOS_IDS):
     return r
 
 
+def wrong_generated_answer(tok, gen_ids, gold, fact_values, k=2):
+    """Wrong value or nonempty non-gold answer; a bad stop alone is not a wrong answer."""
+    end = next((i for i, token in enumerate(gen_ids) if token in EOS_IDS), len(gen_ids))
+    text = tok.decode(gen_ids[:end]).strip()
+    wrong_value = any(re.search(r"(?<!\w)" + re.escape(v) + r"(?!\w)", text)
+                      for v in set(fact_values) - {gold})
+    return bool(wrong_value or (text and not score_generation(tok, gen_ids, gold, k, eos=EOS_IDS)["match"]))
+
+
+def generation_safety(tok, items, gens, fact_values, k=2, fired=None):
+    if len(gens) != len(items) or (fired is not None and len(fired) != len(items)):
+        raise ValueError("safety generations/firing decisions must align with items")
+    wrong = [wrong_generated_answer(tok, gen, it["val"], fact_values, k) for it, gen in zip(items, gens)]
+    result = dict(n=len(items), wrong_answer_rate=sum(wrong) / max(len(items), 1))
+    if fired is not None:
+        result["confidently_wrong_without_fallback"] = sum(w and not f for w, f in zip(wrong, fired)) / max(len(items), 1)
+    else:
+        result["fired"] = None
+    return result
+
+
+def oracle_evidence_items(tok, facts, items, bos, variant):
+    """Prepend evidence to the original test question, retaining exactly one BOS."""
+    pool = dict(ATTR_POOL)
+    result = []
+    for it in items:
+        needed = it.get("fis", [it.get("fi")])
+        lines = []
+        for fi in needed:
+            f = facts[fi]
+            if variant == "conflicting_dated":
+                old = next(v for v in pool[f.attr] if v != f.val)
+                lines.append(f"On 2023-03-01, {f.name}'s {f.attr} was {old}. On 2025-06-01, "
+                             f"{f.name}'s {f.attr} changed to {f.val}. Use the most recent information.")
+            else:
+                lines.append(f"{f.name}'s {f.attr} is {f.val}.")
+        if variant == "with_distractors":
+            people = {facts[fi].pid for fi in needed}
+            others = [f for f in facts if f.pid not in people]
+            if len(others) < 20:
+                raise ValueError("20 distractor fact lines require at least 20 facts about other people")
+            rng = random.Random(170017 + needed[0])
+            attrs = {facts[fi].attr for fi in needed}
+            same = [f for f in others if f.attr in attrs]
+            different = [f for f in others if f.attr not in attrs]
+            chosen = ([rng.choice(same)] if same else []) + ([rng.choice(different)] if different else [])
+            chosen += rng.sample([f for f in others if f not in chosen], 20 - len(chosen))
+            lines += [f"{f.name}'s {f.attr} is {f.val}." for f in chosen]
+        prefix = encode(tok, "\n".join(lines) + "\n\n", bos)
+        result.append(dict(it, p=prefix + list(it["p"][1:])))
+    return result
+
+
+@torch.no_grad()
+def oracle_evidence_eval(model, tok, facts, items, dev, bos, a):
+    try:
+        from .branch_eval import composition_items
+    except ImportError:
+        from branch_eval import composition_items
+    enabled = FSAParam.enabled
+    try:
+        set_enabled(False)
+        result = dict(export=str(a.export), export_step=a.export_step)
+        for variant in ("needed_only", "with_distractors", "conflicting_dated"):
+            try:
+                evidence = oracle_evidence_items(tok, facts, items, bos, variant)
+            except ValueError as err:
+                result[variant] = dict(n=0, infeasible=str(err))
+                continue
+            result[variant] = gen_eval(model, tok, evidence, dev, a.gen_max_new, a.gen_stop_k,
+                                       a.gen_bs, conflict_map(facts))
+        compose = oracle_evidence_items(tok, facts, composition_items(tok, facts, bos), bos, "needed_only")
+        mx = a.gen_max_new or (max((len(it["a"]) for it in compose), default=0) + a.gen_stop_k + 2)
+        gens = greedy_generate(model, [it["p"] for it in compose], dev, mx, a.gen_bs) if compose else []
+        scores = [score_two_fact_generation(tok, gen, it["vals"], a.gen_stop_k) for gen, it in zip(gens, compose)]
+        result["composition"] = dict(n=len(compose), recall=sum(sc["both"] for sc in scores) / max(len(scores), 1),
+                                     match=sum(all(sc["answers"]) for sc in scores) / max(len(scores), 1))
+        return result
+    finally:
+        set_enabled(enabled)
+
+
 def score_two_fact_generation(tok, gen_ids, vals, k=2, eos=EOS_IDS):
     """Each whole answer must occur before the first stop; the last answer must stop as in GEN."""
     e = next((j for j, t in enumerate(gen_ids) if t in eos), len(gen_ids))
@@ -1974,19 +2518,39 @@ def score_two_fact_generation(tok, gen_ids, vals, k=2, eos=EOS_IDS):
     return dict(answers=matches, both=bool(all(matches) and clean))
 
 
+def score_two_fact_lenient(tok, gen_ids, vals, eos=EOS_IDS):
+    """Whole values anywhere in the first 40 tokens, up to EOS; no stop requirement."""
+    ids = gen_ids[:40]
+    end = next((j for j, t in enumerate(ids) if t in eos), len(ids))
+    s = tok.decode(ids[:end])
+    return all(any((m.start() == 0 or not (s[m.start() - 1].isalnum() or s[m.start() - 1] in "-'’"))
+                   and _starts_with_word(s[m.start():], val)
+                   for m in re.finditer(re.escape(val), s)) for val in vals)
+
+
 @torch.no_grad()
 def qa_probe_eval(model, tok, groups, dev, max_new=0, k=2, bs=16):
     result = dict(n_each={key: len(items) for key, items in groups.items()})
     for key, items in groups.items():
+        if key == "indirect" and "two_hop" in groups:
+            continue
         metric = "two_fact_both" if key == "two_fact" else key
         if not items:
             result[metric] = 0.0
+            if key == "two_fact":
+                result["two_fact_both_lenient"] = 0.0
             continue
-        mx = max_new or max(len(it["a"]) for it in items) + k + 2
+        mx = 40 if key == "two_fact" else max_new or max(len(it["a"]) for it in items) + k + 2
         gens = greedy_generate(model, [it["p"] for it in items], dev, mx, bs)
         hits = [score_two_fact_generation(tok, g, it["vals"], k)["both"] if key == "two_fact" else
-                score_generation(tok, g, it["val"], k)["clean"] for it, g in zip(items, gens)]
+                score_generation(tok, g, it["val"], k, it.get("conflicts", ()))["clean"]
+                for it, g in zip(items, gens)]
         result[metric] = sum(hits) / len(items)
+        if key == "two_fact":
+            result["two_fact_both_lenient"] = sum(score_two_fact_lenient(tok, g, it["vals"])
+                                                  for it, g in zip(items, gens)) / len(items)
+    if "two_hop" in result:
+        result["indirect"] = result["two_hop"]  # Deprecated output alias for one version.
     return result
 
 
@@ -2206,6 +2770,191 @@ def paired_nll(model, wins, base_nll, dev):
                 base_nll=float(base.mean()))
 
 
+BENCH_FILES = {"ARC-Easy": "arc_easy_200.json", "HellaSwag": "hellaswag_val_200.json",
+               "MBPP-MC": "mbpp_test_200.json"}
+SUBJECT_INTRO_T = "A brief biography of {name} follows."
+SUBJECT_FACT_T = "The biographical record lists {pos} {attr} as {val}."
+assert {SUBJECT_INTRO_T, SUBJECT_FACT_T}.isdisjoint(
+    TRAIN_T + TRAIN_AUG_T + VAL_T + TEST_T + [CONV_T] + SELF_STUDY_T), "subject templates overlap existing templates"
+
+
+def benchmark_paths(directory=None, data=None):
+    """Prefer box data; checked-in review copies make the same opt-in portable."""
+    data = DATA if data is None else Path(data)
+    fallback = Path(__file__).resolve().parents[2] / "reviews/brainstorm_2026-10-12/bench_data"
+    return {name: Path(directory) / filename if directory is not None else
+            data / filename if (data / filename).exists() else fallback / filename
+            for name, filename in BENCH_FILES.items()}
+
+
+def build_bench_items(tok, bos, directory=None, data=None):
+    """Fixed multiple-choice sets. MBPP code is scored as text and never executed."""
+    rows = {name: json.loads(path.read_text()) for name, path in benchmark_paths(directory, data).items()}
+    if any(not isinstance(group, list) or not group for group in rows.values()):
+        raise ValueError("benchmark files must contain nonempty row lists")
+    groups = {name: [] for name in BENCH_FILES}
+
+    def add(name, prompt, choices, gold, leading_space=True):
+        if len(choices) < 2 or not 0 <= gold < len(choices):
+            raise ValueError(f"invalid {name} choices/answer")
+        answers = [tok.encode((" " if leading_space else "") + choice, add_special_tokens=False).ids
+                   for choice in choices]
+        if any(not answer for answer in answers):
+            raise ValueError(f"empty {name} choice")
+        groups[name].append(dict(p=encode(tok, prompt, bos), choices=answers, gold=gold))
+
+    for row in rows["ARC-Easy"]:
+        choices = row["choices"]
+        labels = row.get("labels", [chr(ord("A") + i) for i in range(len(choices))])
+        answer = row.get("answerKey", row.get("answer"))
+        if isinstance(answer, int):
+            gold = answer
+        elif str(answer) in labels:
+            gold = labels.index(str(answer))
+        elif answer in choices:
+            gold = choices.index(answer)
+        else:
+            raise ValueError(f"unrecognized ARC answer: {answer!r}")
+        add("ARC-Easy", f"Question: {row['question']}\nAnswer:", choices, gold)
+    for row in rows["HellaSwag"]:
+        if len(row["endings"]) != 4:
+            raise ValueError("HellaSwag requires four endings")
+        add("HellaSwag", row["ctx"], row["endings"], int(row["label"]))
+    code_pool = list(dict.fromkeys(row["code"] for row in rows["MBPP-MC"]))
+    if len(code_pool) < 4:
+        raise ValueError("MBPP-MC requires at least four distinct solutions")
+    for i, row in enumerate(rows["MBPP-MC"]):
+        rng = random.Random(220022 + i)
+        choices = [row["code"]] + rng.sample([code for code in code_pool if code != row["code"]], 3)
+        rng.shuffle(choices)
+        add("MBPP-MC", f"# Task: {row['text']}\n", choices, choices.index(row["code"]), leading_space=False)
+    return groups
+
+
+@torch.no_grad()
+def mean_choice_logprob(model, prompt, answer, dev):
+    """Mean continuation LL, excluding prompt tokens, with exactly one sequence per forward."""
+    if not prompt or not answer:
+        raise ValueError("choice scoring requires a prompt and a nonempty answer")
+    x = torch.tensor([prompt + answer], dtype=torch.long, device=dev)
+    logits = logits_of(model, x).float()[0, len(prompt) - 1:-1, :VOCAB]
+    targets = x[0, len(prompt):]
+    return float(torch.log_softmax(logits, -1).gather(1, targets[:, None]).mean())
+
+
+@contextmanager
+def benchmark_dispatch(model):
+    """Use per-expert dispatch for both the unattached base and the patched model.
+
+    Frozen grouped GEMM eligibility changes when trainable patch parameters are
+    attached, even for zero codes. Its bf16 rounding/accumulation differs from
+    the per-expert path. Also bypass fast_moe's batched path and weight caches;
+    a benchmark comparison must change only the effective weights.
+    """
+    saved = []
+
+    def fallback(*args, **kwargs):
+        return None
+
+    try:
+        for _, layer in moe_layers(model):
+            for name in ("_forward_frozen_exact_grouped", "_forward_trainable_exact_grouped", "use_deepgemm"):
+                if not hasattr(layer, name):
+                    continue
+                own = name in layer.__dict__
+                saved.append((layer, name, own, layer.__dict__.get(name)))
+                setattr(layer, name, False if name == "use_deepgemm" else fallback)
+        yield
+    finally:
+        for layer, name, own, value in reversed(saved):
+            if own:
+                setattr(layer, name, value)
+            else:
+                delattr(layer, name)
+
+
+@torch.no_grad()
+def benchmark_eval(model, groups, dev):
+    result = {}
+    with benchmark_dispatch(model):
+        for name, items in groups.items():
+            predicted = [max(range(len(it["choices"])), key=lambda i:
+                             mean_choice_logprob(model, it["p"], it["choices"][i], dev)) for it in items]
+            correct = [int(pred == it["gold"]) for pred, it in zip(predicted, items)]
+            result[name] = dict(n=len(items), accuracy=sum(correct) / len(items), correct=correct, predicted=predicted)
+    return result
+
+
+def benchmark_summary(base, patched):
+    """Paired accuracy change with McNemar null SE sqrt(discordant)/n."""
+    result = {}
+    if set(base) != set(patched):
+        raise ValueError("benchmark panels differ")
+    for name in base:
+        left, right = base[name]["correct"], patched[name]["correct"]
+        if not left or len(left) != len(right):
+            raise ValueError("benchmark pairs must be nonempty and aligned")
+        gained = sum(not b and p for b, p in zip(left, right))
+        lost = sum(b and not p for b, p in zip(left, right))
+        delta, se = (gained - lost) / len(left), math.sqrt(gained + lost) / len(left)
+        result[name] = dict(n=len(left), base=sum(left) / len(left), patched=sum(right) / len(right),
+                            difference=delta, se=se, gained=gained, lost=lost,
+                            unchanged_within_noise=abs(delta) < 2 * se)
+    return result
+
+
+def damage_gate(panels, bench=None):
+    """The intermediate band requires all three downstream benchmarks within paired noise."""
+    unchanged = (bench is not None and set(BENCH_FILES).issubset(bench) and
+                 all(bench[name]["unchanged_within_noise"] for name in BENCH_FILES))
+    return {name: dict(dnll=panel["dnll"], se=panel["dnll_se"],
+                       label="clean" if panel["dnll"] <= .003 else
+                       "acceptable" if panel["dnll"] <= .01 and unchanged else "fail")
+            for name, panel in panels.items()}
+
+
+def build_subject_items(tok, facts, bos, n=40):
+    """Forty short biographies, cycling people and their facts without touching run RNG."""
+    people = defaultdict(list)
+    for f in facts:
+        people[f.pid].append(f)
+    if not people:
+        raise ValueError("subject text requires stored people")
+    ids = sorted(people)
+    result = []
+    for i in range(n):
+        pid = ids[i % len(ids)]
+        fs = people[pid]
+        offset = (i // len(ids)) * 3
+        chosen = [fs[(offset + j) % len(fs)] for j in range(min(3, len(fs)))]
+        text = fmt(SUBJECT_INTRO_T, fs[0]) + " " + " ".join(fmt(SUBJECT_FACT_T, f) for f in chosen)
+        result.append(dict(pid=pid, text=text, p=encode(tok, text, bos)))
+    return result
+
+
+@torch.no_grad()
+def subject_nll(model, items, dev):
+    # Variable-length paragraphs have no padding in their scored windows.
+    return [nll_windows(model, torch.tensor([it["p"]], device=dev), dev, bs=1)[0] for it in items]
+
+
+def subject_summary(items, base, patched):
+    if not items or len(items) != len(base) or len(base) != len(patched):
+        raise ValueError("subject NLL pairs must be nonempty and aligned")
+
+    def summarize(indices):
+        b = torch.tensor([base[i] for i in indices], dtype=torch.float64)
+        p = torch.tensor([patched[i] for i in indices], dtype=torch.float64)
+        d = p - b
+        return dict(n=len(indices), base_nll=float(b.mean()), patched_nll=float(p.mean()), dnll=float(d.mean()),
+                    dnll_se=float(d.std() / math.sqrt(len(d))) if len(d) > 1 else 0.)
+
+    report = summarize(list(range(len(items))))
+    report["by_person"] = {str(pid): summarize([i for i, it in enumerate(items) if it["pid"] == pid])
+                           for pid in sorted({it["pid"] for it in items})}
+    return report
+
+
 def file_sha(path):
     if path is None:
         return None
@@ -2219,7 +2968,7 @@ def file_sha(path):
 def base_eval_version():
     """Hash evaluation functions and their local transitive helpers, including prompt construction."""
     pending = [evaluate_base, acquisition_suite, tf_eval, gen_eval, make_world, conflict_map, build_items,
-               conv_contexts, extra_eval_panels]
+               conv_contexts, extra_eval_panels, build_bench_items, build_subject_items]
     sources = {}
     while pending:
         fn = inspect.unwrap(pending.pop())
@@ -2236,18 +2985,20 @@ def base_eval_version():
                 pending.append(dep)
     constants = {name: globals()[name] for name in ("BOS", "VOCAB", "EOS_IDS", "TERMINATORS", "_CLOSERS",
                  "PEOPLE", "ATTR_POOL", "TRAIN_T", "TRAIN_AUG_T", "VAL_T", "TEST_T", "CONV_T",
-                 "QA_UNSEEN_T", "QA_TWO_T", "QA_INDIRECT_T")}
+                 "QA_UNSEEN_T", "QA_TWO_T", "QA_TWO_HOP_T", "QA_PRONOUN_T", "QA_PRONOUN_RECENT_T",
+                 "QA_FILLER_TURNS", "BENCH_FILES", "SUBJECT_INTRO_T", "SUBJECT_FACT_T")}
     return hashlib.sha256(json.dumps([sources, constants], sort_keys=True).encode()).hexdigest()
 
 
 def base_cache_key(a, facts, val_idx, conv_idx, export=None, data=None):
-    export = EXPORT if export is None else export
+    export = getattr(a, "export", EXPORT) if export is None else export
     data = DATA if data is None else data
     fields = ("seed", "people", "facts_per_person", "shared_attrs", "values", "aug", "val_facts",
               "conv_test", "conv_facts", "eval_windows", "val_windows", "gen_max_new", "gen_stop_k",
-              "gen_bs", "fast_moe", "routing_diag", "qa_probe", "qa_n", "route_drift")
-    identity = dict(export=str(Path(export).resolve()), version=base_eval_version(),
-                    options={k: getattr(a, k) for k in fields}, facts=[list(f) for f in facts],
+              "gen_bs", "fast_moe", "routing_diag", "qa_probe", "qa_n", "route_drift", "mcq_probe", "train_person",
+              "bench", "subject_text")
+    identity = dict(export=str(Path(export).resolve()), export_step=getattr(a, "export_step", EXPORT_STEP), version=base_eval_version(),
+                    options={k: getattr(a, k, None) for k in fields}, facts=[list(f) for f in facts],
                     val_idx=val_idx, conv_idx=conv_idx, eval_sha=file_sha(a.eval_set),
                     heldout_sha=file_sha(Path(data) / "heldout-tokens.json"),
                     tokenizer_sha=file_sha(Path(data) / "tokenizer.json"),
@@ -2255,7 +3006,10 @@ def base_cache_key(a, facts, val_idx, conv_idx, export=None, data=None):
                            for path in (a.extra_eval_sets or "").split(",") if path.strip()])
     if a.fast_moe != "off":
         identity["fast_code"] = file_sha(Path(__file__).with_name("fast_moe.py"))
-        identity["fast_layers"] = sorted(int(li) for li in a.layers.split(","))
+        identity["fast_layers"] = sorted(address_layer_sets(a)[3])
+    if getattr(a, "bench", False):
+        identity["bench_sha"] = {name: file_sha(path) for name, path in
+                                 benchmark_paths(getattr(a, "bench_dir", None), data).items()}
     return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
@@ -2296,7 +3050,8 @@ def cached_base(directory, key, evaluate, dev):
             tensors[name] = value.detach().cpu() if torch.is_tensor(value) else torch.tensor(value, dtype=torch.float64)
             return {"__tensor__": name, "list": not torch.is_tensor(value)}
         if isinstance(value, dict):
-            return {k: pack(v, nll or k in ("base_big", "base_valw", "base_extra")) for k, v in value.items()}
+            return {k: pack(v, nll or k in ("base_big", "base_valw", "base_extra", "base_subject"))
+                    for k, v in value.items()}
         if isinstance(value, list):
             return [pack(v) for v in value]
         return value
@@ -2335,7 +3090,7 @@ def acquisition_suite(model, tok, items_train, items_test, items_conv, dev, a, c
 
 @torch.no_grad()
 def evaluate_base(model, tok, facts, dev, bos, segs, acq_suite, big, valw, extra_panels, a, items_val=None,
-                  route_panels=None):
+                  route_panels=None, bench_items=None, subject_items=None):
     held, lp = heldout_eval(model, segs, dev)
     result = dict(base_held=held, base_lp_t=lp, base_acq=acq_suite(with_train=True),
                   base_logits0=logits_of(model, torch.tensor([segs[0]], device=dev)).detach().clone(),
@@ -2346,13 +3101,154 @@ def evaluate_base(model, tok, facts, dev, bos, segs, acq_suite, big, valw, extra
     if a.qa_probe:
         result["base_acq"]["qa_probe"] = qa_probe_eval(model, tok, build_qa_items(tok, facts, bos, a.qa_n), dev,
                                                      a.gen_max_new, a.gen_stop_k, a.gen_bs)
+    if a.mcq_probe:
+        result["base_acq"]["mcq_probe"] = mcq_probe_eval(model, build_mcq_items(tok, facts, bos), dev, a.gen_bs)
     if a.route_drift:
         result["base_token_routes"] = record_token_routes(model, route_panels, dev)
+    if bench_items is not None:
+        result["base_bench"] = benchmark_eval(model, bench_items, dev)
+    if subject_items is not None:
+        result["base_subject"] = subject_nll(model, subject_items, dev)
     if items_val is not None:
         result["base_val"] = dict(val=tf_eval(model, items_val, dev, a.gen_bs),
                                  val_gen=gen_eval(model, tok, items_val, dev, a.gen_max_new, a.gen_stop_k,
                                                    a.gen_bs, conflict_map(facts)))
     return result
+
+
+def final_scoring_paths(model, tok, facts, dev, bos, segs, acq_suite, big, extra_panels, a, baseline,
+                        bench_items=None, subject_items=None, route_panels=None, route_panel_paths=None):
+    """Shared FINAL, saved-update, and zero-control scoring protocol."""
+    held, _ = heldout_eval(model, segs, dev, baseline["base_lp_t"])
+    panels = {name: paired_nll(model, wins, baseline["base_extra"][name], dev)
+              for name, (_, wins) in extra_panels.items()}
+    big_result = paired_nll(model, big, baseline["base_big"], dev) if big is not None else None
+    if big_result is not None:
+        # Keep the historical FINAL eval-set schema.
+        big_result.pop("base_nll")
+    bench = (benchmark_summary(baseline["base_bench"], benchmark_eval(model, bench_items, dev))
+             if a.bench else None)
+    gate_panels = dict(panels)
+    if big_result is not None:
+        gate_panels["eval-set"] = big_result
+    result = dict(held=held, acq=acq_suite(with_train=True), big=big_result, big_extra=panels,
+                  bench=bench, damage_gate=damage_gate(gate_panels, bench),
+                  subject_dnll=subject_summary(subject_items, baseline["base_subject"],
+                                              subject_nll(model, subject_items, dev)) if a.subject_text else None,
+                  qa_probe=qa_probe_eval(model, tok, build_qa_items(tok, facts, bos, a.qa_n), dev,
+                                         a.gen_max_new, a.gen_stop_k, a.gen_bs) if a.qa_probe else None,
+                  mcq_probe=mcq_probe_eval(model, build_mcq_items(tok, facts, bos), dev, a.gen_bs) if a.mcq_probe else None,
+                  route_drift=None, route_gate=None)
+    if a.route_drift:
+        result["route_drift"] = route_drift_summary(baseline["base_token_routes"],
+                                                  record_token_routes(model, route_panels, dev))
+        result["route_gate"] = route_gate(result["route_drift"], route_panel_paths)
+    return result
+
+
+def base_scoring_paths(baseline, a, subject_items=None, route_panel_paths=None):
+    """Expected zero-intervention scores from the unpatched (possibly cached) baseline."""
+    acq = {k: v for k, v in baseline["base_acq"].items() if k not in ("qa_probe", "mcq_probe", "val", "val_gen")}
+    big = dict(dnll=0., dnll_se=0.) if baseline["base_big"] is not None else None
+    panels = {name: dict(dnll=0., dnll_se=0., base_nll=float(torch.tensor(nll).mean()))
+              for name, nll in baseline["base_extra"].items()}
+    bench = benchmark_summary(baseline["base_bench"], baseline["base_bench"]) if a.bench else None
+    gate_panels = dict(panels)
+    if big is not None:
+        gate_panels["eval-set"] = big
+    result = dict(held=dict(baseline["base_held"], kl=0., top1=1.), acq=acq, big=big, big_extra=panels,
+                  bench=bench, damage_gate=damage_gate(gate_panels, bench),
+                  subject_dnll=subject_summary(subject_items, baseline["base_subject"], baseline["base_subject"])
+                               if a.subject_text else None,
+                  qa_probe=baseline["base_acq"].get("qa_probe"), mcq_probe=baseline["base_acq"].get("mcq_probe"),
+                  route_drift=None, route_gate=None)
+    if a.route_drift:
+        result["route_drift"] = route_drift_summary(baseline["base_token_routes"], baseline["base_token_routes"])
+        result["route_gate"] = route_gate(result["route_drift"], route_panel_paths)
+    return result
+
+
+@contextmanager
+def zero_patch(model):
+    """An enabled, all-zero intervention, including clearing base-reset ablations.
+
+    Leave parametrizations/dispatch installed so the control traverses the actual
+    patched execution path. Restore tensors and enabled flags even on scoring failure.
+    """
+    saved = []
+    enabled = FSAParam.enabled, LoRAParam.enabled
+    try:
+        with torch.no_grad():
+            for _, lin in patched_linears(model):
+                for m in lin.parametrizations.weight:
+                    names = ("M", "unit_reset_rows", "unit_reset_cols") if isinstance(m, FSAParam) else ("B", "S")
+                    for name in names:
+                        tensor = getattr(m, name, None)
+                        if tensor is not None:
+                            saved.append((tensor, tensor.clone()))
+                            tensor.zero_()
+        set_enabled(True)
+        yield
+    finally:
+        with torch.no_grad():
+            for tensor, value in saved:
+                tensor.copy_(value)
+        FSAParam.enabled, LoRAParam.enabled = enabled
+
+
+def assert_zero_patch_control(base, patched):
+    """Exact metric equality, without a tolerance that could hide dispatch changes."""
+    checks = {name: base[name] == patched.get(name) for name in base}
+    passed = all(checks.values()) and set(base) == set(patched)
+    report = dict(passed=passed, checks=checks, base=base, patched=patched)
+    print("ZERO-PATCH-CONTROL", "PASS" if passed else "FAIL", json.dumps(report), flush=True)
+    if not passed:
+        raise AssertionError("zero-patch FINAL scoring differs from base: " + str([k for k, v in checks.items() if not v]))
+    return report
+
+
+def effective_mask_sha(model):
+    """Hash actual writable masks/coordinates, including partitions and unit allocation."""
+    digest = hashlib.sha256()
+    for name, lin in sorted(patched_linears(model)):
+        m = lin.parametrizations.weight[0]
+        mask = getattr(m, "mask", None)
+        digest.update(json.dumps([name, list(lin.parametrizations.weight.original.shape)]).encode())
+        if mask is None:
+            digest.update(b"all-weights")
+            continue
+        # The physical coordinates make sparse/dense representations comparable.
+        coords = m.idx.long()[mask] if getattr(m, "sparse", False) else mask.flatten().nonzero().flatten()
+        digest.update(coords.cpu().numpy().astype("<i8").tobytes())
+    return digest.hexdigest()
+
+
+def comparison_manifest(a, model, meta, final_file, checkpoint_evals, storage_, exposures, wake_steps):
+    """Record training and serving identity alongside each result, independent of compatibility checks."""
+    optimizer_keys = ("optim", "lr", "wd", "bop_gamma", "bop_gamma_late", "bop_gamma_switch", "bop_tau",
+                      "bop_tau_abs", "bop_tau_scale", "local_lambda", "drift_lambda", "repair_steps",
+                      "repair_local_lambda", "rehearsal_frac", "refresh_every", "budget_freeze", "keep_live",
+                      "support_score", "cost_rel", "adam_phase", "bop_accum", "tau_anneal", "wake_lr",
+                      "wake_lambda", "wake_margin", "master_clip", "mls_eta", "mls_gamma")
+    result = dict(export=dict(path=str(a.export), step=a.export_step),
+                  checkpoint=dict(path=str(final_file), sha256=file_sha(final_file),
+                                  bytes=Path(final_file).stat().st_size, update=a.steps + a.repair_steps),
+                  source_checkpoint=dict(path=a.load_patch, sha256=file_sha(a.load_patch)) if a.load_patch else None,
+                  mask_sha256=effective_mask_sha(model), init=a.unit_init, base_altering=a.unit_init in ("random", "zero"),
+                  seed=a.seed, calibration=meta.get("calibration"), exposures=exposures,
+                  training=dict(wake_steps=wake_steps, value_steps=a.steps + a.repair_steps),
+                  optimizer={k: getattr(a, k) for k in optimizer_keys},
+                  selection=dict(metric=a.select_metric, policy="validation recall thresholds, minimum validation dNLL",
+                                 no_pareto=a.no_pareto, save_at=a.save_at, first_threshold=.97 if a.save_at else None),
+                  checkpoints=checkpoint_evals,
+                  bytes=dict(storage=storage_, resident_banks=1, selector=0,
+                             checkpoint=Path(final_file).stat().st_size),
+                  configuration=vars(a))
+    result["optimizer"]["lr"] = a.lr or (.02 if a.method.startswith("fsa") else 1e-3)
+    path = Path(a.out).with_suffix(".manifest.json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(result, indent=2, default=str) + "\n")
+    return str(path)
 
 
 def extra_eval_panels(paths, bos, dev):
@@ -2376,7 +3272,8 @@ def wake_hinge(z, positive, negative, margin, general=None, weight=1., normalize
     """Squared positive/negative margin hinges and the general-text z <= 0 hinge."""
     pos = torch.relu(margin - z).square()[positive]
     neg = torch.relu(z + margin).square()[negative]
-    pos_count, neg_count = normalizers or (max(pos.numel(), 1), max(neg.numel(), 1))
+    pos_count, neg_count = normalizers or (pos.numel(), neg.numel())
+    pos_count, neg_count = max(pos_count, 1), max(neg_count, 1)
     loss = pos.sum() / pos_count + neg.sum() / neg_count
     if general is not None and general.numel():
         loss = loss + weight * torch.relu(general).square().mean()
@@ -2416,7 +3313,7 @@ def wake_select(z, facts, fact_ids, routed, eligible, units):
 
 
 @contextmanager
-def wake_prompt_inputs(model, layer_ids, detach=True):
+def wake_prompt_inputs(model, layer_ids, detach=True, shared=False, position=-1, locations=None):
     """Record exact last-prompt-token inputs and routes, with no prefix subtraction.
 
     The resident grouped dispatch supplies explicit token indices (also in fast-MoE
@@ -2428,20 +3325,36 @@ def wake_prompt_inputs(model, layer_ids, detach=True):
     try:
         for li in layer_ids:
             _, moe = moe_layers(model)[li]
+            if shared:
+                for si, expert in enumerate(getattr(moe, "shared_experts", None) or []):
+                    def shared_last(mod, inp, key=(li, si)):
+                        x = inp[0].reshape(-1, inp[0].shape[-1])[position]
+                        records[key] = (x.detach().cpu() if detach else x, set())
+                        if locations is not None:
+                            locations[(key, "shared")] = position % (inp[0].numel() // inp[0].shape[-1])
+                    hooks.append(expert.up_proj.register_forward_pre_hook(shared_last))
             dispatch = getattr(moe, "_forward_frozen_exact_grouped", None)
             if dispatch is not None:
                 own = "_forward_frozen_exact_grouped" in moe.__dict__
                 methods.append((moe, dispatch, own))
 
                 def capture(layer, x, indices, weights, li=li, dispatch=dispatch):
-                    records[li] = (x[-1].detach().cpu() if detach else x[-1], set(indices[-1].tolist()))
+                    records[li] = (x[position].detach().cpu() if detach else x[position], set(indices[position].tolist()))
+                    if locations is not None:
+                        target = position % x.shape[0]
+                        for ei in records[li][1]:
+                            locations[(li, ei)] = int((indices[:target] == ei).any(-1).sum())
                     return dispatch(x, indices, weights)
 
                 moe._forward_frozen_exact_grouped = MethodType(capture, moe)
             else:
                 def last(mod, inp, li=li):
                     x = inp[0].reshape(-1, inp[0].shape[-1])
-                    records[li] = (x[-1].detach().cpu() if detach else x[-1], set())
+                    records[li] = (x[position].detach().cpu() if detach else x[position], set())
+                    if locations is not None:
+                        # Identical inputs route identically in the simple CPU fallback.
+                        target = position % x.shape[0]
+                        locations[(li, "ordinal")] = int((x[:target] == x[target]).all(1).sum())
                 hooks.append(moe.register_forward_pre_hook(last))
                 for ei, expert in enumerate(moe.experts):
                     if expert is None:
@@ -2452,6 +3365,9 @@ def wake_prompt_inputs(model, layer_ids, detach=True):
                         last, chosen = records[li]
                         if bool((x == last.detach().cpu()).all(1).any()):
                             chosen.add(ei)
+                            if locations is not None:
+                                matches = (x == last.detach().cpu()).all(1).nonzero().flatten()
+                                locations[(li, ei)] = int(matches[locations[(li, "ordinal")]])
                     hooks.append(expert.up_proj.register_forward_pre_hook(route))
         yield records
     finally:
@@ -2465,74 +3381,734 @@ def wake_prompt_inputs(model, layer_ids, detach=True):
 
 
 def wake_margin_stats(z, pos, neg, margin):
-    return dict(positive=float((z >= margin)[pos].float().mean()),
-                negative=float((z <= -margin)[neg].float().mean()))
+    return dict(positive=float((z >= margin)[pos].float().sum() / max(int(pos.sum()), 1)),
+                negative=float((z <= -margin)[neg].float().sum() / max(int(neg.sum()), 1)))
 
 
-def run_wake_stage(model, tok, facts, templates, bos, layer_ids, anchor, a):
-    """Learn forced-slot detectors on causal prompt inputs, then freeze quantized rows.
+def unit_slot_mask(m, rows, proj):
+    """Unit membership in the optimizer's dense or sparse coordinates."""
+    rows = torch.as_tensor(rows, dtype=torch.long, device=m.M.device)
+    if m.sparse:
+        return torch.isin(m.rows() if proj == "up_proj" else m.cols(), rows)
+    indices = torch.arange(m.wshape[0 if proj == "up_proj" else 1], device=m.M.device)
+    selected = torch.isin(indices, rows)
+    return (selected[:, None] if proj == "up_proj" else selected[None, :]).expand_as(m.mask)
+
+
+def address_general_windows(path, streams, bos, dev, length=512):
+    """Use a separate calibration panel, checking every 32-gram against every damage stream.
+
+    Check the entire file, including unused calibration tokens and the legacy heldout
+    panel. Unlike the training overlap diagnostic, this allows no overlap and samples
+    no positions: a matching gram at any offset is leakage.
+    """
+    tokens, windows = preservation_windows(path, bos, length, dev)
+    overlap = ngram_overlap(tokens, streams, stride=1)
+    if any(overlap.values()):
+        raise SystemExit(f"calibration text overlaps damage panels (32-gram): {overlap}")
+    return windows[:32], dict(path=str(path), sha256=file_sha(path), overlap_32gram=overlap)
+
+
+@torch.no_grad()
+def collect_address_general(model, windows):
+    """Base input means and raw positive firing fractions; unrouted tokens count as silent.
+
+    Means use the inputs actually dispatched to each expert. Statistics stream over
+    all tokens of at most 32 windows, with no retained activation panel.
+    """
+    banks = {name: lin for name, lin in patched_linears(model) if name.endswith("up_proj")}
+    stats = {name: dict(sum=torch.zeros(lin.in_features, device=lin.weight.device),
+                       positive=torch.zeros(lin.out_features, device=lin.weight.device), count=0)
+             for name, lin in banks.items()}
+    hooks, total = [], 0
+    enabled, checkpoint_on = FSAParam.enabled, CKPT["on"]
+    try:
+        set_enabled(False)
+        CKPT["on"] = False
+        for name, lin in banks.items():
+            def capture(mod, inp, out, name=name):
+                x = inp[0].detach().reshape(-1, inp[0].shape[-1]).float()
+                stats[name]["sum"] += x.sum(0)
+                stats[name]["positive"] += (out.detach().reshape(-1, out.shape[-1]) > 0).sum(0)
+                stats[name]["count"] += x.shape[0]
+            hooks.append(lin.register_forward_hook(capture))
+        for win in windows[:32]:
+            total += win.numel()
+            logits_of(model, win[None])
+    finally:
+        for hook in hooks:
+            hook.remove()
+        set_enabled(enabled)
+        CKPT["on"] = checkpoint_on
+    return {name: dict(mean=s["sum"] / max(s["count"], 1),
+                       positive_fraction=s["positive"] / max(total, 1), tokens=total,
+                       routed_tokens=s["count"]) for name, s in stats.items()}
+
+
+def exclude_general_units(eligible, stats, fraction):
+    if not fraction:
+        return eligible
+    if stats is None:
+        raise ValueError("general exclusion requires unrelated-prompt statistics")
+    indices = eligible.nonzero().flatten()
+    count = math.ceil(fraction * indices.numel())
+    order = torch.argsort(stats["positive_fraction"][indices], descending=True, stable=True)
+    eligible = eligible.clone()
+    eligible[indices[order[:count]]] = False
+    return eligible
+
+
+def attribution_entropy(scores):
+    """Normalized Shannon entropy of nonnegative attribution, in [0, 1]."""
+    if scores.numel() <= 1:
+        return 0.
+    if not bool(scores.sum() > 0):
+        return 1.  # No evidence distinguishes units: treat attribution as uniform.
+    p = scores.float() / scores.float().sum()
+    return float(-(p * p.clamp_min(1e-30).log()).sum() / math.log(p.numel()))
+
+
+def entropy_unit_count(k, entropy):
+    return max(1, min(4 * k, round(k * (0.5 + entropy))))
+
+
+@contextmanager
+def centered_address_inputs(model, stats):
+    """Center address computations during selection, without changing inference."""
+    hooks = []
+    try:
+        for name, lin in patched_linears(model):
+            if stats and name in stats:
+                mean = stats[name]["mean"]
+                hooks.append(lin.register_forward_pre_hook(
+                    lambda mod, inp, mean=mean: (inp[0] - mean.to(inp[0]), *inp[1:])))
+        yield
+    finally:
+        for hook in hooks:
+            hook.remove()
+
+
+def center_address_gradients(model, stats):
+    """Use centered inputs for address-weight gradients, preserving the forward values."""
+    hooks = []
+    for name, lin in patched_linears(model):
+        if name not in stats:
+            continue
+        mean = stats[name]["mean"]
+        def centered(mod, inp, out, mean=mean):
+            if not torch.is_grad_enabled() or not FSAParam.enabled:
+                return out
+            correction = F.linear(mean.to(inp[0]), mod.weight)
+            return out + (correction.detach() - correction)
+        hooks.append(lin.register_forward_hook(centered))
+    return hooks
+
+
+@torch.no_grad()
+def snapshot_addresses(model, assignments):
+    for name, lin in patched_linears(model):
+        if not name.endswith("up_proj"):
+            continue
+        m = lin.parametrizations.weight[0]
+        bank = name.rsplit(".", 1)[0]
+        rows = sorted({u for fact in assignments.values() for u in fact.get(bank, [])})
+        m.address_indices = (unit_slot_mask(m, rows, "up_proj") & m.mask).flatten().nonzero().flatten()
+        codes = m._quant(m.M.detach() * m.mask) * m.support
+        m.address_start_codes = codes.flatten()[m.address_indices].clone()
+        if hasattr(m, "saved_address_start"):
+            idx, val = m.saved_address_start
+            coords = m.idx[m.address_indices] if m.sparse else m.address_indices
+            m.address_start_codes.zero_()
+            positions = torch.searchsorted(coords, idx.to(coords.device).long())
+            if positions.numel():
+                if bool((positions >= coords.numel()).any()) or not torch.equal(coords[positions], idx.to(coords)):
+                    raise ValueError("saved address baseline lies outside allocated rows")
+                m.address_start_codes[positions] = val.to(m.M)
+
+
+@torch.no_grad()
+def address_moved(model):
+    count = 0
+    for m in fsa_modules(model):
+        if hasattr(m, "address_indices"):
+            codes = m._quant(m.M.detach() * m.mask) * m.support
+            count += int((codes.flatten()[m.address_indices] != m.address_start_codes).sum())
+    return count
+
+
+def freeze_unit_addresses(model, assignments):
+    for name, lin in patched_linears(model):
+        if name.endswith("up_proj"):
+            bank = name.rsplit(".", 1)[0]
+            freeze_wake_rows(lin.parametrizations.weight[0],
+                             sorted({u for fact in assignments.values() for u in fact.get(bank, [])}))
+
+
+@torch.no_grad()
+def restrict_unit_masks(model, assignments, layer_ids=None):
+    prefixes = tuple(moe_layers(model)[li][0] + "." for li in layer_ids) if layer_ids is not None else None
+    for name, lin in patched_linears(model):
+        if prefixes is not None and not name.startswith(prefixes):
+            continue
+        m = lin.parametrizations.weight[0]
+        bank, proj = name.rsplit(".", 1)
+        allowed = sorted({u for fact in assignments.values() for u in fact.get(bank, [])})
+        alias = m.support is m.mask
+        m.mask = m.mask & unit_slot_mask(m, allowed, proj)
+        m.support = m.mask if alias else m.support & m.mask
+        m.M.mul_(m.mask)
+
+
+def restrict_person_addresses(model, assignments, a, layer_ids=None):
+    _, addresses, values, _ = address_layer_sets(a)
+    if layer_ids is not None:
+        addresses = layer_ids
+        if a.address_layers is None:
+            values = layer_ids
+    restrict_unit_masks(model, assignments, addresses)
+    # Address-only up rows are trained by the hinge, never by answer CE/Bop.
+    prefixes = tuple(moe_layers(model)[li][0] + "." for li in addresses if li not in values)
+    for name, lin in patched_linears(model):
+        if name.endswith("up_proj") and name.startswith(prefixes):
+            rows = assignments["person"].get(name.rsplit(".", 1)[0], [])
+            freeze_wake_rows(lin.parametrizations.weight[0], rows)
+
+
+@contextmanager
+def fact_unit_gradients(model, assignment):
+    """Keep each fact's answer gradient on its own units, even inside the union."""
+    hooks = []
+    try:
+        for name, lin in patched_linears(model):
+            m = lin.parametrizations.weight[0]
+            bank, proj = name.rsplit(".", 1)
+            mask = unit_slot_mask(m, assignment.get(bank, []), proj) & writable_slots(m)
+            hooks.append(m.M.register_hook(lambda grad, mask=mask: grad * mask))
+        yield
+    finally:
+        for hook in hooks:
+            hook.remove()
+
+
+def select_fact_units(model, pool, layer_ids, k, dev, general_stats=None, address_center=False,
+                      exclude_general=0., entropy_units=False):
+    """One canonical answer-loss backward per fact, ranked at the preceding token.
+
+    Stable sorting breaks equal-gradient ties by unit index. Selection is independent
+    per fact; shared selections are explicitly counted, rather than silently reassigned.
+    """
+    banks = dict(patched_linears(model))
+    assignments, occupancy, entropies, fact_k = {}, defaultdict(list), {}, {}
+    checkpoint_on, enabled = CKPT["on"], FSAParam.enabled
+    try:
+        CKPT["on"] = False
+        set_enabled(True)
+        for fi, examples in enumerate(pool):
+            seq, start = examples[0]
+            captured, hooks, locations = {}, [], {}
+            try:
+                with wake_prompt_inputs(model, layer_ids, shared=True, position=start - 1, locations=locations) as records, \
+                        centered_address_inputs(model, general_stats if address_center else None):
+                    for name, lin in banks.items():
+                        if not name.endswith("up_proj"):
+                            continue
+                        li = next(i for i, (lname, _) in enumerate(moe_layers(model)) if name.startswith(lname + "."))
+                        shared = ".shared_experts." in name
+                        ei = int(name.split(".shared_experts." if shared else ".experts.")[1].split(".")[0])
+                        key = (li, ei) if shared else li
+
+                        def capture(mod, inp, out, name=name, key=key, ei=ei, shared=shared):
+                            last, routes = records[key]
+                            if not shared and ei not in routes:
+                                return
+                            location = locations.get((key, "shared") if shared else (key, ei))
+                            if location is None:
+                                raise RuntimeError("unit selection lost answer-preceding token")
+                            out.retain_grad()
+                            captured[name] = (out, location)
+                        hooks.append(lin.register_forward_hook(capture))
+                    model.zero_grad(set_to_none=True)
+                    xx, lm = batchify([seq], dev, [start])
+                    lg = logits_of(model, xx)[:, :-1, :VOCAB].float()
+                    loss = F.cross_entropy(lg[lm[:, 1:]], xx[:, 1:][lm[:, 1:]])
+                    if loss.requires_grad:
+                        loss.backward()
+                    chosen = {}
+                    for name, (out, position) in captured.items():
+                        bank = name.rsplit(".", 1)[0]
+                        up = banks[name].parametrizations.weight[0]
+                        down = banks[bank + ".down_proj"].parametrizations.weight[0]
+                        um = up._dense(up.mask).bool() if up.sparse else up.mask
+                        dm = down._dense(down.mask).bool() if down.sparse else down.mask
+                        allowed = um.any(1) & dm.any(0)
+                        allowed = exclude_general_units(allowed, (general_stats or {}).get(name), exclude_general)
+                        eligible = allowed.nonzero().flatten()
+                        if not eligible.numel():
+                            continue
+                        grad = (out.grad.reshape(-1, out.shape[-1])[position].float().abs()
+                                if out.grad is not None else torch.zeros(out.shape[-1], device=dev))
+                        scores = grad
+                        if address_center:
+                            scores = scores * out.detach().reshape(-1, out.shape[-1])[position].float().abs()
+                        h = attribution_entropy(scores[eligible])
+                        count = entropy_unit_count(k, h) if entropy_units else k
+                        entropies.setdefault(str(fi), {})[bank] = h
+                        fact_k.setdefault(str(fi), {})[bank] = count
+                        rows = eligible[torch.argsort(scores[eligible], descending=True, stable=True)[:count]].tolist()
+                        chosen[bank] = rows
+                        for row in rows:
+                            occupancy[(bank, row)].append(fi)
+                    assignments[str(fi)] = chosen
+            finally:
+                for hook in hooks:
+                    hook.remove()
+        if not occupancy:
+            raise RuntimeError("no routed units with writable up rows and down columns")
+    finally:
+        model.zero_grad(set_to_none=True)
+        CKPT["on"] = checkpoint_on
+        set_enabled(enabled)
+    collisions = [dict(bank=bank, unit=row, facts=fis) for (bank, row), fis in sorted(occupancy.items()) if len(fis) > 1]
+    report = dict(k=k, assignments=assignments, used_units=len(occupancy), collisions=collisions,
+                  collision_units=len(collisions), colliding_assignments=sum(len(c["facts"]) - 1 for c in collisions),
+                  entropy_units=entropy_units, normalized_entropy=entropies, k_per_fact=fact_k)
+    print("UNIT-ASSIGNMENT " + json.dumps(report), flush=True)
+    return report
+
+
+@torch.no_grad()
+def initialize_units(model, units, mode, seed):
+    """Random/zero arms replace borrowed addresses and values without mutating W0.
+
+    Reset row/column indices are serialized separately from forced-position codes.
+    Borrowed deliberately preserves the existing harness behavior.
+    """
+    if mode == "borrowed":
+        return
+    gen = torch.Generator().manual_seed(seed + 19019)
+    for name, lin in sorted(patched_linears(model)):
+        bank, proj = name.rsplit(".", 1)
+        rows = units.get(bank, [])
+        if not rows:
+            continue
+        m = lin.parametrizations.weight[0]
+        selected = unit_slot_mask(m, rows, proj) & m.mask
+        axis, dim = ("rows", 0) if proj == "up_proj" else ("cols", 1)
+        reset = torch.zeros(m.wshape[dim], dtype=torch.bool, device=m.M.device)
+        reset[rows] = True
+        previous = getattr(m, "unit_reset_" + axis, None)
+        m.register_buffer("unit_reset_" + axis, reset if previous is None else reset | previous)
+        m.M[selected] = 0
+        if mode == "random" and proj == "up_proj":
+            n = int(selected.sum())
+            codes = (torch.rand(n, generator=gen) < .25).float()
+            codes *= torch.randint(0, 2, (n,), generator=gen).float() * 2 - 1
+            m.M[selected] = codes.to(m.M.device)
+        if m.support is not m.mask:
+            m.support[selected] = True
+
+
+@torch.no_grad()
+def address_accuracy(model, facts, items, detectors, windows, dev, person=None, assignments=None):
+    """Query-level any-unit TPR/FPR; general-text FPR over all unit/token opportunities.
+
+    Unrouted units count as silent. Fact-owned banks treat every other fact as a
+    negative; person-owned banks treat every other person's item as a negative.
+    """
+    ownership = []
+    if assignments is not None:
+        for fi, banks in assignments.items():
+            ownership.append((int(fi), {bank + ".up_proj": dict(rows=rows) for bank, rows in banks.items()}))
+    elif detectors:
+        ownership.append((person, detectors))
+    if not ownership:
+        return dict(available=False, reason="patch has no saved address/unit ownership")
+    union = defaultdict(set)
+    for _, selected in ownership:
+        for name, detector in selected.items():
+            union[name].update(detector["rows"])
+    activations = None
+    if assignments is not None:
+        # A single capture per query reads every bank; 100 memories do not require
+        # 100 full-model forwards on each negative item.
+        merged = {name: dict(rows=sorted(rows)) for name, rows in union.items()}
+        activations = [address_activity(model, it["p"], merged, dev) if merged else {} for it in items]
+    result = []
+    for owner, selected in ownership:
+        tp = fp = positive = negative = 0
+        for i, it in enumerate(items):
+            own = it["fi"] == owner if assignments is not None else facts[it["fi"]].pid == owner
+            fired = (any(set(detector["rows"]) & activations[i].get(name, set()) for name, detector in selected.items())
+                     if activations is not None else address_fired(model, it["p"], selected, dev) if selected else False)
+            if own:
+                positive += 1
+                tp += fired
+            else:
+                negative += 1
+                fp += fired
+        result.append(dict(owner=owner, positives=positive, negatives=negative, true_positive=tp,
+                           false_positive=fp, tpr=tp / positive if positive else None,
+                           fpr=fp / negative if negative else None))
+    # Union banks avoid double-counting colliding unit assignments on general text.
+    banks, hooks, firing = dict(patched_linears(model)), [], [0]
+    tokens = 0
+    try:
+        for name, rows in union.items():
+            def count(mod, inp, out, rows=sorted(rows)):
+                firing[0] += int((out.reshape(-1, out.shape[-1])[:, rows] > 0).sum())
+            hooks.append(banks[name].register_forward_hook(count))
+        for window in windows:
+            seq = window.tolist() if isinstance(window, torch.Tensor) else list(window)
+            tokens += len(seq)
+            logits_of(model, torch.tensor([seq], device=dev))
+    finally:
+        for hook in hooks:
+            hook.remove()
+    pos = sum(row["positives"] for row in result)
+    neg = sum(row["negatives"] for row in result)
+    opportunities = tokens * sum(len(rows) for rows in union.values())
+    return dict(available=True, owners=result, tpr=sum(row["true_positive"] for row in result) / pos if pos else None,
+                fpr=sum(row["false_positive"] for row in result) / neg if neg else None,
+                general_text=dict(tokens=tokens, unit_token_opportunities=opportunities, fired=firing[0],
+                                  fpr=firing[0] / opportunities if opportunities else None),
+                query_rule="any dispatched owned unit preactivation > 0")
+
+
+def composition_recall(model, tok, items, dev, max_new, stop_k, bs):
+    gens = greedy_generate(model, [it["p"] for it in items], dev,
+                           max_new or max((len(it["a"]) for it in items), default=0) + stop_k + 2, bs) if items else []
+    hits = [all(re.search(r"(?<!\w)" + re.escape(v.lower()) + r"(?!\w)", tok.decode(gen).lower())
+                for v in it["vals"]) for it, gen in zip(items, gens)]
+    return dict(n=len(items), recall=sum(hits) / len(hits) if hits else None)
+
+
+def e2e_three_metrics(model, tok, facts, items, general, dev, bos, a, wake, unit_info):
+    try:
+        from .branch_eval import composition_items
+    except ImportError:
+        from branch_eval import composition_items
+    assignments = unit_info["assignments"] if unit_info else None
+    # Assignment keys index the person-filtered pool, while eval items index the world.
+    global_assignments = ({str(fi): assignments[str(local)] for local, fi in enumerate(person_indices(facts, a.train_person))}
+                          if assignments is not None else None)
+    address = address_accuracy(model, facts, items, wake["detectors"] if wake else {}, general, dev,
+                               person=a.train_person, assignments=global_assignments)
+    composed = gen_eval(model, tok, items, dev, a.gen_max_new, a.gen_stop_k, a.gen_bs, conflict_map(facts))
+    g = composition_items(tok, facts, bos)
+    g_score = composition_recall(model, tok, g, dev, a.gen_max_new, a.gen_stop_k, a.gen_bs)
+    individual = {}
+    if global_assignments is not None:
+        saved = export_patch(model)
+        try:
+            for fi, selected in global_assignments.items():
+                # Each memory keeps only its selected up rows / down columns, including
+                # reset metadata. Shared units are retained and reported as collisions.
+                state = dict(saved, entries={})
+                for name, entry in saved["entries"].items():
+                    bank, proj = name.rsplit(".", 1)
+                    units = torch.tensor(selected.get(bank, []), dtype=torch.long)
+                    indices = entry["idx"].long()
+                    unit = indices // entry["shape"][1] if proj == "up_proj" else indices % entry["shape"][1]
+                    keep = torch.isin(unit, units)
+                    e = dict(entry, idx=entry["idx"][keep], val=entry["val"][keep])
+                    for axis in ("rows", "cols"):
+                        key = "unit_reset_" + axis
+                        if key in e:
+                            e[key] = e[key][torch.isin(e[key], units)]
+                    state["entries"][name] = e
+                load_patch(model, state)
+                own = [it for it in items if it["fi"] == int(fi)]
+                individual[fi] = gen_eval(model, tok, own, dev, a.gen_max_new, a.gen_stop_k, a.gen_bs,
+                                          conflict_map(facts))["recall"]
+        finally:
+            load_patch(model, saved)
+    else:
+        own = [it for it in items if a.train_person is None or facts[it["fi"]].pid == a.train_person]
+        individual[str(a.train_person)] = gen_eval(model, tok, own, dev, a.gen_max_new, a.gen_stop_k, a.gen_bs,
+                                                   conflict_map(facts))["recall"]
+    return dict(address_accuracy=address, individual_recall=dict(by_memory=individual,
+                mean=sum(individual.values()) / len(individual) if individual else None),
+                composed_recall=dict(n=composed["n"], recall=composed["recall"], g_set=g_score),
+                resident_people=sorted({facts[fi].pid for fi in person_indices(facts, a.train_person)}))
+
+
+@torch.no_grad()
+def unit_bytes(model, sparse_storage=None):
+    """Nominal code payloads; scales/base identity and file/container overhead excluded.
+
+    Dense unit: index once, then two bits per forced position of the up row/down
+    column. Block unit: index once, then index + 16 code bits per nonzero 8-block
+    along each vector (the final partial block is padded to eight).
+    """
+    banks = defaultdict(dict)
+    for name, lin in patched_linears(model):
+        m = lin.parametrizations.weight[0]
+        if not isinstance(m, FSAParam) or m.fmt != "ternary":
+            return None
+        bank, proj = name.rsplit(".", 1)
+        banks[bank][proj] = (m, lin.parametrizations.weight.original.detach())
+    dense_bits = block_bits = used = nnz = slots = 0
+    aligned_banks = packed = positions = 0
+    entries = {}
+    for bank, projections in banks.items():
+        if set(projections) != {"up_proj", "down_proj"}:
+            continue
+        up, wu = projections["up_proj"]
+        down, wd = projections["down_proj"]
+        uc, dc = up.codes(), down.codes()
+        rows = (uc.ne(0).any(1) | dc.ne(0).any(0))
+        if hasattr(up, "address_indices"):
+            coords = up.idx[up.address_indices].long() if up.sparse else up.address_indices
+            rows[torch.div(coords, wu.shape[1], rounding_mode="floor").unique()] = True
+        for m in (up, down):
+            for axis in ("rows", "cols"):
+                reset = getattr(m, "unit_reset_" + axis, None)
+                if reset is not None:
+                    rows |= reset
+        um, dm = ((wu == 0, wd == 0) if ".shared_experts." in bank
+                  else (pair8_forced_mask(wu), pair8_forced_mask(wd)))
+        db = bb = 0
+        index_bits = math.ceil(math.log2(max(wu.shape[0], 2)))
+        for row in rows.nonzero().flatten().tolist():
+            db += index_bits + 2 * (int(um[row].sum()) + int(dm[:, row].sum()))
+            bb += index_bits
+            for vec in (uc[row], dc[:, row]):
+                blocks = math.ceil(vec.numel() / 8)
+                padded = F.pad(vec, (0, blocks * 8 - vec.numel()))
+                nonzero_blocks = int(padded.reshape(-1, 8).ne(0).any(1).sum())
+                bb += nonzero_blocks * (math.ceil(math.log2(max(blocks, 2))) + 16)
+        bank_ids = sorted({row // 8 for row in rows.nonzero().flatten().tolist()})
+        payload_bits = 0
+        for bank_id in bank_ids:
+            first, last = bank_id * 8, min((bank_id + 1) * 8, wu.shape[0])
+            payload_bits += 2 * (int(um[first:last].sum()) + int(dm[:, first:last].sum()))
+        # Bank positions are a packed fixed-width list; the final short bank uses
+        # only existing units. Tensor identity/counts are container metadata.
+        position_bits = len(bank_ids) * math.ceil(math.log2(max(math.ceil(wu.shape[0] / 8), 2)))
+        payload_bytes, position_bytes = math.ceil(payload_bits / 8), math.ceil(position_bits / 8)
+        entries[bank] = dict(used_units=int(rows.sum()), logical_units_used=int(rows.sum()),
+                             aligned_8_unit_banks_touched=len(bank_ids), packed_bytes=payload_bytes,
+                             position_encoding_overhead_bytes=position_bytes,
+                             dense_packed_unit_bytes=db / 8, block_sparse_unit_bytes=bb / 8)
+        aligned_banks += len(bank_ids)
+        packed += payload_bytes
+        positions += position_bytes
+        dense_bits += db
+        block_bits += bb
+        used += int(rows.sum())
+        nnz += int(uc.ne(0).sum() + dc.ne(0).sum())
+        slots += int(up.mask.sum() + down.mask.sum())
+    coordinate = (sparse_storage or fsa_storage(nnz, slots, "ternary"))["bytes_sparse"]
+    return dict(sparse_coordinate_bytes=coordinate, dense_packed_unit_bytes=dense_bits / 8,
+                block_sparse_unit_bytes=block_bits / 8, used_units=used, entries=entries,
+                logical_units_used=used, aligned_8_unit_banks_touched=aligned_banks, packed_bytes=packed,
+                position_encoding_overhead_bytes=positions, aligned_bank_total_bytes=packed + positions,
+                accounting="code payload only; base-derived scales and container metadata excluded")
+
+
+def address_labels(facts, fact_ids, person, units, device):
+    own_attrs = {f.attr for f in facts if f.pid == person}
+    pos = torch.tensor([facts[fi].pid == person for fi in fact_ids], device=device)
+    neg = torch.tensor([facts[fi].pid != person and facts[fi].attr in own_attrs for fi in fact_ids], device=device)
+    return pos[:, None].expand(-1, units), neg[:, None].expand(-1, units)
+
+
+def address_select(z, facts, fact_ids, person, routed, eligible, units):
+    pos, neg = address_labels(facts, fact_ids, person, z.shape[1], z.device)
+    routed = torch.tensor(routed, device=z.device)[:, None]
+    # Prefer routed positives for selection, but still allocate K units in every
+    # expert: unseen experts can be reached by later phrasings or changed routes.
+    if bool((pos & routed).any()):
+        pos = pos & routed
+    scores = (z * pos).sum(0) / pos.sum(0).clamp_min(1)
+    scores -= (z * neg).sum(0) / neg.sum(0).clamp_min(1)
+    indices = eligible.nonzero().flatten()
+    if indices.numel() < units:
+        raise RuntimeError("partition has fewer eligible address rows than --address-units")
+    return indices[scores[indices].topk(units).indices].tolist()
+
+
+@torch.no_grad()
+def address_activity(model, prompt, detectors, dev):
+    """Any selected, actually dispatched address unit with raw preactivation > 0.
+
+    One unpadded prompt prevents generation padding or continuation tokens from
+    changing the last-token decision. Inputs are captured after expert normalization.
+    """
+    layers = moe_layers(model)
+    banks = dict(patched_linears(model))
+    selected = []
+    for name, detector in detectors.items():
+        if name not in banks or not detector.get("rows"):
+            raise ValueError(f"missing selected address linear/rows: {name}")
+        li = next(i for i, (lname, _) in enumerate(layers) if name.startswith(lname + "."))
+        shared = ".shared_experts." in name
+        ei = int(name.split(".shared_experts." if shared else ".experts.")[1].split(".")[0])
+        selected.append((name, banks[name], detector["rows"], (li, ei) if shared else li, ei, shared))
+    fired, hooks = {}, []
+    try:
+        with wake_prompt_inputs(model, sorted({key[0] if isinstance(key, tuple) else key
+                                              for _, _, _, key, _, _ in selected}), shared=True) as records:
+            for name, lin, rows, key, ei, shared in selected:
+                def capture(mod, inp, out, name=name, rows=rows, key=key, ei=ei, shared=shared):
+                    last, routes = records[key]
+                    if not shared and ei not in routes:
+                        return
+                    x = inp[0].reshape(-1, inp[0].shape[-1])
+                    positions = (x == last.to(x)).all(1).nonzero().flatten()
+                    if not positions.numel():
+                        raise RuntimeError("address capture lost last prompt token")
+                    # Read the actual GEMM output, retaining bf16 rounding and biases.
+                    z = out.reshape(-1, out.shape[-1])[positions[-1], rows]
+                    fired[name] = {row for row, active in zip(rows, (z > 0).tolist()) if active}
+                hooks.append(lin.register_forward_hook(capture))
+            logits_of(model, torch.tensor([prompt], device=dev))
+        return fired
+    finally:
+        for hook in hooks:
+            hook.remove()
+
+
+def address_fired(model, prompt, detectors, dev):
+    return any(address_activity(model, prompt, detectors, dev).values())
+
+
+def global_fact_assignments(assignments, local_to_global, n_facts):
+    """Translate local allocation ownership into the full negative pool's fact IDs."""
+    if local_to_global is None:
+        local_to_global = list(range(n_facts))
+    if len(set(local_to_global)) != len(local_to_global) or any(not 0 <= fi < n_facts for fi in local_to_global):
+        raise ValueError("invalid local-to-global fact mapping")
+    out = {}
+    for local, banks in assignments.items():
+        local = int(local)
+        if not 0 <= local < len(local_to_global):
+            raise ValueError("allocation fact outside local-to-global mapping")
+        out[str(local_to_global[local])] = banks
+    return out
+
+
+def run_wake_stage(model, tok, facts, templates, bos, layer_ids, anchor, a,
+                   general_stats=None, assignments=None, assignment_fact_ids=None):
+    """Learn forced-slot detectors on causal inputs; unit runs obey --address-mode.
 
     Selection and margin scales use the base model. Each wake update re-evaluates
     the patched hidden inputs, with gradients only to selected up-slot masters.
     Small master vectors avoid Adam moments for entire expert weight matrices.
+    Address mode labels every own-person prompt positive and same-attribute other
+    people negative, with absolute raw-preactivation margins (including anchors).
+    Waking units also activates frozen base down columns: subsequent value training
+    uses the full forward and therefore sees those base-column contributions.
     """
+    # Allocation IDs index the local training pool. Prompt IDs index the full world.
+    # Convert once; all owners, labels, and serialized detector facts below are global.
+    if assignments is not None:
+        assignments = global_fact_assignments(assignments, assignment_fact_ids, len(facts))
+    address = getattr(a, "address_units", 0)
+    unit_contrastive = assignments is not None
+    unit_constrained = bool(address or unit_contrastive)
+    shared_address = bool(unit_constrained and (a.shared_expert or a.shared_only))
     items = build_items(tok, facts, templates, bos)
+    if address and getattr(a, "address_pronoun", False):
+        items += build_address_pronoun_items(tok, facts, bos)
     fact_ids = [it["fi"] for it in items]
     dev = next(model.parameters()).device
     banks = {name: (lin, lin.parametrizations.weight[0]) for name, lin in patched_linears(model)
              if name.endswith("up_proj")}
+    input_keys = ([(li, si) for li in layer_ids for si, _ in enumerate(
+                   getattr(moe_layers(model)[li][1], "shared_experts", None) or [])]
+                  if shared_address else layer_ids)
+    if unit_contrastive and shared_address and not a.shared_only:
+        input_keys = list(layer_ids) + input_keys
     prompt_x, routes = defaultdict(list), defaultdict(list)
     enabled, checkpoint_on = FSAParam.enabled, CKPT["on"]
     try:
         set_enabled(False)
         CKPT["on"] = False
-        with torch.no_grad(), wake_prompt_inputs(model, layer_ids) as records:
+        with torch.no_grad(), wake_prompt_inputs(model, layer_ids, shared=shared_address) as records:
             for it in items:
                 records.clear()
                 logits_of(model, torch.tensor([it["p"]], device=dev))
-                for li in layer_ids:
-                    if li not in records:
-                        raise RuntimeError(f"wake stage cannot capture last-token dispatch at layer {li}")
-                    x, chosen = records[li]
-                    prompt_x[li].append(x)
-                    routes[li].append(chosen)
+                for key in input_keys:
+                    if key not in records:
+                        raise RuntimeError(f"wake stage cannot capture last-token dispatch at layer {key}")
+                    x, chosen = records[key]
+                    prompt_x[key].append(x)
+                    routes[key].append(chosen)
     finally:
         set_enabled(enabled)
         CKPT["on"] = checkpoint_on
     detectors, report = [], {}
     for li in layer_ids:
         lname, moe = moe_layers(model)[li]
-        xs = torch.stack(prompt_x[li]).to(dev)
-        for ei, expert in enumerate(moe.experts):
-            name = f"{lname}.experts.{ei}.up_proj"
+        experts = [(ei, expert, shared_address) for ei, expert in enumerate(
+            (getattr(moe, "shared_experts", None) or []) if shared_address else moe.experts)]
+        if unit_contrastive and shared_address and not a.shared_only:
+            experts += [(ei, expert, False) for ei, expert in enumerate(moe.experts)]
+        for ei, expert, is_shared in experts:
+            input_key = (li, ei) if is_shared else li
+            xs = torch.stack(prompt_x[input_key]).to(dev)
+            name = f"{lname}.{'shared_experts' if is_shared else 'experts'}.{ei}.up_proj"
             if name not in banks:
                 continue
             lin, m = banks[name]
             original = lin.parametrizations.weight.original.detach()
+            center = ((general_stats or {}).get(name, {}).get("mean") if a.address_center else None)
+            if center is not None:
+                xs = xs - center.to(xs)
             with torch.no_grad():
                 z = F.linear(xs, original, lin.bias).float()
                 eligible = ((m._dense(m.mask).bool() if m.sparse else m.mask).any(1) & (m.alpha[:, 0] > 0))
-                rows, owners = wake_select(z, facts, fact_ids, [ei in r for r in routes[li]], eligible, a.wake_units)
+                if not unit_contrastive:
+                    eligible = exclude_general_units(eligible, (general_stats or {}).get(name), a.exclude_general)
+                if address:
+                    rows = address_select(z, facts, fact_ids, a.train_person,
+                                          [True if shared_address else ei in r for r in routes[input_key]], eligible, address)
+                    owners = []
+                elif unit_contrastive:
+                    bank = name.rsplit(".", 1)[0]
+                    rows, owners = [], []
+                    # One row can belong to multiple facts: its target is their
+                    # union, avoiding contradictory hinges on colliding addresses.
+                    rows = sorted({u for fact in assignments.values() for u in fact.get(bank, [])})
+                else:
+                    rows, owners = wake_select(z, facts, fact_ids, [ei in r for r in routes[li]], eligible, a.wake_units)
             if not rows:
                 continue
-            pos, neg = wake_labels(facts, fact_ids, owners, dev)
-            margin = a.wake_margin * z[:, rows].std(0, unbiased=False)
+            if address:
+                initialize_units(model, {name.rsplit(".", 1)[0]: rows}, a.unit_init, a.seed + li * 1000 + ei)
+            pos, neg = (address_labels(facts, fact_ids, a.train_person, len(rows), dev) if address
+                        else wake_labels(facts, fact_ids, owners, dev))
+            if unit_contrastive:
+                owners = [{int(fi) for fi, fact in assignments.items() if row in fact.get(bank, [])} for row in rows]
+                pos = torch.tensor([[fi in own for own in owners] for fi in fact_ids], device=dev)
+                neg = torch.tensor([[any(facts[fi].attr == facts[other].attr and facts[fi].pid != facts[other].pid
+                                         for other in own) and fi not in own for own in owners]
+                                    for fi in fact_ids], device=dev)
+            margin = (torch.full((len(rows),), a.wake_margin, device=dev) if address
+                      else a.wake_margin * z[:, rows].std(0, unbiased=False))
             before = wake_margin_stats(z[:, rows], pos, neg, margin)
             row_ids = torch.tensor(rows, device=dev)
             stored_rows = m.rows() if m.sparse else torch.arange(m.wshape[0], device=dev)[:, None].expand_as(m.M)
             indices = (torch.isin(stored_rows, row_ids) & m.mask).flatten().nonzero().flatten()
             detectors.append(dict(name=name, lin=lin, param=m, rows=rows, row_ids=row_ids, indices=indices,
-                                  master=nn.Parameter(m.M.detach().flatten()[indices].clone()), li=li,
+                                  master=nn.Parameter(m.M.detach().flatten()[indices].clone()), li=li, input_key=input_key,
                                   pos=pos, neg=neg, margin=margin, normalizers=(int(pos.sum()), int(neg.sum())),
+                                  center=center,
                                   support=m.support.flatten()[indices].clone()))
-            report[name] = dict(rows=rows, facts=owners, before=before)
+            report[name] = dict(rows=rows, facts=[sorted(own) for own in owners] if unit_contrastive else owners,
+                                positive_prompts=int(pos.any(1).sum()), negative_prompts=int(neg.any(1).sum()),
+                                before=before)
     del prompt_x
     xs = z = None
     if not detectors:
         raise RuntimeError("wake stage found no routed conflict prompts with writable up rows")
+    if address:
+        address_assignments = {"person": {name.rsplit(".", 1)[0]: d["rows"] for name, d in report.items()}}
+        snapshot_addresses(model, address_assignments)
 
     trainable = [(param, param.requires_grad) for param in model.parameters()]
-    hooks, general_terms = [], {}
+    hooks, general_terms, local = [], {}, None
     try:
         for param, _ in trainable:
             param.requires_grad_(False)
@@ -2548,11 +4124,14 @@ def run_wake_stage(model, tok, facts, templates, bos, layer_ids, anchor, a):
             def general_hook(mod, inp, out, detector=detector):
                 if detector["name"] in general_terms:
                     z = out.reshape(-1, out.shape[-1])[:, detector["row_ids"]].float()
-                    general_terms[detector["name"]].append((torch.relu(z).square().sum(), z.numel()))
+                    if detector["center"] is not None:
+                        z = z - F.linear(detector["center"].to(inp[0]), mod.weight[detector["row_ids"]]).float()
+                    general_terms[detector["name"]].append((torch.relu(z + (detector["margin"] if address else 0)).square().sum(), z.numel()))
             hooks.append(detector["lin"].register_forward_hook(general_hook))
+        local = LocalOutputPenalty(model) if address else None
         optimizer = torch.optim.Adam([d["master"] for d in detectors], lr=a.wake_lr)
-        with wake_prompt_inputs(model, layer_ids, detach=False) as records:
-            for _ in range(a.wake_steps):
+        with wake_prompt_inputs(model, layer_ids, detach=False, shared=shared_address) as records:
+            for _ in range(0 if address and a.address_mode == "frozen" else a.wake_steps):
                 optimizer.zero_grad(set_to_none=True)
                 for i, it in enumerate(items):
                     records.clear()
@@ -2562,7 +4141,9 @@ def run_wake_stage(model, tok, facts, templates, bos, layer_ids, anchor, a):
                         pos, neg = d["pos"][i], d["neg"][i]
                         if not bool((pos | neg).any()):
                             continue
-                        x = records[d["li"]][0]
+                        x = records[d["input_key"]][0]
+                        if d["center"] is not None:
+                            x = x - d["center"].to(x)
                         lin = d["lin"]
                         bias = lin.bias[d["row_ids"]] if lin.bias is not None else None
                         z = F.linear(x, lin.weight[d["row_ids"]], bias).float()
@@ -2570,18 +4151,26 @@ def run_wake_stage(model, tok, facts, templates, bos, layer_ids, anchor, a):
                         terms.append(term / len(detectors))
                     if terms:
                         torch.stack(terms).sum().backward()
-                if a.wake_lambda:
+                if a.wake_lambda or local is not None:
                     for window in anchor[:2]:
                         general_terms.update({d["name"]: [] for d in detectors})
+                        if local is not None:
+                            local.start()
                         logits_of(model, window[None])
+                        penalty = local.stop() if local is not None else None
                         terms = []
                         for values in general_terms.values():
                             if values:
                                 total = torch.stack([value for value, _ in values]).sum()
                                 terms.append(total / max(sum(n for _, n in values), 1))
                         general_terms.clear()
-                        if terms:
-                            (a.wake_lambda * torch.stack(terms).sum() / (len(detectors) * min(2, len(anchor)))).backward()
+                        loss = (a.wake_lambda * torch.stack(terms).sum() / len(detectors) if terms else 0)
+                        if penalty is not None:
+                            loss = loss + a.local_lambda * penalty
+                        if isinstance(loss, torch.Tensor) and loss.requires_grad:
+                            (loss / min(2, len(anchor))).backward()
+                        if local is not None:
+                            local.end()
                 optimizer.step()
                 with torch.no_grad():
                     for d in detectors:
@@ -2593,6 +4182,9 @@ def run_wake_stage(model, tok, facts, templates, bos, layer_ids, anchor, a):
         general_terms.clear()
         for hook in hooks:
             hook.remove()
+        if local is not None:
+            for hook in local.h:
+                hook.remove()
         for d in detectors:
             m = d["param"]
             if hasattr(m, "wake_master"):
@@ -2622,18 +4214,24 @@ def run_wake_stage(model, tok, facts, templates, bos, layer_ids, anchor, a):
         with torch.no_grad():
             if a.budget and m.support is not m.mask:
                 m.support.view(-1)[d["indices"]] = m.M.flatten()[d["indices"]] != 0
-            freeze_wake_rows(m, d["rows"])
+            if not unit_constrained or a.address_mode != "mutable":
+                freeze_wake_rows(m, d["rows"])
+
+    if address:
+        restrict_person_addresses(model, address_assignments, a, layer_ids)
 
     # Measure after ternarization/pruning on the actual patched hidden inputs.
     after_z = defaultdict(list)
-    with torch.no_grad(), wake_prompt_inputs(model, layer_ids) as records:
+    with torch.no_grad(), wake_prompt_inputs(model, layer_ids, shared=shared_address) as records:
         for it in items:
             records.clear()
             logits_of(model, torch.tensor([it["p"]], device=dev))
             for d in detectors:
                 lin = d["lin"]
                 bias = lin.bias[d["row_ids"]] if lin.bias is not None else None
-                x = records[d["li"]][0].to(dev)
+                x = records[d["input_key"]][0].to(dev)
+                if d["center"] is not None:
+                    x = x - d["center"].to(x)
                 after_z[d["name"]].append(F.linear(x, lin.weight[d["row_ids"]], bias).float())
     for d in detectors:
         report[d["name"]]["after"] = wake_margin_stats(torch.stack(after_z[d["name"]]),
@@ -2641,14 +4239,17 @@ def run_wake_stage(model, tok, facts, templates, bos, layer_ids, anchor, a):
     by_layer = {}
     for li in layer_ids:
         lname = moe_layers(model)[li][0]
-        entries = [v for name, v in report.items() if name.startswith(lname + ".experts.")]
+        entries = [v for name, v in report.items() if name.startswith(lname + ".")]
         if entries:
             by_layer[lname] = {phase: {kind: sum(v[phase][kind] for v in entries) / len(entries)
                                       for kind in ("positive", "negative")} for phase in ("before", "after")}
     print("WAKE", json.dumps(dict(layers=by_layer, units=sum(len(v["rows"]) for v in report.values()),
                                  nnz=sum(int(pinned_slots(m).sum()) for _, m in banks.values()))), flush=True)
     return dict(steps=a.wake_steps, units=a.wake_units, margin=a.wake_margin, weight=a.wake_lambda,
-                lr=a.wake_lr, detectors=report, layers=by_layer)
+                lr=a.wake_lr, detectors=report, layers=by_layer,
+                prompt_fact_ids=sorted(set(fact_ids)), assignment_fact_ids=assignment_fact_ids,
+                address_mode=a.address_mode if unit_constrained else "frozen",
+                training_steps=0 if address and a.address_mode == "frozen" else a.wake_steps)
 
 
 @torch.no_grad()
@@ -2759,6 +4360,91 @@ class GateHinge:
         self.replay = False
 
 
+class RouteKLPenalty:
+    """Sum of mean-token KL on layers strictly after the first patched layer.
+
+    The production sigmoid router returns (indices, weights, raw logits). Normalize its full sigmoid
+    affinities over all experts, before top-k; a plain Linear test router uses softmax. Cache at most
+    32 detached CPU batches, avoiding an unbounded GPU cache. Hooks are active only inside capture().
+    """
+
+    def __init__(self, model, layer_ids, cache_size=32):
+        self.model, self.cache_size, self.cache = model, cache_size, {}
+        self.layers = {li: layer.router for li, (_, layer) in enumerate(moe_layers(model))
+                       if li > min(layer_ids)}
+
+    @contextmanager
+    def capture(self):
+        rows, hooks = {}, []
+        def hook(li):
+            def record(mod, inp, out):
+                if li in rows:
+                    raise ValueError("router called twice during route-KL capture")
+                if isinstance(out, tuple) and len(out) == 3:
+                    logits = out[2].float()
+                    logp = F.logsigmoid(logits)
+                    logp = logp - torch.logsumexp(logp, -1, keepdim=True)
+                elif torch.is_tensor(out):
+                    logp = F.log_softmax(out.float(), -1)
+                else:
+                    raise ValueError("route-KL needs raw router logits")
+                rows[li] = logp.reshape(-1, logp.shape[-1])
+            return record
+        try:
+            for li, router in self.layers.items():
+                hooks.append(router.register_forward_hook(hook(li)))
+            yield rows
+            if rows.keys() != self.layers.keys():
+                raise ValueError("route-KL capture missed a downstream router")
+        finally:
+            for h in hooks:
+                h.remove()
+
+    def base(self, windows):
+        key = (tuple(windows.shape), tuple(windows.detach().cpu().flatten().tolist()))
+        if key not in self.cache:
+            # Disable both student and any fading teacher, restoring every flag even on an error.
+            student_state = FSAParam.enabled, LoRAParam.enabled
+            teacher_state = [(t, t.enabled) for t in self.model.modules() if isinstance(t, TeacherLoRAParam)]
+            try:
+                set_enabled(False)
+                for t, _ in teacher_state:
+                    t.enabled = False
+                with torch.no_grad(), self.capture() as rows:
+                    logits_of(self.model, windows)
+                cached = {li: logp.detach().cpu() for li, logp in rows.items()}
+            finally:
+                FSAParam.enabled, LoRAParam.enabled = student_state
+                for t, enabled in teacher_state:
+                    t.enabled = enabled
+            if len(self.cache) >= self.cache_size:
+                self.cache.pop(next(iter(self.cache)))
+            self.cache[key] = cached
+        return {li: logp.to(windows.device) for li, logp in self.cache[key].items()}
+
+    def loss(self, base, patched):
+        terms = [(base[li].exp() * (base[li] - logp)).sum(-1).mean()
+                 for li, logp in patched.items()]
+        return torch.stack(terms).sum() if terms else None
+
+
+def route_gate(summary, panel_paths):
+    """Equal-panel mean of FineWeb token/layer Jaccard; missing FineWeb evidence fails the gate."""
+    scores = [summary[name]["mean"]["jaccard"] for name, path in panel_paths.items()
+              if "fineweb" in str(path).lower() and name in summary and summary[name]["mean"]]
+    mean = sum(scores) / len(scores) if scores else None
+    return dict(passed=mean is not None and mean >= .87, mean_fineweb_jaccard=mean, threshold=.87)
+
+
+def preservation_windows(path, bos, length, dev):
+    tokens = json.loads(Path(path).read_text())
+    if length < 2 or len(tokens) < length - 1:
+        raise SystemExit("preservation file too short or --anchor-len < 2")
+    wins = torch.tensor([[bos] + tokens[i:i + length - 1]
+                         for i in range(0, len(tokens) - (length - 1) + 1, length - 1)], device=dev)
+    return tokens, wins
+
+
 class LocalOutputPenalty:
     """Smooth preservation: relative energy of the patch's direct output change on general text,
     sum ||x @ dW^T||^2 / sum ||x @ W^T||^2 over every patched linear (W = the frozen base). Routing chaos cannot
@@ -2792,7 +4478,11 @@ class LocalOutputPenalty:
                 den = base.detach().pow(2).sum()
             else:
                 x = inp[0].reshape(-1, inp[0].shape[-1]).float()
-                num = (x @ pm.delta_w().float().T).pow(2).sum()
+                delta = pm.delta_w().float()
+                if isinstance(pm, FSAParam) and (hasattr(pm, "unit_reset_rows") or hasattr(pm, "unit_reset_cols")):
+                    original = lin.parametrizations.weight.original.detach().float()
+                    delta = delta + pm.unit_base(original) - original
+                num = (x @ delta.T).pow(2).sum()
                 with torch.no_grad():
                     den = (x @ lin.parametrizations.weight.original.float().T).pow(2).sum()
             if self.on:                                    # replay (checkpoint recompute): same ops, not recorded
@@ -2839,12 +4529,96 @@ def checked_overlap(train_toks, streams, source):
     return ov
 
 
+def refresh_due(update, every, freeze, epoch_steps=None):
+    """After 1-based updates 1, 1+N, ...; freeze is the inclusive last allowed update.
+
+    Epoch scoring retains its end-of-epoch cadence and uses the same inclusive cutoff.
+    Zero/-1 disables refresh; it does not populate an empty support.
+    """
+    cadence = update % epoch_steps == 0 if epoch_steps else (update - 1) % every == 0
+    return update >= 1 and update <= freeze and cadence
+
+
+def bop_gamma_at(a, update):
+    return a.bop_gamma_late if a.bop_gamma_late is not None and update > a.bop_gamma_switch else a.bop_gamma
+
+
+def refresh_support_event(mods, update, *args, **kwargs):
+    """Record support additions separately from Bop's actual code births."""
+    before = [m.support.clone() for m in mods]
+    refresh_support(mods, *args, **kwargs)
+    event = dict(update=update, phase="initialization" if update == 0 else "after_update",
+                 support_births=sum(int((m.support & ~old).sum()) for m, old in zip(mods, before)),
+                 support_deaths=sum(int((old & ~m.support).sum()) for m, old in zip(mods, before)),
+                 support_size=sum(int(m.support.sum()) for m in mods))
+    print("REFRESH", json.dumps(event), flush=True)
+    return event
+
+
+def parse_save_at(value):
+    try:
+        updates = [int(v.strip()) for v in value.split(",")]
+    except ValueError as err:
+        raise argparse.ArgumentTypeError("--save-at needs comma-separated positive update numbers") from err
+    if any(v < 1 for v in updates) or len(set(updates)) != len(updates):
+        raise argparse.ArgumentTypeError("--save-at needs distinct positive update numbers (1-based)")
+    return sorted(updates)
+
+
+def validate_c31_args(a):
+    if a.refresh_every < 1 or a.budget_freeze < -1:
+        raise SystemExit("--refresh-every must be >= 1; --budget-freeze must be >= -1")
+    for gamma in (a.bop_gamma, a.bop_gamma_late):
+        if gamma is not None and (not math.isfinite(gamma) or not 0 < gamma <= 1):
+            raise SystemExit("Bop gamma must be finite and in (0, 1]")
+    if (a.bop_gamma_late is None) != (a.bop_gamma_switch is None):
+        raise SystemExit("--bop-gamma-late and --bop-gamma-switch must be supplied together")
+    if a.bop_gamma_switch is not None and (a.bop_gamma_switch < 0 or a.optim != "bop"):
+        raise SystemExit("--bop-gamma-switch must be >= 0 and requires --optim bop")
+    if a.save_at:
+        if max(a.save_at) > a.steps + a.repair_steps:
+            raise SystemExit("--save-at update exceeds total value-training updates")
+        panels = [p.strip() for p in (a.extra_eval_sets or "").split(",") if p.strip()]
+        if not a.eval_set or a.eval_windows < 2 or len(set(panels)) < 2 or len({Path(p).name for p in panels}) != len(panels):
+            raise SystemExit("--save-at needs --eval-set and at least two distinct --extra-eval-sets damage panels")
+
+
 def build_parser():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--export", type=Path, default=EXPORT)
+    ap.add_argument("--export-step", type=int, default=EXPORT_STEP)
+    ap.add_argument("--mask-compare", type=Path, default=None)
+    ap.add_argument("--oracle-evidence", action="store_true", help="eval unpatched base with oracle fact context, print and exit")
+    ap.add_argument("--train-person", type=int, default=None, help="zero-based training person; eval remains full-world")
+    ap.add_argument("--slot-partition", type=int, default=0, help="forced 8-weight block partitions (K=3)")
+    ap.add_argument("--slot-part", type=int, default=None)
+    ap.add_argument("--partition-unit", action="store_true", help="partition whole hidden units instead of 8-weight blocks")
+    ap.add_argument("--address-units", type=int, default=0, help="person-address units per expert; reuses wake stage")
+    ap.add_argument("--address-layers", default=None, help="MoE layers for address up rows (default: --layers)")
+    ap.add_argument("--address-pronoun", action="store_true", help="include train-only C21-style pronouns in address hinge and answer training")
+    ap.add_argument("--value-layers-late", action="store_true", help="also write selected down columns at address layers; late addresses cannot gate earlier values")
+    ap.add_argument("--units-per-fact", type=int, default=0, help="at most K gradient-selected units per routed expert/fact (0 off)")
+    ap.add_argument("--unit-init", choices=("borrowed", "random", "zero"), default="borrowed")
+    ap.add_argument("--address-center", action="store_true", help="center address selection/training inputs on up to 32 FineWeb/anchor windows")
+    ap.add_argument("--exclude-general", type=float, default=0., help="exclude top fraction of general-text positive-firing units before allocation")
+    ap.add_argument("--entropy-units", action="store_true", help="per-fact K = clamp(round(K * (0.5 + normalized attribution entropy)), 1, 4K)")
+    ap.add_argument("--address-mode", choices=("frozen", "mutable", "contrastive"), default="mutable",
+                    help="unit address rows: freeze borrowed, train forced zeros, or wake hinge then freeze")
     ap.add_argument("--base-cache", type=Path, default=None, help="shared deterministic base-evaluation cache")
-    ap.add_argument("--qa-probe", action="store_true", help="final-only unseen, two-fact and indirect generation QA")
+    ap.add_argument("--bench", action="store_true", help="final-only base/patched ARC, HellaSwag and MBPP-MC")
+    ap.add_argument("--bench-dir", type=Path, default=None, help="override directory containing the three benchmark JSON files")
+    ap.add_argument("--subject-text", action="store_true", help="final-only 40 biographies, scored separately from unrelated damage")
+    ap.add_argument("--qa-probe", action="store_true", help="final-only unseen, two-fact, two-hop and pronoun generation QA")
     ap.add_argument("--qa-n", type=int, default=120, help="maximum QA probe items per type (fixed sampling RNG)")
     ap.add_argument("--route-drift", action="store_true", help="final base/patched token routing on 16x512 per panel")
+    ap.add_argument("--route-kl", type=float, default=0., help="downstream router KL preservation weight")
+    ap.add_argument("--route-kl-set", nargs="?", const="data/rehearsal-fineweb.json", default=None,
+                    help="optional route-KL token panel; bare flag uses data/rehearsal-fineweb.json")
+    ap.add_argument("--mcq-probe", action="store_true", help="final 2/3-way cross-person option-letter probe")
+    ap.add_argument("--promote-failing", type=float, default=0.,
+                    help="multiply failing audited facts' CE gradient in support scoring only (K >= 1)")
+    ap.add_argument("--promote-budget", type=int, default=None,
+                    help="extra birth-only slots with positive failing-fact gain (default: floor(0.1 * budget))")
     ap.add_argument("--wake-steps", type=int, default=0, help="pretraining up-row detector steps (0 disables)")
     ap.add_argument("--wake-units", type=int, default=16, help="detector units per routed expert")
     ap.add_argument("--wake-margin", type=float, default=1., help="detector margin in base fact preactivation std")
@@ -2916,7 +4690,10 @@ def build_parser():
     ap.add_argument("--down-only", action="store_true", help="patch down_proj only (up frozen)")
     ap.add_argument("--n-experts", type=int, default=0, help="patch only the top-N experts per layer (profiled); 0 = all")
     ap.add_argument("--budget", type=int, default=0, help="hard cap on physical nonzero patch slots (0 = none)")
-    ap.add_argument("--budget-freeze", type=int, default=200, help="last step at which the budgeted support is refreshed")
+    ap.add_argument("--budget-freeze", type=int, default=200,
+                    help="inclusive last refresh UPDATE (1-based, after optimization); 0/-1 disables refresh")
+    ap.add_argument("--refresh-every", type=int, default=10,
+                    help="refresh after updates 1, 1+N, ... (default 1,11,...); --score-epoch uses epoch ends")
     ap.add_argument("--optim", choices=["adam", "sgd", "bop", "mls"], default="adam")
     ap.add_argument("--mls-eta", type=float, default=0.,
                     help="MLS output-gradient step override; 0 calibrates to --mls-target-changes each iteration")
@@ -2931,6 +4708,9 @@ def build_parser():
     ap.add_argument("--mls-thr", type=float, default=.5)
     ap.add_argument("--mls-max-change", type=int, default=50000)
     ap.add_argument("--bop-gamma", type=float, default=0.05, help="Bop gradient-EMA rate")
+    ap.add_argument("--bop-gamma-late", type=float, default=None, help="Bop EMA rate after --bop-gamma-switch")
+    ap.add_argument("--bop-gamma-switch", type=int, default=None,
+                    help="last 1-based UPDATE using --bop-gamma; subsequent updates use --bop-gamma-late")
     ap.add_argument("--bop-tau", type=float, default=1.0,
                     help="Bop flip threshold, in units of the step-0 RMS of the answer gradient over slots")
     ap.add_argument("--bop-tau-scale", choices=["none", "energy"], default="none",
@@ -2940,6 +4720,10 @@ def build_parser():
     ap.add_argument("--tau-hi", type=float, default=4.0)
     ap.add_argument("--master-clip", type=float, default=0.0)
     ap.add_argument("--eval-every", type=int, default=50)
+    ap.add_argument("--save-at", type=parse_save_at, default=[],
+                    help="comma-separated 1-based updates to checkpoint and score test GEN + damage panels; also save first val GEN >=97%%")
+    ap.add_argument("--zero-patch-control", action="store_true",
+                    help="assert base/zero-patch equality through every enabled FINAL scoring path")
     ap.add_argument("--support-score", choices=["absgrad", "netcost"], default="absgrad")
     ap.add_argument("--cost-rel", type=float, default=1.0,
                     help="netcost lambda relative to median(gain)/median(cost) at the first refresh")
@@ -2949,9 +4733,12 @@ def build_parser():
     ap.add_argument("--scale-init", type=float, default=1.0, help="initial block scale relative to the row alpha")
     ap.add_argument("--fp4-step", type=float, default=0.25, help="fp4 grid scale in alpha units (0.25 -> min .125a, cap 1.5a)")
     ap.add_argument("--aug", action="store_true", help="12 training formats, 3 sampled per fact per step")
+    ap.add_argument("--aug-all", action="store_true", help="with --aug, use all 12 formats per fact per step")
     ap.add_argument("--val-windows", type=int, default=16, help="general-text validation windows for dNLL selection")
     ap.add_argument("--local-lambda", type=float, default=0.0, help="weight of the smooth local output-change penalty")
     ap.add_argument("--eval-set", default=None, help="json token list for the large NLL eval (disjoint from anchors)")
+    ap.add_argument("--calib-set", default="data/rehearsal-fineweb.json",
+                    help="separate JSON calibration tokens for address centering/exclusion; must be 32-gram disjoint from every damage panel")
     ap.add_argument("--eval-windows", type=int, default=40)
     ap.add_argument("--select-metric", choices=["gen", "tf"], default="gen",
                     help="validation recall used for Pareto checkpoints: generated (default) or teacher-forced")
@@ -3011,6 +4798,8 @@ def build_parser():
     ap.add_argument("--death-tau-mult", type=float, default=1.0, help="Bop death threshold = mult x birth tau")
     ap.add_argument("--no-churn", action="store_true", help="skip the per-slot int8 churn counters (memory)")
     ap.add_argument("--load-patch", default=None, help="load a saved patch after attach (use with --steps 0)")
+    ap.add_argument("--address-ceiling", action="store_true",
+                    help="C26 eval-only global-patch ceiling (requires --load-patch --steps 0)")
     ap.add_argument("--fast-moe", choices=("off", "exact", "batched"), default="off",
                     help="MoE dispatch overhead removal (exact: bit-identical logits); see fast_moe.py")
     ap.add_argument("--bind-loss", type=float, default=0.0, help="weight of complete subject-answer assignment loss")
@@ -3043,6 +4832,7 @@ def build_parser():
     ap.add_argument("--ctx-T", type=float, default=1.0)
     ap.add_argument("--ctx-only-correct", action="store_true", help="KL only where context teacher argmax is gold")
     ap.add_argument("--self-study", type=int, default=0, help="additional labelled self-study questions per step")
+    ap.add_argument("--ctx-check-n", type=int, default=0, help="seeded items per val/test split for context check; 0 = all")
     ap.add_argument("--ctx-teacher-check", action="store_true",
                     help="report person/all context teacher val/test TF and GEN, then exit before training")
     ap.add_argument("--saturation-sampling", action="store_true")
@@ -3061,7 +4851,61 @@ def build_parser():
     return ap
 
 
+def validate_c19_args(a):
+    if a.units_per_fact < 0:
+        raise SystemExit("--units-per-fact must be >= 0")
+    if a.unit_init != "borrowed" and not (a.units_per_fact or a.address_units):
+        raise SystemExit("--unit-init random/zero requires --address-units or --units-per-fact")
+    if a.units_per_fact:
+        if a.method != "fsa_forced" or a.fmt != "ternary" or a.patch_scale != "row" or a.occupied_flips or a.down_only:
+            raise SystemExit("--units-per-fact requires forced-mask ternary row-scaled up/down patches")
+        if a.optim == "mls" or a.bind_loss or a.self_study or a.n_experts or a.gate_units_frac:
+            raise SystemExit("--units-per-fact requires Adam/SGD/Bop without binding/self-study/expert or unit gating")
+    if a.address_units and a.units_per_fact:
+        raise SystemExit("--address-units and --units-per-fact allocate different ownership scopes; run separate arms")
+
+
+def validate_c20_args(a):
+    if not math.isfinite(a.exclude_general) or not 0 <= a.exclude_general < 1:
+        raise SystemExit("--exclude-general must be finite and in [0, 1)")
+    if (a.address_center or a.exclude_general or a.entropy_units or a.address_mode != "mutable") and not (a.address_units or a.units_per_fact):
+        raise SystemExit("address controls require --address-units or --units-per-fact")
+    if a.entropy_units and not a.units_per_fact:
+        raise SystemExit("--entropy-units requires --units-per-fact")
+    if a.units_per_fact and a.wake_steps and a.address_mode != "contrastive":
+        raise SystemExit("--units-per-fact uses --wake-steps only with --address-mode contrastive")
+    if (a.address_center or a.exclude_general) and not a.calib_set:
+        raise SystemExit("address centering/general exclusion needs --calib-set")
+    if a.units_per_fact and a.address_mode == "contrastive" and not a.load_patch:
+        if not a.anchor:
+            raise SystemExit("contrastive addresses need --anchor for the general-text hinge")
+        if not a.wake_steps:
+            a.wake_steps = 100
+
+
+def validate_c15_args(a):
+    if not math.isfinite(a.route_kl) or a.route_kl < 0:
+        raise SystemExit("--route-kl must be finite and >= 0")
+    if a.route_kl and not (a.anchor or a.route_kl_set):
+        raise SystemExit("--route-kl needs --anchor or --route-kl-set")
+    if a.route_kl and (a.anchor_bs < 1 or a.anchor_len < 2):
+        raise SystemExit("--route-kl needs --anchor-bs >= 1 and --anchor-len >= 2")
+    if not math.isfinite(a.promote_failing) or (a.promote_failing != 0 and a.promote_failing < 1):
+        raise SystemExit("--promote-failing must be 0 (disabled) or finite and >= 1")
+    if a.promote_budget is not None and a.promote_budget < 0:
+        raise SystemExit("--promote-budget must be >= 0")
+    if a.promote_failing:
+        if not (a.train_audit > 0 and a.eval_every > 0 and a.budget > 0 and a.method.startswith("fsa")):
+            raise SystemExit("--promote-failing needs FSA, --train-audit, --eval-every and --budget > 0")
+        if a.pool_select != "none" or a.swap_margin or a.swap_cap:
+            raise SystemExit("--promote-failing needs dynamic support without static pools or swap controls")
+    if a.optim == "mls" and (a.route_kl or a.promote_failing):
+        raise SystemExit("MLS does not use gradient penalties/support scoring; route-KL/promotion need Adam/SGD/Bop")
+
+
 def validate_ctx_args(a):
+    if a.ctx_check_n < 0:
+        raise SystemExit("--ctx-check-n must be >= 0")
     if not math.isfinite(a.ctx_mu) or a.ctx_mu < 0:
         raise SystemExit("--ctx-mu must be finite and >= 0")
     if not math.isfinite(a.ctx_T) or a.ctx_T <= 0:
@@ -3088,8 +4932,9 @@ def validate_wake_args(a):
             raise SystemExit(f"--{name.replace('_', '-')} must be finite and > 0")
     if a.wake_steps:
         if (a.method != "fsa_forced" or a.fmt != "ternary" or a.patch_scale != "row" or a.occupied_flips
-                or a.down_only or a.shared_only or a.shared_expert or a.optim not in ("bop", "mls")):
-            raise SystemExit("wake stage needs routed forced-mask ternary up rows, row scales, and Bop/MLS")
+                or a.down_only or ((a.shared_only or a.shared_expert) and not (a.address_units or a.units_per_fact))
+                or (a.optim not in ("bop", "mls") and not a.units_per_fact)):
+            raise SystemExit("wake stage needs forced-mask ternary up rows, row scales, and Bop/MLS (shared experts require address units)")
         if not a.anchor:
             raise SystemExit("--wake-steps needs --anchor for the general-text hinge")
         if a.load_patch:
@@ -3211,11 +5056,40 @@ def apply_projection_scales(model, mult, up=None, down=None):
 
 def main():
     a = build_parser().parse_args()
+    validate_c31_args(a)
+    if a.address_ceiling and (not a.load_patch or a.steps or a.repair_steps or a.wake_steps
+                             or a.train_person is not None or a.oracle_evidence):
+        raise SystemExit("--address-ceiling requires a global --load-patch, --steps 0, and no wake/repair training")
+    if a.export_step < 0:
+        raise SystemExit("--export-step must be >= 0")
+    if a.oracle_evidence:
+        if a.load_patch:
+            raise SystemExit("--oracle-evidence evaluates the base; cannot combine with --load-patch")
+        sys.path.insert(0, "/workspace/malleable/mlf")
+        from ops.eval.bench_saves import build_model
+        from tokenizers import Tokenizer
+        random.seed(a.seed)
+        torch.manual_seed(a.seed)
+        tok = Tokenizer.from_file(str(DATA / "tokenizer.json"))
+        model, _, dev = build_model(a.export, device="cuda:0", model_config=None, step=a.export_step,
+                                    expert_format="bf16", eda_kernel_backend="naive_fp32")
+        model.eval()
+        for param in model.parameters():
+            param.requires_grad_(False)
+        facts = make_world(a.seed, a.people, a.facts_per_person, a.shared_attrs, a.values)
+        result = oracle_evidence_eval(model, tok, facts, build_items(tok, facts, TEST_T, BOS), dev, BOS, a)
+        print("ORACLE-EVIDENCE " + json.dumps(result), flush=True)
+        return
+    validate_c16_args(a)
+    validate_c19_args(a)
+    validate_c20_args(a)
+    validate_c25_args(a)
     validate_ctx_args(a)
     validate_wake_args(a)
     validate_mls_args(a)
     validate_c2_args(a)
     validate_c3_args(a)
+    validate_c15_args(a)
     support_mode = "netcost" if a.score_epoch or a.fisher_support else a.support_score
 
     sys.path.insert(0, "/workspace/malleable/mlf")
@@ -3322,27 +5196,40 @@ def main():
         raise SystemExit("--anchor and --eval-set must be different text")
 
     t0 = time.time()
-    model, cfg, dev = build_model(EXPORT, device="cuda:0", model_config=None, step=58814,
+    model, cfg, dev = build_model(a.export, device="cuda:0", model_config=None, step=a.export_step,
                                   expert_format="bf16", eda_kernel_backend="naive_fp32")
+    model._fsa_export, model._fsa_export_step = a.export, a.export_step
     model.eval()
     for p in model.parameters():
         p.requires_grad_(False)
     print(f"built {time.time()-t0:.0f}s, MoE layers={len(moe_layers(model))}", flush=True)
+    configured_values, address_layers, value_layers, layer_ids = address_layer_sets(a)
+    if not a.ctx_teacher_check and max(layer_ids) >= len(moe_layers(model)):
+        raise SystemExit("requested layer outside model's MoE layers")
+    projs = ("down_proj",) if a.down_only else ("up_proj", "down_proj")
+    projections = layer_projections(layer_ids, value_layers, projs)
+    shared_address = bool(a.address_units and (a.shared_expert or a.shared_only))
+    if shared_address:
+        check_shared_address(model, address_layers, a.address_units)
     if a.fast_moe != "off":                                # dispatch overhead only; "exact" is bit-identical
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         from fast_moe import install as _fast_install
-        _fast_install(model, patched_layer_ids=[int(x) for x in a.layers.split(",")], mode=a.fast_moe)
+        _fast_install(model, patched_layer_ids=layer_ids, mode=a.fast_moe)
         print(f"fast-moe {a.fast_moe} installed", flush=True)
 
     facts = make_world(a.seed, a.people, a.facts_per_person, a.shared_attrs, a.values)
     conflicts = conflict_map(facts)
     print(f"facts {len(facts)} people {a.people} conflicting {len(conflicts)}", flush=True)
+    train_idx = person_indices(facts, a.train_person)
+    training_facts = [facts[i] for i in train_idx]
+    training_conflicts = {i: conflicts[fi] for i, fi in enumerate(train_idx) if fi in conflicts}
     rngv = random.Random(a.seed + 3)
-    val_idx = sorted(rngv.sample(range(len(facts)), a.val_facts)) if 0 < a.val_facts < len(facts) else None
+    val_idx = (sorted(rngv.sample(train_idx, a.val_facts)) if 0 < a.val_facts < len(train_idx)
+               else train_idx if a.train_person is not None else None)
     conv_idx = sorted(rngv.sample(range(len(facts)), a.conv_facts)) if 0 < a.conv_facts < len(facts) else None
     K = a.gen_stop_k
-    items_train = build_items(tok, facts, TRAIN_T, bos)
-    audit = (train_audit_items(tok, facts, TRAIN_AUG_T if a.aug else TRAIN_T, bos, a.train_audit, a.seed)
+    items_train = build_items(tok, training_facts, TRAIN_T, bos)
+    audit = (train_audit_items(tok, training_facts, TRAIN_AUG_T if a.aug else TRAIN_T, bos, a.train_audit, a.seed)
              if a.train_audit else None)
     items_val = build_items(tok, facts, VAL_T, bos, idxs=val_idx)
     arities = fact_arities(facts) if a.strata else None
@@ -3370,7 +5257,10 @@ def main():
         return tf_eval(model, items, dev, a.gen_bs)
 
     def acq_suite(with_train=False):
-        return acquisition_suite(model, tok, items_train, items_test, items_conv, dev, a, conflicts, with_train)
+        result = acquisition_suite(model, tok, items_train, items_test, items_conv, dev, a, conflicts, with_train)
+        if a.train_person is not None:
+            result["test_gen_person"] = gen([it for it in items_test if facts[it["fi"]].pid == a.train_person])
+        return result
 
     big = valw = None
     if a.eval_set:
@@ -3380,17 +5270,23 @@ def main():
         valw = torch.tensor([[bos] + et[vo + i * 511:vo + i * 511 + 511] for i in range(a.val_windows)], device=dev)
     extra_panels = extra_eval_panels(a.extra_eval_sets, bos, dev) if a.extra_eval_sets else {}
     route_panels = None
+    route_panel_paths = {name: path.strip() for path in (a.extra_eval_sets or "").split(",") if path.strip()
+                         for name in [Path(path.strip()).name]}
     if a.route_drift:
         route_panels = {name: wins[:16] for name, (_, wins) in extra_panels.items()}
         if et is not None:
+            route_panel_paths["eval-set"] = a.eval_set
             nw = min(16, len(et) // 511)
             route_panels["eval-set"] = torch.tensor(
                 [[bos] + et[i * 511:(i + 1) * 511] for i in range(nw)], device=dev, dtype=torch.long)
+    bench_items = build_bench_items(tok, bos, a.bench_dir) if a.bench else None
+    subject_items = build_subject_items(tok, facts, bos) if a.subject_text else None
     cache_key = base_cache_key(a, facts, val_idx, conv_idx) if a.base_cache else None
     baseline = cached_base(a.base_cache, cache_key,
                            lambda: evaluate_base(model, tok, facts, dev, bos, segs, acq_suite, big, valw,
                                                  extra_panels, a, items_val if a.base_cache else None,
-                                                 route_panels=route_panels), dev)
+                                                 route_panels=route_panels, bench_items=bench_items,
+                                                 subject_items=subject_items), dev)
     base_held, base_lp_t, base_acq = [baseline[k] for k in ("base_held", "base_lp_t", "base_acq")]
     if a.base_cache:
         base_acq.update(baseline["base_val"])
@@ -3406,8 +5302,6 @@ def main():
         streams.update(eval=et[:a.eval_windows * 511], conv=et[a.eval_windows * 511:60000],
                        val=et[60000:60000 + a.val_windows * 511])
     streams.update({f"extra:{name}": tokens for name, (tokens, _) in extra_panels.items()})
-    layer_ids = [int(x) for x in a.layers.split(",")]
-    projs = ("down_proj",) if a.down_only else ("up_proj", "down_proj")
     anchor, ov = None, None
     if a.anchor:
         at = json.load(open(a.anchor))
@@ -3431,27 +5325,40 @@ def main():
         rehearsal_ov = checked_overlap(rt, streams, "rehearsal")
         print(f"rehearsal windows {rehearsal.shape[0]} x {L}", flush=True)
 
+    route_windows, route_ov = None, None
+    if a.route_kl and a.route_kl_set:
+        route_tokens, route_windows = preservation_windows(a.route_kl_set, bos, a.anchor_len, dev)
+        route_ov = checked_overlap(route_tokens, streams, "route-kl")
+        print(f"route-KL windows {route_windows.shape[0]} x {a.anchor_len}", flush=True)
+
     def enc_fact(t, f):
         return encode_fact(tok, t, f, bos)
 
-    pool = [[enc_fact(t, f) for t in (TRAIN_AUG_T if a.aug or a.curriculum == "attribute" else TRAIN_T)] for f in facts]
+    pool = [[enc_fact(t, f) for t in (TRAIN_AUG_T if a.aug or a.curriculum == "attribute" else TRAIN_T)] for f in training_facts]
+    if a.address_pronoun:
+        local_ids = {fi: i for i, fi in enumerate(train_idx)}
+        for it in build_address_pronoun_items(tok, facts, bos):
+            if it["fi"] in local_ids:
+                seq = it["p"] + tok.encode(" " + it["val"] + ".", add_special_tokens=False).ids
+                pool[local_ids[it["fi"]]].append((seq, len(it["p"])))
     rng = random.Random(a.seed + 1)
-    resample = a.aug or (0 < a.fact_batch < len(facts)) or a.paired or a.curriculum == "attribute" or a.saturation_sampling
-    saturation = SaturationSampler(len(facts), a.sat_margin, a.sat_weight, a.seed + 101) if a.saturation_sampling else None
-    answer_lengths = [len(tok.encode(" " + f.val, add_special_tokens=False).ids) for f in facts] if saturation else None
+    resample = a.aug or a.address_pronoun or (0 < a.fact_batch < len(training_facts)) or a.paired or a.curriculum == "attribute" or a.saturation_sampling
+    saturation = SaturationSampler(len(training_facts), a.sat_margin, a.sat_weight, a.seed + 101) if a.saturation_sampling else None
+    answer_lengths = [len(tok.encode(" " + f.val, add_special_tokens=False).ids) for f in training_facts] if saturation else None
     training_step, teachers, mu_now = None, [], 0.0
-    curriculum = (AttributeCurriculum(facts, pool, a.fact_batch, a.cur_active, a.cur_replay, a.seed)
+    curriculum = (AttributeCurriculum(training_facts, pool, a.fact_batch, a.cur_active, a.cur_replay, a.seed,
+                                      aug_all=a.aug_all)
                   if a.curriculum == "attribute" else None)
-    epoch_steps = math.ceil(len(facts) / (a.fact_batch or len(facts))) if a.score_epoch else None
+    epoch_steps = math.ceil(len(training_facts) / (a.fact_batch or len(training_facts))) if a.score_epoch else None
 
     by_person = defaultdict(list)
-    for fi, f in enumerate(facts):
+    for fi, f in enumerate(training_facts):
         by_person[f.pid].append(fi)
     # unlikelihood targets: first token of every other person's (different) value for the same attribute
     neg_first = {}                                         # fi -> [(answer offset j, own token, other token)]
     if a.unlikelihood > 0 or a.margin > 0:
-        for fi, others in conflicts.items():
-            own = tok.encode(" " + facts[fi].val, add_special_tokens=False).ids
+        for fi, others in training_conflicts.items():
+            own = tok.encode(" " + training_facts[fi].val, add_special_tokens=False).ids
             lst = set()
             for o in others:
                 oth = tok.encode(" " + o, add_special_tokens=False).ids
@@ -3463,10 +5370,10 @@ def main():
         print(f"conflict loss: {len(neg_first)} facts with a divergent competitor token", flush=True)
 
     by_attr = defaultdict(list)
-    for fi, f in enumerate(facts):
+    for fi, f in enumerate(training_facts):
         by_attr[f.attr].append(fi)
     attr_queue = []
-    bind_groups = binding_groups(facts, conflicts) if a.bind_loss else []
+    bind_groups = binding_groups(training_facts, training_conflicts) if a.bind_loss else []
     if a.bind_loss and not bind_groups:
         raise SystemExit("--bind-loss needs complete conflicting groups of two or three people")
     bind_rng = random.Random(a.seed + 79) if a.bind_loss else None
@@ -3474,7 +5381,7 @@ def main():
     def make_batch():
         if saturation is not None:
             fis = saturation.batch(a.fact_batch, training_step or 0)
-            chosen = [(fi, e) for fi in fis for e in (rng.sample(pool[fi], 3) if a.aug else pool[fi])]
+            chosen = [(fi, e) for fi in fis for e in (rng.sample(pool[fi], 3) if a.aug and not a.aug_all else pool[fi])]
             xx, ll = batchify([c[1][0] for c in chosen], dev,
                              [c[1][1] for c in chosen] if a.answer_only else None)
             return xx, ll, int(ll[:, 1:].sum()), [(fi, e[1]) for fi, e in chosen]
@@ -3495,7 +5402,7 @@ def main():
                     continue
                 used.add(at_)
                 grp = by_attr[at_]
-                tix = rng.sample(range(len(pool[grp[0]])), 3) if a.aug else list(range(len(pool[grp[0]])))
+                tix = rng.sample(range(len(pool[grp[0]])), 3) if a.aug and not a.aug_all else list(range(len(pool[grp[0]])))
                 for fi in grp:                             # same formats for every member of the group
                     chosen += [(fi, pool[fi][t]) for t in tix]
                     nf += 1
@@ -3512,7 +5419,7 @@ def main():
                 fis = sorted(rng.sample(range(len(pool)), a.fact_batch))
         else:
             fis = range(len(pool))
-        chosen = [(fi, e) for fi in fis for e in (rng.sample(pool[fi], 3) if a.aug else pool[fi])]  # 3 per fact
+        chosen = [(fi, e) for fi in fis for e in (rng.sample(pool[fi], 3) if a.aug and not a.aug_all else pool[fi])]
         xx, ll = batchify([c[1][0] for c in chosen], dev, [c[1][1] for c in chosen] if a.answer_only else None)
         meta_ = [(fi, e[1]) for fi, e in chosen]           # (fact index, first answer-token position)
         return xx, ll, int(ll[:, 1:].sum()), meta_
@@ -3520,16 +5427,23 @@ def main():
     x, lm, ntok, bmeta = make_batch()
     fact_scale = 1.0 - a.rehearsal_frac
     fact_masked = set()
+    failing_facts, fact_weights = set(), [1.] * len(training_facts)
+    promote_budget = (a.promote_budget if a.promote_budget is not None else a.budget // 10) if a.promote_failing else 0
+    exposure_counts = Counter()
+    exposure_tokens = 0
 
     def fact_loss_backward(backward=True):
-        nonlocal x, lm, ntok, bmeta, fact_masked
+        nonlocal x, lm, ntok, bmeta, fact_masked, exposure_tokens
         if resample and backward:
             x, lm, ntok, bmeta = make_batch()
         if backward:
+            if training_step is not None:
+                exposure_counts.update(fi for fi, _ in bmeta)
+                exposure_tokens += ntok
             fact_masked = ({fi for fi, _ in bmeta if saturation.saturated(fi)}
                            if saturation is not None and training_step is not None else set())
         masked_facts = fact_masked
-        study = (build_self_study_items(tok, facts, a.self_study, a.seed, training_step or 0, bos)
+        study = (build_self_study_items(tok, training_facts, a.self_study, a.seed, training_step or 0, bos)
                  if a.ctx_teacher and a.self_study else [])
         denom = ntok
         if a.ctx_teacher or (teachers and training_step is not None):
@@ -3538,9 +5452,10 @@ def main():
             denom = max(int((lm[:, 1:] & (positions >= starts)).sum()), 1)
         denom += sum(len(it["seq"]) - it["start"] for it in study)
         tot = 0.0
-        for s0 in range(0, x.shape[0], a.micro):           # grad accumulation: naive EDA scan stores per-step state
-            xb, mb = x[s0:s0 + a.micro], lm[s0:s0 + a.micro, 1:]
-            meta_batch = bmeta[s0:s0 + a.micro]
+        micro = 1 if a.units_per_fact else a.micro
+        for s0 in range(0, x.shape[0], micro):           # unit arms need independently masked fact gradients
+            xb, mb = x[s0:s0 + micro], lm[s0:s0 + micro, 1:]
+            meta_batch = bmeta[s0:s0 + micro]
             answer_mask = mb.clone()
             if a.ctx_teacher or ((teachers or saturation is not None) and training_step is not None):
                 for r, (_, st0) in enumerate(meta_batch):
@@ -3552,8 +5467,8 @@ def main():
             ctx_lg = None
             if a.ctx_teacher and a.ctx_mu:
                 lengths = [int(lm[s0 + r].nonzero()[-1, 0]) + 1 for r in range(xb.shape[0])]
-                ctx_lg = context_teacher_logits(model, tok, facts, xb, lengths,
-                                                [(facts[fi].pid,) for fi, _ in meta_batch], a.ctx_teacher, bos)[:, :-1]
+                ctx_lg = context_teacher_logits(model, tok, training_facts, xb, lengths,
+                                                [(training_facts[fi].pid,) for fi, _ in meta_batch], a.ctx_teacher, bos)[:, :-1]
             assert all(t.enabled == bool(a.teacher_fade) for t in teachers)
             lg = logits_of(model, xb)[:, :-1, :VOCAB].float()
             ce_mask = answer_mask.clone() if a.ctx_teacher or (teachers and training_step is not None) else mb.clone()
@@ -3573,7 +5488,7 @@ def main():
                     saturation.observe(fi, lg[r, mastery_mask].detach(), xb[r, 1:][mastery_mask], training_step)
             if neg_first and (a.unlikelihood > 0 or a.margin > 0):   # other people's values, same attribute
                 ul, mg = [], []
-                for r, (fi, st0) in enumerate(bmeta[s0:s0 + a.micro]):
+                for r, (fi, st0) in enumerate(meta_batch):
                     for j, own_t, oth_t in neg_first.get(fi, ()):
                         z = lg[r, st0 - 1 + j]                # teacher-forced on the shared prefix
                         if a.unlikelihood > 0:
@@ -3586,13 +5501,27 @@ def main():
                 if mg:
                     l = l + a.margin * torch.stack(mg).sum() / x.shape[0]
             if backward and l.requires_grad:              # a microbatch may route through no patched expert
-                (fact_scale * l).backward()
+                if a.promote_failing and failing_facts:
+                    grads = failing_ce_gradients(lg, xb[:, 1:], ce_mask, meta_batch, fact_weights,
+                                                failing_facts, mods, fact_scale / denom)
+                    with torch.no_grad():
+                        for m, grad in zip(mods, grads):
+                            if grad is not None:
+                                if m.promote_grad is None:
+                                    m.promote_grad = grad.detach()
+                                else:
+                                    m.promote_grad.add_(grad)
+                if a.units_per_fact:
+                    with fact_unit_gradients(model, unit_info["assignments"][str(meta_batch[0][0])]):
+                        (fact_scale * l).backward()
+                else:
+                    (fact_scale * l).backward()
             tot += l.item()
         # All synthetic answers are labelled. They receive answer/stop CE + teacher KL, with no prompt CE.
         for it in study:
             sx, slm = batchify([it["seq"]], dev, [it["start"]])
             mask = slm[:, 1:]
-            target = (context_teacher_logits(model, tok, facts, sx, [len(it["seq"])], [it["pids"]],
+            target = (context_teacher_logits(model, tok, training_facts, sx, [len(it["seq"])], [it["pids"]],
                                              a.ctx_teacher, bos)[:, :-1] if a.ctx_mu else None)
             student = logits_of(model, sx)[:, :-1, :VOCAB].float()
             loss = F.cross_entropy(student[mask], sx[:, 1:][mask], reduction="sum") / denom
@@ -3620,7 +5549,8 @@ def main():
                 logits_of(model, anchor[i:i + 2])
         for h in hooks:
             h.remove()
-        attach(model, layer_ids, a.method, a.rank, a.fmt, projs)
+        attach(model, layer_ids, a.method, a.rank, a.fmt, projs,
+               slot_partition=a.slot_partition, slot_part=a.slot_part, partition_unit=a.partition_unit)
         fact_loss_backward()
         keep, selection = {}, {}
         for li in layer_ids:
@@ -3660,12 +5590,15 @@ def main():
         print("GATE", json.dumps(gate_info), flush=True)
     params, n_slots, n_lora = attach(model, layer_ids, a.method, a.rank, a.fmt, projs, keep,
                                      budgeted=bool(a.budget) and a.optim != "mls",
-                                     shared=a.shared_expert or a.shared_only, routed=not a.shared_only,
+                                     shared=a.shared_expert or a.shared_only, routed=not (a.shared_only or shared_address),
                                      sparse=a.sparse_state and fsa, fold_mode=a.fold_mode,
                                      occupied=a.occupied_flips, slot_frac=a.slot_frac, seed=a.seed,
                                      fold_any_zero=("pair8_forced" if a.fold_mask == "pair8_forced"
-                                                    else a.fold_mask == "any_zero"), restrict=restrict)
+                                                    else a.fold_mask == "any_zero"), restrict=restrict,
+                                     slot_partition=a.slot_partition, slot_part=a.slot_part, shared_address=shared_address,
+                                     partition_unit=a.partition_unit, projs_by_layer=projections)
     print(f"attached: reserve slots {n_slots}, lora params {n_lora}", flush=True)
+    mask_info = mask_diagnostics(model, a.mask_compare)
     if a.expert_checkpoint:
         print(f"expert checkpointing on {checkpoint_experts(model, layer_ids, a.shared_expert or a.shared_only)} "
               f"experts", flush=True)
@@ -3704,9 +5637,31 @@ def main():
         for m in mods:
             m.enable_block_scale(a.scale_block, a.scale_init)
             params.append(m.logb)
+    unit_info = None
+    general_stats, general_source = None, None
+    if a.address_center or a.exclude_general:
+        general_windows, general_source = address_general_windows(a.calib_set, streams, bos, dev)
+        general_stats = collect_address_general(model, general_windows)
+        print("ADDRESS-GENERAL " + json.dumps(dict(source=general_source, windows=len(general_windows),
+                entries={name: dict(tokens=s["tokens"], routed_tokens=s["routed_tokens"],
+                                    positive_fraction=s["positive_fraction"].tolist())
+                         for name, s in general_stats.items()})), flush=True)
+    if a.units_per_fact and not a.load_patch:
+        unit_info = select_fact_units(model, pool, layer_ids, a.units_per_fact, dev, general_stats,
+                                      a.address_center, a.exclude_general, a.entropy_units)
+        unit_info["local_to_global_fact_ids"] = train_idx
+        restrict_unit_masks(model, unit_info["assignments"])
+        union = {bank: sorted({u for fact in unit_info["assignments"].values() for u in fact.get(bank, [])})
+                 for fact in unit_info["assignments"].values() for bank in fact}
+        initialize_units(model, union, a.unit_init, a.seed)
+        snapshot_addresses(model, unit_info["assignments"])
+        if a.address_mode == "frozen":
+            freeze_unit_addresses(model, unit_info["assignments"])
+        n_slots = sum(int(m.mask.sum()) for m in mods)
     local = (LocalOutputPenalty(model, from_output=a.sparse_state and fsa)
              if (a.local_lambda > 0 or a.repair_steps or a.optim == "mls") else None)
     gate = GateHinge(model, layer_ids, units, a.gate_margin) if a.gate_lambda > 0 else None
+    route_kl = RouteKLPenalty(model, layer_ids) if a.route_kl else None
     lr = a.lr or (0.02 if fsa else 1e-3)
     if a.optim == "bop":
         assert a.fmt == "ternary" and a.patch_scale == "row", "bop is defined for plain ternary slots"
@@ -3744,7 +5699,22 @@ def main():
             m.support.zero_()
             if a.score_epoch:
                 m.score = torch.zeros_like(m.M)           # fp32 sum: avoid bf16 accumulation saturation
-    meta = dict(method=a.method, fmt=a.fmt, layers=layer_ids, projs=list(projs), rank=a.rank, seed=a.seed,
+            if a.promote_failing:
+                m.promote_score = torch.zeros_like(m.score)
+                m.promote_grad = None
+        if a.units_per_fact and a.unit_init != "borrowed":
+            for m in mods:
+                m.support.copy_(m.mask & m._quant(m.M).ne(0))
+            if sum(int(m.support.sum()) for m in mods) > a.budget:
+                raise SystemExit("unit initialization exceeds --budget; increase the budget or use --budget 0")
+    meta = dict(train_person=a.train_person, slot_partition=a.slot_partition, slot_part=a.slot_part,
+                partition_unit=a.partition_unit,
+                units_per_fact=a.units_per_fact, unit_init=a.unit_init,
+                base_altering=a.unit_init in ("random", "zero"), calibration=general_source,
+                address_center=a.address_center, exclude_general=a.exclude_general, entropy_units=a.entropy_units,
+                address_mode=a.address_mode,
+                address_units=a.address_units, method=a.method, fmt=a.fmt, layers=layer_ids,
+                projs=list(projs), rank=a.rank, seed=a.seed,
                 n_experts=a.n_experts, selection=selection, fp4_step=a.fp4_step, patch_scale=a.patch_scale,
                 scale_block=a.scale_block if a.patch_scale == "block" else 0, people=a.people,
                 facts_per_person=a.facts_per_person, shared_attrs=a.shared_attrs, values=a.values, budget=a.budget,
@@ -3755,20 +5725,45 @@ def main():
                 fold_thr=a.fold_thr if a.method == "lora_fold" else None,
                 fold_mask=a.fold_mask if a.method == "lora_fold" else None,
                 fold_mask_frac=a.fold_mask_frac if a.method == "lora_fold" else None, no_pareto=a.no_pareto,
-                export=str(EXPORT), alpha="mean |nonzero base weight| of the row")
+                export=str(a.export), export_step=a.export_step, alpha="mean |nonzero base weight| of the row")
     if a.patch_scale_mult_up is not None or a.patch_scale_mult_down is not None:
         meta.update(patch_scale_mult_up=a.patch_scale_mult_up, patch_scale_mult_down=a.patch_scale_mult_down)
+    if a.address_units:
+        meta.update(address_layers=address_layers, value_layers=value_layers,
+                    address_pronoun=a.address_pronoun, value_layers_late=a.value_layers_late,
+                    configured_value_layers=configured_values)
     protocol = dict(select_metric=a.select_metric, gen_max_new=a.gen_max_new, gen_stop_k=a.gen_stop_k, val_facts=a.val_facts, conv_test=a.conv_test,
                     conv_facts=a.conv_facts, eval_set=a.eval_set, eval_windows=a.eval_windows,
                     val_windows=a.val_windows, anchor=a.anchor)
-    wake_info = (run_wake_stage(model, tok, facts, TRAIN_AUG_T if a.aug else TRAIN_T, bos,
-                                layer_ids, anchor, a) if a.wake_steps else None)
+    wake_info = (run_wake_stage(model, tok, facts,
+                                TRAIN_AUG_T if a.aug else TRAIN_T, bos,
+                                address_layers if a.address_units else layer_ids, anchor, a, general_stats=general_stats,
+                                assignments=unit_info["assignments"] if a.units_per_fact and a.address_mode == "contrastive" else None,
+                                assignment_fact_ids=train_idx if a.units_per_fact else None)
+                 if a.wake_steps else None)
     if wake_info is not None:
         meta["wake"] = wake_info
+    if unit_info is not None:
+        meta["unit_allocation"] = unit_info
     if a.load_patch:
         st_ = torch.load(a.load_patch, map_location="cpu", weights_only=False)
+        try:
+            validate_patch_export(st_["meta"], a.export, a.export_step)
+        except ValueError as err:
+            raise SystemExit(str(err)) from err
+        st_["meta"].setdefault("export_step", EXPORT_STEP)
+        st_["meta"]["export"] = str(a.export)
+        if a.address_units:
+            for key, default in (("address_layers", st_["meta"]["layers"]),
+                                 ("value_layers", st_["meta"]["layers"]),
+                                 ("configured_value_layers", st_["meta"]["layers"]),
+                                 ("address_pronoun", False), ("value_layers_late", False)):
+                st_["meta"].setdefault(key, default)
         for k_, d_ in (("shared_expert", False), ("shared_only", False), ("occupied_flips", False),
-                       ("patch_scale_mult", 1.0), ("slot_frac", 1.0)):
+                       ("patch_scale_mult", 1.0), ("slot_frac", 1.0), ("train_person", None),
+                       ("slot_partition", 0), ("slot_part", None), ("partition_unit", False), ("address_units", 0),
+                       ("units_per_fact", 0), ("unit_init", "borrowed"), ("address_mode", "mutable"),
+                       ("address_center", False), ("exclude_general", 0.), ("entropy_units", False)):
             st_["meta"].setdefault(k_, d_)
         # Include saved overrides in comparison even when the current command omits them.
         if any(k in st_["meta"] or k in meta for k in ("patch_scale_mult_up", "patch_scale_mult_down")):
@@ -3782,8 +5777,8 @@ def main():
                 raise SystemExit(f"folded patch ({st_['meta'].get('fold_mask')}) must be loaded with --method {want}")
             st_["meta"] = dict(st_["meta"], method=a.method, rank=a.rank, fmt=a.fmt)
         diff = {k: (st_["meta"].get(k), v) for k, v in meta.items()
-                if k not in ("selection", "budget", "sparse_state", "slot_frac", "fold_mode", "fold_every", "fold_thr",
-                              "fold_mask_frac", "no_pareto", "fold_mask")
+                if k not in ("selection", "budget", "sparse_state", "fold_mode", "fold_every", "fold_thr",
+                              "fold_mask_frac", "no_pareto", "fold_mask", "unit_allocation", "calibration", "base_altering")
                 and json.dumps(st_["meta"].get(k)) != json.dumps(v)}
         if diff:
             raise SystemExit(f"--load-patch config mismatch (saved, now): {diff}")
@@ -3792,14 +5787,29 @@ def main():
         if pdiff:
             print(f"WARNING --load-patch evaluation protocol differs (saved, now): {pdiff}", flush=True)
         load_patch(model, st_)
+        if a.units_per_fact:
+            unit_info = st_["meta"].get("unit_allocation")
+            if not unit_info:
+                raise SystemExit("unit patch requires saved fact allocation")
+            meta["unit_allocation"] = unit_info
+            restrict_unit_masks(model, unit_info["assignments"])
+            snapshot_addresses(model, unit_info["assignments"])
+            if a.address_mode == "frozen":
+                freeze_unit_addresses(model, unit_info["assignments"])
+            n_slots = sum(int(m.mask.sum()) for m in mods)
         if st_["meta"].get("wake"):
             wake_info = st_["meta"]["wake"]
             meta["wake"] = wake_info
             for name, lin in patched_linears(model):
-                if name in wake_info["detectors"]:
+                if name in wake_info["detectors"] and (not (a.address_units or a.units_per_fact) or a.address_mode != "mutable"):
                     freeze_wake_rows(lin.parametrizations.weight[0], wake_info["detectors"][name]["rows"])
+            if a.address_units:
+                address_assignments = {"person": {name.rsplit(".", 1)[0]: d["rows"]
+                                                   for name, d in wake_info["detectors"].items()}}
+                restrict_person_addresses(model, address_assignments, a)
+                snapshot_addresses(model, address_assignments)
         if a.budget:
-            assert patch_stats(mods)[0] <= a.budget, "loaded patch exceeds --budget"
+            assert patch_stats(mods)[0] <= a.budget + promote_budget, "loaded patch exceeds support budget"
         for m in mods:                                     # imported slots: one prior birth, already mature
             if hasattr(m, "age"):
                 live = m.M != 0
@@ -3808,6 +5818,19 @@ def main():
                     m.nbirth[live] = 1
                     m.lastsign[live] = torch.sign(m.M[live]).to(torch.int8)
         print(f"loaded patch {a.load_patch} (step {st_['meta'].get('step')})", flush=True)
+        if a.address_ceiling:
+            set_enabled(True)
+            report = global_addressing_ceiling(model, tok, facts, items_test, dev, bos, a)
+            set_enabled(False)
+            revoked = torch.equal(logits_of(model, torch.tensor([segs[0]], device=dev)).detach(), base_logits0)
+            if not revoked:
+                raise RuntimeError("address-ceiling revocation failed bit-exact check")
+            result = dict(address_ceiling=report, world=meta, export=str(a.export), export_step=a.export_step,
+                          revoked=dict(logits_bit_exact=True))
+            Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+            Path(a.out).write_text(json.dumps(result, indent=2) + "\n")
+            return
+    address_gradient_hooks = center_address_gradients(model, general_stats) if a.address_center else []
     den_total, cost_lambda, tau_stats = None, None, None
     if (support_mode == "netcost" or a.bop_tau_scale == "energy") and mods:
         den_total = collect_col_energy(model, mods, anchor[:32])
@@ -3816,7 +5839,7 @@ def main():
     if a.bop_tau_scale == "energy" and mods:
         tau_stats = set_energy_tau_scale(mods, a.tau_power, a.tau_lo, a.tau_hi)
         print("TAU-SCALE", json.dumps(tau_stats), flush=True)
-    pool_info = None
+    pool_info, initial_refresh = None, None
     if a.pool_select != "none" and mods:
         gen_ = torch.Generator().manual_seed(a.seed + 21)
         prng = random.Random(a.seed + 22)                  # own stream: training batches stay seed-identical
@@ -3831,7 +5854,7 @@ def main():
                 ptok = 0
                 for c0 in range(0, len(fis), max(a.fact_batch, 1) if a.fact_batch else len(fis)):
                     ch = fis[c0:c0 + (a.fact_batch or len(fis))]
-                    chosen = [pool[fi][t] for fi in ch for t in (prng.sample(range(len(pool[fi])), 3) if a.aug
+                    chosen = [pool[fi][t] for fi in ch for t in (prng.sample(range(len(pool[fi])), 3) if a.aug and not a.aug_all
                                                                  else range(len(pool[fi])))]
                     xx, ll = batchify([c[0] for c in chosen], dev, [c[1] for c in chosen])
                     ptok += int(ll[:, 1:].sum())
@@ -3846,7 +5869,7 @@ def main():
             for m in mods:
                 m.M.grad = None
             k_top = a.budget - n_rand
-            refresh_support(mods, k_top, conflict_pool_scores(mods, grads, a.pool_beta), None)
+            initial_refresh = refresh_support_event(mods, 0, k_top, conflict_pool_scores(mods, grads, a.pool_beta), None)
             del grads
         added = add_random_support(mods, n_rand, gen_)
         a.budget_freeze = -1                               # static pool: never refreshed
@@ -3859,6 +5882,36 @@ def main():
     model.train(False)
     t1 = time.time()
     gscale, traj, best = None, [], {}
+    learn_evals = []
+    gen_learning_curve = []
+    if a.address_units or a.units_per_fact:
+        initial_gen = gen([it for it in items_test if it["fi"] in train_idx])
+        gen_learning_curve.append(dict(update=0, wake_steps=(wake_info or {}).get("training_steps", 0),
+                                       value_steps=0, test_gen=initial_gen["recall"], test_n=initial_gen["n"],
+                                       test_correct=round(initial_gen["recall"] * initial_gen["n"])))
+    refresh_events, bop_events, checkpoint_evals = ([initial_refresh] if initial_refresh else []), [], {}
+    first_threshold = None
+
+    def score_final():
+        return final_scoring_paths(model, tok, facts, dev, bos, segs, acq_suite, big, extra_panels, a, baseline,
+                                   bench_items, subject_items, route_panels, route_panel_paths)
+
+    def save_update_checkpoint(update, reason):
+        key = str(update)
+        if key in checkpoint_evals:
+            checkpoint_evals[key]["reasons"].append(reason)
+            return checkpoint_evals[key]
+        path = patch_dir / f"update{update}.pt"
+        size = save_patch(model, path, dict(meta, protocol=protocol, step=update,
+                                          wake_steps=(wake_info or {}).get("training_steps", 0), value_steps=update))
+        scores = score_final()
+        entry = dict(update=update, reasons=[reason], patch_file=str(path), patch_file_bytes=size,
+                     patch_sha256=file_sha(path), test=scores["acq"]["test"], test_gen=scores["acq"]["test_gen"],
+                     big=scores["big"], big_extra=scores["big_extra"], damage_gate=scores["damage_gate"],
+                     qa_probe=scores["qa_probe"], bench=scores["bench"])
+        checkpoint_evals[key] = entry
+        print("CHECKPOINT", json.dumps(entry), flush=True)
+        return entry
     lam_trace = []
     lam_start = a.local_lambda
     acc_i = 0
@@ -3981,12 +6034,15 @@ def main():
                             a.reheat_frac if a.reheat_every and (step + 1) % a.reheat_every == 0 else 0,
                             chaos_rng)
             tau_noise_mult = math.exp(a.tau_noise * float(torch.randn((), generator=chaos_rng))) if a.tau_noise else 1.0
+            if a.promote_failing:
+                for m in mods:
+                    m.promote_grad = None
             tot = fact_loss_backward()
             if a.bind_loss and (step + 1) % a.bind_every == 0:
                 groups = bind_rng.sample(bind_groups, min(a.bind_groups, len(bind_groups)))
                 for group in groups:
                     template = bind_rng.choice(TRAIN_AUG_T if a.aug else TRAIN_T)
-                    candidates = binding_candidates(tok, facts, group, template, bos)
+                    candidates = binding_candidates(tok, training_facts, group, template, bos)
                     bl = binding_loss_backward(model, candidates, dev, a.micro,
                                                scale=fact_scale * a.bind_loss / len(groups))
                     tot += a.bind_loss * bl / len(groups)
@@ -4003,7 +6059,9 @@ def main():
                     bop_tau = a.bop_tau * math.sqrt(ss_ / nn_) / fact_scale
                     print(f"bop tau {bop_tau:.3e} ({a.bop_tau} x first answer-gradient RMS, step {step})", flush=True)
             if a.budget and mods and not repair and (bop_now or acc_n == 1):   # score: EMA of the answer gradient
-                if a.score_epoch:
+                if a.promote_failing:
+                    accumulate_promoted_scores(mods, a.promote_failing, support_mode, a.score_epoch)
+                elif a.score_epoch:
                     accumulate_epoch_scores(mods)
                 else:
                     for m in mods:
@@ -4026,16 +6084,27 @@ def main():
                     print(f"step {step} rehearsal_ce {rsum:.4f}", flush=True)
             if (local is not None and lam > 0) or gate is not None:
                 ab = anchor[torch.randint(0, anchor.shape[0], (a.anchor_bs,), device=dev)]
+                rb = route_kl.base(ab) if route_kl is not None else None
                 lp_ = gp_ = None
                 try:
                     if local is not None and lam > 0:
                         local.start()
                     if gate is not None:
                         gate.start()
-                    logits_of(model, ab)
+                    if route_kl is not None:
+                        with route_kl.capture() as routed:
+                            logits_of(model, ab)
+                        rp_ = route_kl.loss(rb, routed)
+                    else:
+                        logits_of(model, ab)
+                        rp_ = None
                     lp_ = local.stop() if (local is not None and lam > 0) else None
                     gp_ = gate.stop() if gate is not None else None
                     terms = []
+                    if rp_ is not None:
+                        tot += a.route_kl * rp_.item()
+                        if rp_.requires_grad:
+                            terms.append(a.route_kl * rp_)
                     if lp_ is not None and lp_.requires_grad:
                         terms.append(lam * lp_)
                         tot += lam * lp_.item()
@@ -4055,6 +6124,8 @@ def main():
                     print(f"step {step} local_rel {lp_.item():.3e}", flush=True)
                 if step % 25 == 0 and gp_ is not None:
                     print(f"step {step} gate_hinge {gp_.item():.3e}", flush=True)
+                if step % 25 == 0 and route_kl is not None:
+                    print(f"step {step} route_kl {rp_.item() if rp_ is not None else 0.:.3e} (anchor)", flush=True)
                 if a.local_target > 0 and lp_ is not None and not repair:   # dual ascent on the damage constraint
                     ratio_ = float(lp_.item()) / a.local_target
                     step_ = max(-0.5, min(0.5, a.local_dual_lr * (min(ratio_, 10.0) - 1.0)))   # bounded log step
@@ -4062,6 +6133,24 @@ def main():
                     lam_trace.append(a.local_lambda) if step % 25 == 0 else None
                 if step % 25 == 0 and lp_ is not None:
                     print(f"step {step} local_rel {lp_.item():.3e}", flush=True)
+            if route_kl is not None:
+                # Reuse the local pass above. With no local objective, use the same anchor sampling rule.
+                panels = ([('anchor', anchor)] if anchor is not None and not ((local is not None and lam > 0)
+                                                                             or gate is not None) else [])
+                if route_windows is not None:
+                    panels.append(('route-kl-set', route_windows))
+                for label, wins in panels:
+                    ab = wins[torch.randint(0, wins.shape[0], (a.anchor_bs,), device=dev)]
+                    rb = route_kl.base(ab)
+                    with route_kl.capture() as routed:
+                        logits_of(model, ab)
+                    rp_ = route_kl.loss(rb, routed)
+                    if rp_ is not None:
+                        if rp_.requires_grad:
+                            (a.route_kl * rp_).backward()
+                        tot += a.route_kl * rp_.item()
+                    if step % 25 == 0:
+                        print(f"step {step} route_kl {rp_.item() if rp_ is not None else 0.:.3e} ({label})", flush=True)
             if anchor is not None and a.drift_lambda > 0:
                 ab = anchor[torch.randint(0, anchor.shape[0], (a.anchor_bs,), device=dev)]
                 set_enabled(False)
@@ -4098,13 +6187,17 @@ def main():
                     bop_options["death_age_mult"] = True
                 if a.tau_noise:
                     bop_options["birth_tau"] = bop_tau * tmul * tau_noise_mult if bop_tau is not None else None
-                nb, nd = (bop_step(mods, a.bop_gamma, bop_tau * tmul, bool(a.budget), allow_birth=not repair,
+                nb, nd = (bop_step(mods, bop_gamma_at(a, step + 1), bop_tau * tmul, bool(a.budget), allow_birth=not repair,
                                    grace=a.death_grace, death_mult=a.death_tau_mult, churn=churn,
                                    keep_ema=a.keep_ema, **bop_options)
                           if bop_tau is not None else (0, 0))
             elif a.optim == "bop":
                 nb = nd = 0
             if a.optim == "bop":
+                event = dict(update=step + 1, gamma=bop_gamma_at(a, step + 1), births=nb, deaths=nd,
+                             applied=bool(not in_adam and bop_now and bop_tau is not None))
+                bop_events.append(event)
+                print("BOP", json.dumps(event), flush=True)
                 if step % 25 == 0 or (repair and step % 5 == 0):
                     print(f"step {step} bop births {nb} deaths {nd}{' (repair)' if repair else ''}", flush=True)
             else:
@@ -4113,15 +6206,19 @@ def main():
                 with torch.no_grad():
                     for m in mods:
                         m.M.clamp_(-a.master_clip, a.master_clip)
-            if wake_info:
+            if wake_info or (a.units_per_fact and a.address_mode == "frozen"):
                 restore_wake_codes(mods)
-            refresh_now = ((step + 1) % epoch_steps == 0) if a.score_epoch else (step % 10 == 0)
+            refresh_now = ((step + 1) % epoch_steps == 0) if a.score_epoch else (step % a.refresh_every == 0)
             swap_options = {}
             if a.swap_margin or a.swap_cap:
                 swap_options = dict(swap_margin=a.swap_margin,
                                     swap_limit=support_swap_limit(a.swap_cap, a.budget, step, a.steps))
-            if a.budget and mods and refresh_now and step <= a.budget_freeze and not repair:
+            if a.budget and mods and refresh_due(step + 1, a.refresh_every, a.budget_freeze, epoch_steps) and not repair:
                 rank_mode = "fisher" if a.fisher_support and not in_adam else support_mode
+                promotion_options = (dict(extra_budget=promote_budget,
+                                          extra_scores=lambda i, m: promotion_gain(
+                                              m, module_score(m, rank_mode, cost_lambda or 0., den_total)))
+                                     if a.promote_failing else {})
                 if rank_mode in ("netcost", "fisher"):
                     if cost_lambda is None:                       # calibrate once: gain and cost on comparable scales
                         best_g = best_c = None              # running global top-K over per-module candidates
@@ -4146,12 +6243,13 @@ def main():
                                 cost_lambda = lam_
                                 print(f"netcost lambda {cost_lambda:.3e} (rel {a.cost_rel})", flush=True)
                     if cost_lambda is not None:
-                        refresh_support(mods, a.budget,
+                        refresh_events.append(refresh_support_event(mods, step + 1, a.budget,
                                         lambda i, m: module_score(m, rank_mode, cost_lambda, den_total), opt,
-                                        churn=churn, keep_live=a.keep_live or a.retain_evicted, **swap_options)
+                                        churn=churn, keep_live=a.keep_live or a.retain_evicted,
+                                        **swap_options, **promotion_options))
                 else:
-                    refresh_support(mods, a.budget, None, opt, churn=churn,
-                                    keep_live=a.keep_live or a.retain_evicted, **swap_options)
+                    refresh_events.append(refresh_support_event(mods, step + 1, a.budget, None, opt, churn=churn,
+                                    keep_live=a.keep_live or a.retain_evicted, **swap_options, **promotion_options))
             advance_step_age(mods)
             if a.patch_dropout:
                 clear_patch_dropout(mods)
@@ -4163,13 +6261,16 @@ def main():
         if a.score_epoch and mods and refresh_now and not repair:
             for m in mods:
                 m.score.zero_()                           # also reset epochs after support freezes
+                if a.promote_failing:
+                    m.promote_score.zero_()
         if curriculum is not None and not repair and (step + 1) % a.cur_check == 0:
             curriculum.check(tf)
         if step % 25 == 0 or step == total_steps - 1:
             fade_log = f" teacher_scale {teacher_scale:.6f}" if a.teacher_fade else ""
             print(f"step {step} loss {tot:.4f}{fade_log} ({time.time()-t1:.0f}s)", flush=True)
+        save_now = step + 1 in a.save_at
         eval_now = a.eval_every and ((step + 1) % a.eval_every == 0 or step == total_steps - 1)
-        if fmods and fmods[0].mode == "ef" and ((step + 1) % a.fold_every == 0 or eval_now
+        if fmods and fmods[0].mode == "ef" and ((step + 1) % a.fold_every == 0 or eval_now or save_now
                                                 or step == total_steps - 1):
             fold_all()                                     # evals always see the pure slot patch (B = 0)
         if eval_now:
@@ -4195,11 +6296,31 @@ def main():
                         t.enabled = False
                     remove_teacher(model)
             if audit is not None:
-                ta = tf_eval(model, audit, dev, a.gen_bs, arities=arities) if a.strata else tf(audit)
+                ta = tf_eval(model, audit, dev, a.gen_bs,
+                             arities=([arities[i] for i in train_idx] if arities is not None else None), per_fact=bool(a.promote_failing))
                 traj[-1]["train_em"] = ta["exact_match"]
+                if a.promote_failing:
+                    failing_facts = set(ta["failing_facts"])
+                    fact_weights = [a.promote_failing if fi in failing_facts else 1. for fi in range(len(training_facts))]
+                    for m in mods:
+                        m.promote_score.zero_()            # no stale evidence from facts that now pass
+                    traj[-1].update(promoted_facts=sorted(failing_facts), promote_budget=promote_budget)
                 if a.strata:
                     for k in (2, 3):
                         traj[-1][f"train_em_{k}way"] = ta["by_arity"].get(k)
+            train_em = tf(items_train)["exact_match"]
+            learn_evals.append((step + 1, train_em))
+            gen_learning_curve.append(dict(update=step + 1, wake_steps=(wake_info or {}).get("training_steps", 0),
+                                           value_steps=step + 1, val_gen=vg["recall"], val_n=vg["n"],
+                                           val_correct=round(vg["recall"] * vg["n"])))
+            if a.address_units or a.units_per_fact:
+                held_gen = gen([it for it in items_test if it["fi"] in train_idx])
+                gen_learning_curve[-1].update(test_gen=held_gen["recall"], test_n=held_gen["n"],
+                                              test_correct=round(held_gen["recall"] * held_gen["n"]))
+            if a.address_units or a.units_per_fact:
+                traj[-1]["train_em"] = train_em
+            if a.address_units or a.units_per_fact:
+                traj[-1]["address_moved"] = address_moved(model)
             if a.strata:
                 # Generation strata reuse the same decoded continuations as the headline metric.
                 for k in (2, 3):
@@ -4212,6 +6333,10 @@ def main():
             if saturation is not None:
                 traj[-1].update(saturation.stats())
             print("TRAJ", json.dumps(traj[-1]), flush=True)
+            if a.save_at and first_threshold is None and vg["recall"] >= .97:
+                first_threshold = dict(update=step + 1, val_gen=vg["recall"], n=vg["n"],
+                                       correct=round(vg["recall"] * vg["n"]))
+                save_update_checkpoint(step + 1, "first_val_gen_ge_97pct")
             if not math.isfinite(vd):
                 raise RuntimeError("non-finite validation dNLL")
             vsel = vg["recall"] if a.select_metric == "gen" else v["exact_match"]
@@ -4222,6 +6347,8 @@ def main():
                                      + ([m.support.to("cpu", copy=True) for m in mods]
                                         if a.budget and a.optim != "mls" else []),
                                      fold_counters=[(fm.fold_lost, fm.fold_kept) for fm in fmods])
+        if save_now:
+            save_update_checkpoint(step + 1, "save_at")
 
     if teachers:
         remove_teacher(model)
@@ -4273,39 +6400,92 @@ def main():
                                                test_gen=out[qf]["test_gen"]["recall"])), flush=True)
         return out
 
+    for hook in address_gradient_hooks:
+        hook.remove()
     nflip, energy = patch_stats(mods + fmods) if (mods or fmods) else (0, 0.0)
     serving_final = serving_stats(model)
+    final_address_moved = address_moved(model)
     if serving_final:
         print("SERVING", json.dumps(serving_final), flush=True)
     n_flips_final = sum(int(m.flip_codes().sum()) for m in mods if getattr(m, "pos_only", None) is not None)
     churn_final = dict(totals=churn, slots=churn_summary(mods)) if churn is not None and mods else None
     if churn_final:
         print("CHURN", json.dumps(churn_final), flush=True)
-    on_big = big_eval()
-    on_extra = {name: paired_nll(model, wins, base_extra[name], dev)
-                for name, (_, wins) in extra_panels.items()}
+    zero_control = None
+    if a.zero_patch_control:
+        expected = base_scoring_paths(baseline, a, subject_items, route_panel_paths)
+        with zero_patch(model):
+            zero_control = assert_zero_patch_control(expected, score_final())
+    final_scores = score_final()
+    on_big, on_extra, on_bench = [final_scores[k] for k in ("big", "big_extra", "bench")]
+    on_damage_gate, on_subject, on_held, on_acq = [final_scores[k] for k in ("damage_gate", "subject_dnll", "held", "acq")]
+    on_qa, on_mcq, on_route_drift, on_route_gate = [final_scores[k] for k in ("qa_probe", "mcq_probe", "route_drift", "route_gate")]
     for name, result in on_extra.items():
         print(f"EXTRA {name} {result['dnll']:.6f} ± {result['dnll_se']:.6f}", flush=True)
-    on_held, _ = heldout_eval(model, segs, dev, base_lp_t)
-    on_acq = acq_suite(with_train=True)
+    if on_bench is not None:
+        print("BENCH " + json.dumps(on_bench), flush=True)
+    print("DAMAGE-GATE " + json.dumps(on_damage_gate), flush=True)
+    if on_subject is not None:
+        print("SUBJECT-DNLL " + json.dumps(on_subject), flush=True)
+    safety = None
+    if a.load_patch or a.address_units:
+        mx = a.gen_max_new or max(len(it["a"]) for it in items_test) + K + 2
+        safety_gens = greedy_generate(model, [it["p"] for it in items_test], dev, mx, a.gen_bs)
+        fired = ([address_fired(model, it["p"], wake_info["detectors"], dev) for it in items_test]
+                 if a.address_units else None)
+        safety = generation_safety(tok, items_test, safety_gens, [f.val for f in facts], K, fired)
+        print("SAFETY " + json.dumps(safety), flush=True)
     on_store = storage()
+    unit_store = unit_bytes(model, on_store.get("fsa")) if a.units_per_fact or a.address_units else None
+    if unit_store is not None:
+        unit_store.update(k=a.units_per_fact, n_facts=len(training_facts), train_recall=on_acq["train"]["exact_match"],
+                          test_recall=on_acq.get("test_gen_person", on_acq["test_gen"])["recall"],
+                          test_recall_world=on_acq["test_gen"]["recall"])
+        print("UNIT-BYTES " + json.dumps(unit_store), flush=True)
+    three_metrics = None
+    if a.units_per_fact or a.address_units or a.train_person is not None:
+        # Use held-out general text, including all tokens rather than just prompt ends.
+        general = big if big is not None else segs
+        three_metrics = e2e_three_metrics(model, tok, facts, items_test, general, dev, bos, a, wake_info, unit_info)
+        print("THREE-METRICS " + json.dumps(three_metrics), flush=True)
+    learn_steps = [step for step, train_em in learn_evals if train_em >= .9]
+    steps_to_learn = min(learn_steps) if learn_steps else (total_steps if on_acq["train"]["exact_match"] >= .9 else None)
+    # Keep the historical TF field, while making wake cost and held-out GEN time explicit.
+    wake_training_steps = (wake_info or {}).get("training_steps", 0)
+    final_person_gen = on_acq.get("test_gen_person", on_acq["test_gen"])
+    if not gen_learning_curve or gen_learning_curve[-1]["update"] != total_steps:
+        gen_learning_curve.append(dict(update=total_steps, wake_steps=wake_training_steps, value_steps=total_steps))
+    gen_learning_curve[-1].update(test_gen=final_person_gen["recall"], test_n=final_person_gen["n"],
+                                 test_correct=round(final_person_gen["recall"] * final_person_gen["n"]))
+    steps_to_learn_gen = next((p["value_steps"] for p in gen_learning_curve if p.get("test_gen", 0.) >= .9), None)
     patched_routing = routing_overlap(model, tok, facts, dev, bos, seed=a.seed) if a.routing_diag else None
-    on_qa = on_route_drift = None
     if a.qa_probe:
-        on_qa = qa_probe_eval(model, tok, build_qa_items(tok, facts, bos, a.qa_n), dev,
-                             a.gen_max_new, K, a.gen_bs)
         print("QA-PROBE", json.dumps(on_qa), flush=True)
+    if a.mcq_probe:
+        print("MCQ-PROBE", json.dumps(dict(base=base_acq["mcq_probe"], patched=on_mcq)), flush=True)
     if a.route_drift:
-        on_route_drift = route_drift_summary(baseline["base_token_routes"],
-                                             record_token_routes(model, route_panels, dev))
         print("ROUTE-DRIFT", json.dumps(on_route_drift), flush=True)
-    final_bytes = save_patch(model, patch_dir / "final.pt", dict(meta, protocol=protocol, step=total_steps))
+        print("ROUTE-GATE", "pass" if on_route_gate["passed"] else "fail", json.dumps(on_route_gate), flush=True)
+    final_bytes = save_patch(model, patch_dir / "final.pt", dict(meta, protocol=protocol, step=total_steps,
+                                                               wake_steps=wake_training_steps, value_steps=total_steps))
     on_quant = quant_suite()
     final = dict(big=on_big, test=on_acq["test"], test_gen=on_acq["test_gen"]["recall"], storage=on_store)
+    final.update(base_altering=meta["base_altering"], wake_steps=wake_training_steps, value_steps=total_steps,
+                 steps_to_learn_gen=steps_to_learn_gen, gen_learning_curve=gen_learning_curve)
+    if zero_control is not None:
+        final["zero_patch_control"] = zero_control
+    final["damage_gate"] = on_damage_gate
+    if on_bench is not None:
+        final["bench"] = on_bench
+    if on_subject is not None:
+        final["subject_dnll"] = on_subject
     if a.qa_probe:
         final.update(qa_probe=on_qa, base_qa_probe=base_acq["qa_probe"])
+    if a.mcq_probe:
+        final.update(mcq_probe=on_mcq, base_mcq_probe=base_acq["mcq_probe"])
     if a.route_drift:
         final["route_drift"] = on_route_drift
+        final["route_gate"] = on_route_gate
     if a.extra_eval_sets:
         final["big_extra"] = on_extra
     print("FINAL", json.dumps(final), flush=True)
@@ -4343,9 +6523,24 @@ def main():
                layers=layer_ids, rank=a.rank, steps=a.steps, repair_steps=a.repair_steps,
                repair_local_lambda=repair_lambda if a.repair_steps else 0.0, rehearsal_frac=a.rehearsal_frac,
                bop_tau=a.bop_tau, bop_tau_abs=bop_tau if a.optim == "bop" else None, bop_tau_scale=a.bop_tau_scale,
-               tau_scale_stats=tau_stats, lr=lr, seed=a.seed,
+               tau_scale_stats=tau_stats, lr=lr, seed=a.seed, export=str(a.export), export_step=a.export_step,
+               forced_mask=mask_info, units_per_fact=a.units_per_fact, unit_init=a.unit_init,
+               address_center=a.address_center, exclude_general=a.exclude_general, entropy_units=a.entropy_units,
+               address_mode=a.address_mode, address_general_source=general_source,
+               calibration=general_source, base_altering=meta["base_altering"],
+               wake_steps=wake_training_steps, value_steps=total_steps, steps_to_learn_gen=steps_to_learn_gen,
+               gen_learning_curve=gen_learning_curve, zero_patch_control=zero_control,
+               refresh_every=a.refresh_every, refresh_events=refresh_events, bop_events=bop_events,
+               bop_gamma_late=a.bop_gamma_late, bop_gamma_switch=a.bop_gamma_switch,
+               checkpoint_evals=checkpoint_evals, first_threshold=first_threshold,
+               steps_to_learn=steps_to_learn, address_moved=final_address_moved,
+               unit_bytes=unit_store, unit_allocation=unit_info, three_metrics=three_metrics,
                people=a.people, facts_per_person=a.facts_per_person, shared_attrs=a.shared_attrs, values=a.values,
-               fact_batch=a.fact_batch, n_conflicting=len(conflicts), facts=[f._asdict() for f in facts],
+               train_person=a.train_person, slot_partition=a.slot_partition, slot_part=a.slot_part,
+               partition_unit=a.partition_unit,
+               address_units=a.address_units, fact_batch=a.fact_batch, n_conflicting=len(conflicts), facts=[f._asdict() for f in facts],
+               address_layers=address_layers, value_layers=value_layers, configured_value_layers=configured_values,
+               address_pronoun=a.address_pronoun, value_layers_late=a.value_layers_late,
                n_facts=len(facts), reserve_slots=n_slots, flipped=nflip, energy=energy, lora_params=n_lora,
                patch_bytes=(st.get("bytes") if st else (lora_bytes["fp32"] if lora_bytes else None)),
                storage=on_store, patch_dir=str(patch_dir), patch_file_bytes=final_bytes,
@@ -4354,7 +6549,7 @@ def main():
                patched=dict(held=on_held, big=on_big, **on_acq), lora_quant=on_quant, local_lambda=a.local_lambda,
                revoked=dict(logits_bit_exact=revoke_exact, test=off_test, test_gen=off_gen), trajectory=traj,
                pareto=best_eval, support_score=a.support_score, cost_rel=a.cost_rel, cost_lambda=cost_lambda,
-               fp4_step=a.fp4_step, aug=a.aug, patch_scale=a.patch_scale, scale_block=a.scale_block,
+               fp4_step=a.fp4_step, aug=a.aug, aug_all=a.aug_all, patch_scale=a.patch_scale, scale_block=a.scale_block,
                scale_init=a.scale_init, load_patch=a.load_patch, anchor_overlap=ov,
                death_grace=a.death_grace, death_tau_mult=a.death_tau_mult, churn=churn_final,
                shared_expert=a.shared_expert, shared_only=a.shared_only, bop_accum=a.bop_accum,
@@ -4377,10 +6572,25 @@ def main():
                max_alloc_gb=torch.cuda.max_memory_allocated() / 2**30)
     if a.extra_eval_sets:
         res["patched"]["big_extra"] = on_extra
+    res["damage_gate"] = res["patched"]["damage_gate"] = on_damage_gate
+    if on_bench is not None:
+        res["bench"] = res["patched"]["bench"] = on_bench
+        res["base"]["bench"] = {name: dict(n=value["n"], accuracy=value["accuracy"])
+                                for name, value in baseline["base_bench"].items()}
+    if on_subject is not None:
+        res["subject_dnll"] = res["patched"]["subject_dnll"] = on_subject
     if a.qa_probe:
         res["qa_probe"] = res["patched"]["qa_probe"] = on_qa
     if a.route_drift:
         res["route_drift"] = on_route_drift
+        res["route_gate"] = on_route_gate
+    if a.mcq_probe:
+        res.update(mcq_probe=on_mcq, base_mcq_probe=base_acq["mcq_probe"])
+    if a.route_kl:
+        res.update(route_kl=a.route_kl, route_kl_set=a.route_kl_set, route_kl_overlap=route_ov)
+    if a.promote_failing:
+        res.update(promote_failing=a.promote_failing, promote_budget=promote_budget,
+                   fact_score_weights=fact_weights)
     if a.optim == "mls":
         res["mls"] = dict(eta=a.mls_eta, target_changes=a.mls_target_changes,
                           gen_every=a.mls_gen_every, rank=a.mls_rank,
@@ -4409,11 +6619,29 @@ def main():
                    reheat_every=a.reheat_every, reheat_frac=a.reheat_frac)
     if wake_info is not None:
         res["wake"] = wake_info
+    if safety is not None:
+        res["safety"] = safety
     if a.ctx_teacher:
         res.update(ctx_teacher=a.ctx_teacher, ctx_mu=a.ctx_mu, ctx_T=a.ctx_T,
                    ctx_only_correct=a.ctx_only_correct, self_study=a.self_study)
     if a.base_cache:
         res["base_cache_key"] = cache_key
+    exposures = dict(facts=len(training_facts), formats_per_fact=[len(examples) for examples in pool],
+                     steps=total_steps, fact_format_steps=sum(exposure_counts.values()),
+                     examples_per_global_fact={str(train_idx[fi]): count for fi, count in sorted(exposure_counts.items())},
+                     loss_tokens=exposure_tokens, aug=a.aug, aug_all=a.aug_all,
+                     wake_steps=wake_training_steps if not a.load_patch else 0,
+                     wake_prompt_count=len(build_items(tok, facts, TRAIN_AUG_T if a.aug else TRAIN_T, bos))
+                                       + (len(build_address_pronoun_items(tok, facts, bos)) if a.address_units and a.address_pronoun else 0)
+                                       if wake_info and not a.load_patch else 0,
+                     allocation_fact_forwards=len(training_facts) if a.units_per_fact and not a.load_patch else 0,
+                     loaded_patch=bool(a.load_patch))
+    manifest_checkpoints = dict(updates=checkpoint_evals,
+                                pareto={thr: dict(update=v["step"], patch_file=str(patch_dir / v["patch_file"]),
+                                                  patch_file_bytes=v["patch_file_bytes"])
+                                        for thr, v in best_eval.items()}, first_threshold=first_threshold)
+    res["manifest"] = comparison_manifest(a, model, meta, patch_dir / "final.pt", manifest_checkpoints,
+                                          on_store, exposures, wake_training_steps if not a.load_patch else 0)
     Path(a.out).write_text(json.dumps(res, indent=1))
     print("RESULT", json.dumps({k: v for k, v in res.items() if k not in ("facts", "trajectory", "mls")}), flush=True)
 

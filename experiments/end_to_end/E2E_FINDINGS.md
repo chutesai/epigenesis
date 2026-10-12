@@ -435,3 +435,253 @@ bounds, retention, no lure ratchet and exact revoke passed in every arm. Revocat
 weights, legal format and identical logits. Session-5 damage is within noise of zero for both ternary
 arms; fp4 is +0.0074 ± 0.0020. v1's in-context ceiling (1.00) was invalid: each probe's context held only the correct policy's source episode, so it already contained the answer. With a non-leaking context (all four rules of the category) the unpatched model picks the right action only 0.30 of the time (ticket 0.27, Q/A 0.34; chance 0.25). The identifiability gate was therefore invalid, and the self-distillation teacher was never competent on the probed skill, so v1 cannot tell whether slots consolidate concepts. EP-1 v2.1 uses coarser categorical rules and a full-table context, or a ground-truth supervised target if the teacher still fails. The multi-session thesis is not established. Details: `experiments/epigenesis/EP1_V1_FINDINGS.md`.
 Source: `experiments/epigenesis/out/ep1/summary.json` (also copied in `reviews/paper_r6/ep1/`).
+
+
+## C16 / v35: per-person branches (implementation; GPU results pending)
+
+`--train-person` is a zero-based index in the full seeded world. Training pools,
+validation facts and audits use that person only; final test evaluation remains
+full-world and adds `test_gen_person`. `--slot-partition 3 --slot-part I` hashes
+8-weight blocks from layer/expert/projection/block indices; every forced slot in a
+block belongs to one part. Random `--slot-frac` sampling remains seed-identical to
+the union attachment. Patch loading checks person and partition metadata.
+
+`branch_eval.py` verifies patch compatibility and reports B (oracle full-mask), C
+(frozen-base residual logistic router, default layers 4/6/8), D (all full-mask
+patches merged), E (oracle disjoint), F (all disjoint patches in one forward), and
+G (oracle composition of the two required disjoint patches). `--merge sum_clip`
+sums codes and clips to ±1; `last_write` gives the last nonzero writer in the
+supplied patch-file order precedence at overlaps. Empty sparse entries do not
+erase other branches. Overlap counts are physical nonzero-slot intersections,
+with sign conflicts and maximum absolute pre-clip summed code logged separately.
+Total and active bytes count serialized patch files, including metadata/scales.
+
+Each arm reports full-world validation/test GEN and TF, confusion,
+all-people-correct, C13 held-out/indirect QA, two-person G-set value presence,
+40 unrelated text completions, and paired 40×512 WikiText/FineWeb/code ΔNLL.
+Oracle unrelated queries activate no patch; their damage and abstention are
+therefore measured against the base. Single-patch damage is also reported.
+Router decisions use the frozen-base residual entering the chosen MoE at the
+last prompt token. General windows use their first 64 tokens as the causal
+routing prompt, then hold that decision for the window; none-rate is reported.
+The none class uses random positions in disjoint anchor windows. Router labels,
+training features and normalization never use test labels.
+
+`--address-units K_u` reuses the C6 wake stage (100 steps unless overridden), with
+all own-person last-question tokens positive and other people's same-attribute
+questions negative. Its raw-preactivation margins are absolute `--wake-margin`
+(default 1), including the negative general-token margin. Only selected up rows
+inside the person's partition can be written; C20 now controls freezing with
+`--address-mode`. Selected down columns remain available for value training, which uses the **full
+forward**: waking a dormant unit also activates its frozen base down column.
+Both `--wake-lambda` and the existing `--local-lambda` must be positive, with an
+anchor panel supplied. Saved address patches can be evaluated without rerunning
+the wake stage.
+
+Run from the repository root on the CUDA model host. Set `ANCHOR`, `WIKITEXT`,
+`FINEWEB` and `CODE` to existing disjoint token-JSON files (the three eval files
+need at least 40×511 tokens; WikiText needs the harness validation tail too).
+The following loops run three people for **each** requested placement, then the
+K=3 partition variant and branch evaluation:
+
+```bash
+: "${ANCHOR:?Set the anchor token JSON path}"
+: "${WIKITEXT:?Set the WikiText eval token JSON path}"
+: "${FINEWEB:?Set the FineWeb eval token JSON path}"
+: "${CODE:?Set the code eval token JSON path}"
+recipe=(
+  --method fsa_forced --fmt ternary --optim bop --seed 0
+  --people 3 --facts-per-person 100 --shared-attrs 30 --values disjoint
+  --sparse-state --slot-frac 0.5 --fast-moe exact --expert-checkpoint
+  --answer-only --aug --fact-batch 40 --micro 4 --steps 500
+  --budget 1000000 --budget-freeze 400 --bop-tau 0.5
+  --support-score netcost --local-lambda 10 --rehearsal-frac 0
+  --train-audit 300 --val-facts 100 --eval-every 50 --gen-bs 1
+  --no-pareto --select-metric gen --anchor "$ANCHOR"
+  --eval-set "$WIKITEXT" --extra-eval-sets "$FINEWEB,$CODE"
+)
+for layers in 12,14,17,20 3,16,22,29; do
+  tag="c16_${layers//,/_}"
+  for person in 0 1 2; do
+    python experiments/end_to_end/e2e_fsa.py "${recipe[@]}" \
+      --layers "$layers" --train-person "$person" \
+      --patch-dir "out/${tag}_full_p${person}" \
+      --out "out/${tag}_full_p${person}.json"
+    python experiments/end_to_end/e2e_fsa.py "${recipe[@]}" \
+      --layers "$layers" --train-person "$person" \
+      --slot-partition 3 --slot-part "$person" \
+      --patch-dir "out/${tag}_part_p${person}" \
+      --out "out/${tag}_part_p${person}.json"
+  done
+  python experiments/end_to_end/branch_eval.py \
+    --patches "out/${tag}_full_p0/final.pt" \
+      "out/${tag}_full_p1/final.pt" "out/${tag}_full_p2/final.pt" \
+    --partition-patches "out/${tag}_part_p0/final.pt" \
+      "out/${tag}_part_p1/final.pt" "out/${tag}_part_p2/final.pt" \
+    --arms B,C,D,E,F,G --merge sum_clip --router-layer 4,6,8 \
+    --anchor "$ANCHOR" --eval-set "$WIKITEXT" \
+    --fineweb "$FINEWEB" --code "$CODE" --gen-bs 1 \
+    --out "out/${tag}_branches.json"
+done
+```
+
+To measure D's alternative merge, rerun the branch command with
+`--arms D --merge last_write` and a distinct output path. For the address follow-up,
+repeat the partitioned training command with `--address-units 16 --wake-steps 100`
+and distinct output paths, then supply those three files as `--partition-patches`.
+
+CPU validation: `python -m pytest -q experiments/end_to_end/tests` (463 passed,
+1 skipped on the development host, including 23 C16 tests). CUDA/8B runs were not
+performed on that host; the model export and `/workspace/malleable/mlf` were absent.
+
+## C20 / v38: address controls and unit-bank efficiency (CPU implementation)
+
+Pair8 constrains the frozen base only. Unit patches use plain ternary codes on
+forced zeros; a patched block may have all four pairs active. C19's
+`--legality-audit`, `LEGALITY` output and legality result fields have been removed
+from both harnesses. Allocation and existing slot partitions determine writable
+positions; there is no patch pair-occupancy restriction.
+
+`--address-center` and `--exclude-general F` use the first 32 windows of the first
+FineWeb panel in `--extra-eval-sets` (basename contains `fineweb`, case insensitive),
+falling back to up to 32 training `--anchor` windows. Means use each expert's
+dispatched base inputs. General scores are raw `preactivation > 0` fractions over
+all panel tokens; unrouted tokens count as silent. Exclusion removes the top
+`ceil(F * eligible_units)` units per expert before allocation, with unit-index
+tie breaking. `F` defaults to zero and must lie in `[0, 1)`.
+
+Fact selection retains its default absolute answer-loss gradient ranking.
+Centering evaluates centered addresses and ranks absolute activation × gradient;
+ordinary training uses centered inputs for address-weight gradients while
+preserving forward values and inference. `--entropy-units` scales each fact's
+per-expert allocation by normalized Shannon entropy of its nonnegative ranking
+scores: `H = -sum(p * log(p)) / log(N)`,
+`k_f = clamp(round(k * (0.5 + H)), 1, 4k)`. Zero evidence is uniform (`H=1`), a
+single eligible unit has `H=0`, and allocation is capped by available units.
+
+`--address-mode mutable` is the default: selected address-row forced zeros remain
+writable during value training. `frozen` preserves initialized borrowed addresses
+and trains only selected value columns. `contrastive` reuses the wake hinge on
+owned person/attribute prompts, same-attribute other-person negatives and general
+anchor text, then freezes the addresses before value writing. Shared fact-owned
+rows use the union of their positive owners. Fact contrastive runs default to 100
+pre-steps; override with `--wake-steps`. `address_moved` counts address-slot codes
+changed from initialization at each validation and final evaluation; its baseline
+survives patch export, reload and branch merging. CPU tests verify that the task
+gradient on an address is zero with zero values and becomes nonzero after value
+writing.
+
+`UNIT-BYTES` includes allocated logical units (even with zero codes), aligned
+8-unit banks touched, two-bit forced-position `packed_bytes`, and a separate
+packed bank-index `position_encoding_overhead_bytes`. The final partial bank
+counts existing units only. Scales and container metadata are excluded; prior
+dense-unit, block-sparse-unit and coordinate estimates remain for comparison.
+Branch evaluation reports composed unit bytes and individual/composed address movement.
+
+Validation commands from the repository root (existing cached Python environment):
+
+```bash
+PYTEST_PYTHON=/Users/jdurbin/.cache/uv/environments-v2/e0817003e2ecbca1/82395b30f9e793b9/bin/python
+OMP_NUM_THREADS=1 "$PYTEST_PYTHON" -m pytest -q experiments/end_to_end/tests
+python3 -m py_compile experiments/end_to_end/e2e_fsa.py experiments/end_to_end/branch_eval.py experiments/end_to_end/tests/test_c20.py
+git diff --check
+```
+
+CPU results: 554 passed, 1 skipped, including 25 C20 tests. No CUDA model run or
+git commit was performed. Training examples, appended to an existing unit recipe:
+
+```bash
+--units-per-fact 8 --address-center --exclude-general 0.1 --entropy-units --address-mode mutable
+--units-per-fact 8 --address-mode frozen
+--units-per-fact 8 --address-mode contrastive --wake-steps 100
+```
+
+## C21 / v39: in-context pronoun QA (CPU implementation)
+
+`--qa-probe` reports `two_hop` (with a deprecated, identical `indirect` alias),
+`pronoun`, and `pronoun_recent`, including counts in `n_each`. Pronoun prompts
+name the target, include one to three deterministic neutral turns, and then
+ask about a fact with `her` or `his`. Recent-mention prompts name the other
+person first and the target last, including same-gender pairs. Held-out
+templates are asserted disjoint from train/validation/test templates. Scoring
+uses the test generation clean-stop and conflicting-value rules. Both harnesses
+cache base probe scores with `--base-cache`; aliases share items and scores.
+
+## C22 / v40: downstream benchmark and subject damage (CPU implementation)
+
+`--bench` adds batch-one, mean continuation log-likelihood multiple-choice
+accuracy for ARC-Easy, HellaSwag, and MBPP-MC at final/load-patch evaluation.
+MBPP uses three deterministic other-problem solutions as distractors. The
+benchmark JSON files come from the box data directory, falling back to
+`reviews/brainstorm_2026-10-12/bench_data`; `--bench-dir` overrides that directory.
+`BENCH` reports paired accuracy differences and McNemar SE `sqrt(gained+lost)/n`.
+Base results are cached with input-content hashes. Branch benchmarks activate
+all banks together for each full-mask/disjoint family (sum/F configuration).
+
+`DAMAGE-GATE` labels each unrelated panel clean at ΔNLL ≤ .003, acceptable at
+ΔNLL ≤ .01 only if all three benchmarks meet `abs(difference) < 2*SE`, and fail
+otherwise. The inequality is strict, including zero-SE panels; missing benchmarks
+cannot certify the intermediate band. `--subject-text` separately reports
+`SUBJECT-DNLL` on 40 deterministic, unpadded short biographies, including paired
+SE and per-person summaries. Branch arms retain their usual routing for this
+related panel; the learned router sees at most the first 64 tokens. Both new
+evaluation flags default off; training is unchanged.
+
+## C25 / v43: late address layers and attribute given person (CPU implementation)
+
+`--address-layers LIST` defaults to `--layers`. With `--address-units`, wake/hinge
+selection runs only at address layers. Value-only layers retain their usual
+writable up/down slots. Address-only layers attach selected up rows and freeze
+them during answer training/Bop. Overlapping layers retain selected address rows
+and their selected down columns, with the existing address-mode behavior.
+
+A detector at L26/L28 cannot gate a value written at L12–20 earlier in the same
+forward. `--value-layers-late` adds value writes to the address layers: the selected
+address units' **down-projection output columns** learn values there, so those late
+layers carry both address and value. This flag defaults off. `--address-pronoun`
+adds train-only C21-style single/recent-person conversations to the hinge and
+answer pool, including own-person positives and same-attribute other-person
+negatives. Neutral fillers are deterministic; training pronoun phrasings are
+disjoint from final QA pronoun phrasings. Anchor negatives remain unchanged.
+Patch metadata preserves both layer sets and flags for reload and branch serving.
+
+`separability_probe.py` now reports `attribute_given_person`: each gold person
+gets an independent attribute classifier fitted and evaluated within that person,
+including train-only preprocessing. Panel accuracies average people equally;
+per-person scores and counts are included. The joint probe remains and reports
+`data_limited=true` when any joint class has fewer than ten training prompts
+(the default five training phrasings per fact meet this condition).
+
+Three-person unit-partition recipe (CUDA/model-host commands, not run on this CPU host):
+
+```bash
+: "${ANCHOR:?Set the training anchor token JSON path}"
+: "${WIKITEXT:?Set the disjoint evaluation token JSON path}"
+for person in 0 1 2; do
+  python experiments/end_to_end/e2e_fsa.py \
+    --method fsa_forced --fmt ternary --optim bop --seed 0 \
+    --people 3 --facts-per-person 100 --shared-attrs 30 --values disjoint \
+    --train-person "$person" --slot-partition 3 --slot-part "$person" --partition-unit \
+    --layers 12,14,17,20 --address-layers 26,28 --address-units 16 \
+    --address-pronoun --value-layers-late --wake-steps 100 --wake-lambda 1 \
+    --local-lambda 10 --anchor "$ANCHOR" --eval-set "$WIKITEXT" \
+    --answer-only --aug --fact-batch 40 --micro 4 --steps 500 --bop-tau 0.5 \
+    --sparse-state --fast-moe exact --expert-checkpoint \
+    --eval-every 50 --val-windows 4 --no-pareto --qa-probe \
+    --patch-dir "out/c25_late_p${person}" --out "out/c25_late_p${person}.json"
+done
+python experiments/end_to_end/separability_probe.py --seed 0 --out out/c25_separability.json
+```
+
+For the address-only control, omit `--value-layers-late` and use distinct output
+paths; L26/L28 then attach up rows only, while values stay at L12/14/17/20.
+CPU validation command:
+
+```bash
+OMP_NUM_THREADS=1 /private/tmp/epigenesis-ladder-venv/bin/python -m pytest -q experiments/end_to_end/tests
+```
+
+CPU coverage includes all three person partitions, dense/sparse state, address-only
+and late-output value variants, actual Bop writes, pronoun split isolation,
+patch reload/revocation, conditional macro averaging and the joint ten-prompt
+threshold. Result: **638 passed, 1 skipped**. No GPU experiment or commit was performed.

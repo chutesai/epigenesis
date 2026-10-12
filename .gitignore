@@ -50,7 +50,15 @@
 !/experiments/end_to_end/mls.py
 !/experiments/end_to_end/MLS.md
 !/experiments/end_to_end/E2E_FINDINGS.md
+!/experiments/end_to_end/C26_REPORT.md
+!/experiments/end_to_end/C27_REPORT.md
+!/experiments/end_to_end/C29_REPORT.md
 !/experiments/end_to_end/e2e_fsa.py
+!/experiments/end_to_end/branch_eval.py
+!/experiments/end_to_end/biology_addressing.py
+!/experiments/end_to_end/indexed_composition.py
+!/experiments/end_to_end/separability_probe.py
+!/experiments/end_to_end/two_hop.py
 !/experiments/end_to_end/data/
 /experiments/end_to_end/data/*
 !/experiments/end_to_end/data/v6_lora_L1415_loc100.json
@@ -74,6 +82,19 @@
 /experiments/end_to_end/tests/*
 !/experiments/end_to_end/tests/test_mls.py
 !/experiments/end_to_end/tests/test_e2e_fsa.py
+!/experiments/end_to_end/tests/test_branch_eval.py
+!/experiments/end_to_end/tests/test_c17.py
+!/experiments/end_to_end/tests/test_c19.py
+!/experiments/end_to_end/tests/test_c20.py
+!/experiments/end_to_end/tests/test_c21.py
+!/experiments/end_to_end/tests/test_c22.py
+!/experiments/end_to_end/tests/test_c23.py
+!/experiments/end_to_end/tests/test_c24.py
+!/experiments/end_to_end/tests/test_c25.py
+!/experiments/end_to_end/tests/test_c26.py
+!/experiments/end_to_end/tests/test_c27.py
+!/experiments/end_to_end/tests/test_c29.py
+!/experiments/end_to_end/tests/test_separability_probe.py
 !/experiments/end_to_end/tests/test_context_teacher.py
 !/experiments/end_to_end/data/v9_bop_t07_loc3_s600.json
 !/experiments/end_to_end/data/v10_bop_t06_loc10.json
@@ -134,3 +155,10 @@ ROADMAP.md
 !/experiments/serving/README.md
 !/experiments/serving/fsa_gguf_patch.py
 !/experiments/serving/summary.json
+
+# C32 review evaluation code and CPU regressions
+!/experiments/end_to_end/review_eval.py
+!/experiments/end_to_end/exploration.py
+!/experiments/end_to_end/tests/test_c32.py
+!/experiments/end_to_end/C32_REPORT.md
+!/experiments/end_to_end/tests/test_exploration.py

@@ -1530,7 +1530,7 @@ def cpu_harness(tmp_path, monkeypatch):
     (tmp_path / "heldout-tokens.json").write_text(json.dumps([BOS_T] + [80] * (5 * 512)))
     paths = {}
     for name, token, count in (("eval", 90, 61022), ("extra", 95, 40 * 511),
-                               ("anchor", 40, 1000), ("rehearsal", 50, 1000)):
+                               ("anchor", 40, 1000), ("rehearsal", 50, 1000), ("calib", 60, 40 * 511)):
         path = tmp_path / f"{name}.json"
         path.write_text(json.dumps([token] * count))
         paths[name] = str(path)
@@ -1930,7 +1930,7 @@ def test_main_c2_epoch_fisher_strata_curriculum_and_scale_loading(cpu_harness, m
     flags = ["--strata", "--train-audit", "5", "--curriculum", "attribute", "--cur-check", "2",
              "--cur-active", "1", "--score-epoch", "--fisher-support", "--adam-phase", "2",
              "--pair-birth", "--sparse-state", "--anchor", paths["anchor"], "--anchor-len", "16",
-             "--budget-freeze", "3", "--patch-scale-mult-up", "0.5", "--patch-scale-mult-down", "0.75"]
+             "--budget-freeze", "4", "--patch-scale-mult-up", "0.5", "--patch-scale-mult-down", "0.75"]
     result, patch = run(["--steps", "6", *flags], "c2")
     assert len(refreshes) == 2                              # epochs end at steps 2,4; step 6 is frozen
     assert len(captures) == 1 and len(accumulated) == 6 and len(checks) == 3
@@ -2866,3 +2866,450 @@ def test_fade_off_preserves_patch_metrics_and_rng(cpu_harness):
     for name in a:
         assert torch.equal(a[name]["idx"], b[name]["idx"])
         assert torch.equal(a[name]["val"], b[name]["val"])
+
+
+# ---------------------------------------------------------------------------------------------- C13 probes
+def test_qa_templates_and_sampling_are_separate_and_deterministic():
+    templates = E.QA_UNSEEN_T + [E.QA_TWO_T, E.QA_INDIRECT_T]
+    assert len(E.QA_UNSEEN_T) >= 3
+    assert set(templates).isdisjoint(E.TRAIN_T + E.TRAIN_AUG_T + E.VAL_T + E.TEST_T +
+                                   [E.CONV_T] + E.SELF_STUDY_T)
+    facts = E.make_world(2, 3, 4, 2)
+    state = random.getstate()
+    items = E.build_qa_items(TOK, facts, BOS_T, 5)
+    assert items == E.build_qa_items(TOK, facts, BOS_T, 5)
+    assert random.getstate() == state
+    assert all(len(group) == 5 for group in items.values())
+    all_items = E.build_qa_items(TOK, facts, BOS_T, 10000)
+    assert len(all_items["unseen"]) == 3 * len(facts)
+    old = E.build_items(TOK, facts, E.TRAIN_AUG_T + E.VAL_T + E.TEST_T, BOS_T)
+    assert {tuple(it["p"]) for it in all_items["unseen"]}.isdisjoint(tuple(it["p"]) for it in old)
+    for it in all_items["two_fact"]:
+        a, b = [facts[fi] for fi in it["fis"]]
+        assert a.pid == b.pid and a.attr != b.attr
+    assert all(not group for group in E.build_qa_items(TOK, facts, BOS_T, 0).values())
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Quillon and Varnholt.", True), ("Varnholt, Quillon!", True),
+    ("They are Quillon and Varnholt. More text", True),
+    ("Quillon.", False), ("Quillon. Varnholt.", False),
+    ("Quillon and Varnholton.", False), ("XQuillon and Varnholt.", False),
+    ("Quillon's and Varnholt.", False), ("Quillon and Varnholt-ish.", False),
+    ("Quillon and Varnholt with extras.", False),
+    ("Quillon and Varnholt", False), ("Quillon and Varnholt  \n", False),
+    ("Quillon and Varnholt)\n", True),
+])
+def test_two_fact_scoring(text, expected):
+    ids = TOK.encode(text).ids
+    assert E.score_two_fact_generation(TOK, ids, ["Quillon", "Varnholt"], k=2)["both"] == expected
+
+
+def test_two_fact_eos_and_numeric_boundaries():
+    ids = TOK.encode("Varnholt and Quillon").ids + [EOS_T]
+    assert E.score_two_fact_generation(TOK, ids, ["Quillon", "Varnholt"], eos=[EOS_T])["both"]
+    ids = TOK.encode("41.5 and Varnholt.").ids
+    assert not E.score_two_fact_generation(TOK, ids, ["41", "Varnholt"])["both"]
+    assert E.score_two_fact_generation(TOK, ids, ["41.5", "Varnholt"])["both"]
+    score = E.score_two_fact_generation(TOK, TOK.encode("Quillon.").ids, ["Quillon", "Varnholt"])
+    assert score["answers"] == [True, False]
+
+
+def test_indirect_questions_exclude_ambiguous_references_and_answer_leakage():
+    facts = [E.Fact(0, "Ada", "her", "she", "dog", "Same"),
+             E.Fact(0, "Ada", "her", "she", "city", "Alpha"),
+             E.Fact(1, "Bo", "his", "he", "dog", "Same"),
+             E.Fact(1, "Bo", "his", "he", "city", "Beta")]
+    items = E.build_qa_items(TOK, facts, BOS_T, 100)["indirect"]
+    assert len(items) == 2
+    assert {it["reference_fi"] for it in items} == {1, 3}
+    for it in items:
+        ref, target = facts[it["reference_fi"]], facts[it["fi"]]
+        assert ref.pid == target.pid and ref.attr != target.attr
+        assert ref.val in it["prompt"] and target.val not in it["prompt"]
+        assert ref.name not in it["prompt"] and it["val"] == target.val
+        assert {f.pid for f in facts if f.val == ref.val} == {ref.pid}
+    cross_attribute = facts + [E.Fact(1, "Bo", "his", "he", "code", "Alpha")]
+    assert all(it["reference_fi"] != 1 for it in E.build_qa_items(TOK, cross_attribute, BOS_T, 100)["indirect"])
+    assert E.build_qa_items(TOK, facts[:1], BOS_T)["indirect"] == []
+
+
+def test_qa_eval_uses_generation_and_reports_both_correct(monkeypatch):
+    facts = [E.Fact(0, "Ada", "her", "she", "dog", "Quillon"),
+             E.Fact(0, "Ada", "her", "she", "city", "Varnholt")]
+    groups = E.build_qa_items(TOK, facts, BOS_T, 100)
+    calls = []
+
+    def generate(model, prompts, dev, mx, bs):
+        calls.append((prompts, mx, bs))
+        items = next(group for group in groups.values() if [it["p"] for it in group] == prompts)
+        return [TOK.encode(" and ".join(reversed(it["vals"])) + ".").ids for it in items]
+
+    monkeypatch.setattr(E, "greedy_generate", generate)
+    score = E.qa_probe_eval(None, TOK, groups, "cpu")
+    assert score == dict(unseen=1., two_fact_both=1., two_fact_both_lenient=1., two_hop=1., indirect=1., pronoun=1., pronoun_recent=0.,
+                         n_each={key: len(group) for key, group in groups.items()})
+    assert len(calls) == 4
+
+
+@pytest.mark.parametrize("fast", [None, "exact", "batched"])
+def test_route_capture_preserves_forward_and_restores_methods(fast):
+    import fast_moe as M
+
+    class ProbeExpert(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.up_proj = torch.nn.Linear(8, 16, bias=False)
+            self.down_proj = torch.nn.Linear(16, 8, bias=False)
+
+        def forward(self, x):
+            return self.down_proj(torch.relu(self.up_proj(x)) ** 2)
+
+    class ProbeMoE(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.router = torch.nn.Linear(8, 5, bias=False)
+            self.experts = torch.nn.ModuleList([ProbeExpert() for _ in range(5)])
+
+        def _forward_frozen_exact_grouped(self, expert_input, indices, weights):
+            return None
+
+        def forward(self, x):
+            flat = x.reshape(-1, 8)
+            values, indices = self.router(flat).topk(3, dim=-1)
+            weights = values.softmax(-1)
+            out = self._forward_frozen_exact_grouped(flat, indices, weights)
+            if out is None:
+                out = torch.zeros_like(flat)
+                for ei, expert in enumerate(self.experts):
+                    sel = (indices == ei).any(-1)
+                    if sel.any():
+                        weight = (weights * (indices == ei)).sum(-1)[sel, None]
+                        out[sel] += expert(flat[sel]) * weight
+            return out.reshape_as(x)
+
+    moe = ProbeMoE()
+
+    class Model(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.emb = torch.nn.Embedding(128, 8)
+            self.moe = moe
+
+        def forward(self, ids):
+            return self.moe(self.emb(ids))
+
+    model = Model().eval()
+    for p in model.parameters():
+        p.requires_grad_(False)
+    if fast:
+        M.install(model, [], mode=fast)
+    original = moe._forward_frozen_exact_grouped
+    had_instance = "_forward_frozen_exact_grouped" in moe.__dict__
+    wins = torch.arange(512).remainder(128).repeat(18, 1)
+    before = model(wins[:1])
+    routes = E.record_token_routes(model, {"panel": wins}, "cpu")
+    assert routes["panel"]["0"].shape == (16 * 512, 3)
+    assert moe._forward_frozen_exact_grouped == original
+    assert ("_forward_frozen_exact_grouped" in moe.__dict__) == had_instance
+    assert torch.equal(model(wins[:1]), before)
+    score = E.route_drift_summary(routes, routes)["panel"]
+    assert score["mean"] == {"jaccard": 1., "identical": 1.}
+    assert score["n_tokens"] == 16 * 512
+
+
+def test_route_drift_set_scores_and_cache(tmp_path):
+    base = {"panel": {"0": torch.tensor([[0, 1], [2, 3]]), "1": torch.tensor([[0, 1], [0, 1]])}}
+    patched = {"panel": {"0": torch.tensor([[1, 0], [3, 4]]), "1": torch.tensor([[2, 3], [2, 3]])}}
+    E.cached_base(tmp_path, "routes", lambda: {"base_token_routes": base}, "cpu")
+    loaded = E.cached_base(tmp_path, "routes", lambda: pytest.fail("cache hit evaluated"), "cpu")
+    score = E.route_drift_summary(loaded["base_token_routes"], patched)["panel"]
+    assert score["layers"]["0"]["jaccard"] == pytest.approx(2 / 3)
+    assert score["layers"]["0"]["identical"] == .5
+    assert score["mean"]["jaccard"] == pytest.approx(1 / 3)
+    assert score["mean"]["identical"] == .25
+
+
+def test_probe_defaults_and_cache_keys(tmp_path):
+    for name in ("heldout-tokens.json", "tokenizer.json"):
+        (tmp_path / name).write_text("[]")
+    a = E.build_parser().parse_args(["--method", "fsa_forced", "--out", "unused"])
+    assert (a.qa_probe, a.qa_n, a.route_drift) == (False, 120, False)
+    key = lambda: E.base_cache_key(a, E.make_world(), None, None, data=tmp_path, export=tmp_path)
+    first = key()
+    for attr, value in (("qa_probe", True), ("qa_n", 10), ("route_drift", True)):
+        old = getattr(a, attr)
+        setattr(a, attr, value)
+        assert key() != first
+        setattr(a, attr, old)
+
+
+def test_main_probes_cache_and_patch_reload(cpu_harness, tmp_path, monkeypatch, capsys):
+    (tmp_path / "tokenizer.json").write_text("{}")
+    # The fixture's model has a 128-entry vocabulary; normalize the Unicode dash in its char tokenizer.
+    original_encode = type(TOK).encode
+    monkeypatch.setattr(type(TOK), "encode", lambda self, s, **kwargs:
+                        original_encode(self, s.replace("—", "-"), **kwargs))
+    # Add the production dispatch observation point to the existing CPU harness stand-in.
+    original_forward = MoE.forward
+
+    def forward(self, x):
+        ids = self.router(x).argmax(-1).reshape(-1, 1)
+        self._forward_frozen_exact_grouped(x.reshape(-1, x.shape[-1]), ids, torch.ones_like(ids))
+        return original_forward(self, x)
+
+    monkeypatch.setattr(MoE, "_forward_frozen_exact_grouped", lambda *args: None, raising=False)
+    monkeypatch.setattr(MoE, "forward", forward)
+    run, paths = cpu_harness
+    flags = ["--steps", "0", "--qa-probe", "--qa-n", "3", "--route-drift", "--base-cache", str(tmp_path / "cache"),
+             "--extra-eval-sets", paths["extra"], "--eval-windows", "2"]
+    first, patch = run(flags, "probe")
+    assert first["qa_probe"]["n_each"] == dict(unseen=3, two_fact=3, two_hop=3, indirect=3,
+                                              pronoun=3, pronoun_recent=3)
+    assert first["base"]["qa_probe"] == first["qa_probe"]
+    assert set(first["route_drift"]) == {"eval-set", "extra.json"}
+    assert all(panel["n_tokens"] == 16 * 512 for panel in first["route_drift"].values())
+    key = first["base_cache_key"]
+    monkeypatch.setattr(E, "base_cache_key", lambda *args, **kwargs: key)
+    monkeypatch.setattr(E, "evaluate_base", lambda *args, **kwargs: pytest.fail("baseline recomputed"))
+    second, _ = run(flags + ["--load-patch", str(patch)], "reload")
+    assert second["qa_probe"] == first["qa_probe"]
+    assert second["route_drift"] == first["route_drift"]
+    output = capsys.readouterr().out
+    assert "QA-PROBE " in output and "ROUTE-DRIFT " in output and "BASE-CACHE hit" in output
+    finals = [json.loads(line.removeprefix("FINAL ")) for line in output.splitlines() if line.startswith("FINAL ")]
+    assert all(final["qa_probe"] == first["qa_probe"] and final["route_drift"] == first["route_drift"]
+               for final in finals)
+
+
+# ---------------------------------------------------------------------------------------------- C15
+def test_route_kl_downstream_gradients_and_batch_cache(monkeypatch):
+    model = tiny()
+    E.attach(model, [0], "fsa_free", 2)
+    penalty = E.RouteKLPenalty(model, [0], cache_size=1)
+    wins = torch.tensor([[1, 65, 66], [1, 70, 71]])
+    calls, forward = [], E.logits_of
+    monkeypatch.setattr(E, "logits_of", lambda m, x: (calls.append(x.clone()), forward(m, x))[1])
+    base = penalty.base(wins)
+    assert set(base) == {1} and not base[1].requires_grad
+    assert all(len(moe.router._forward_hooks) == 0 for moe in model.moes)
+    torch.testing.assert_close(penalty.base(wins.clone())[1], base[1])
+    assert len(calls) == 1
+    with penalty.capture() as patched:
+        E.logits_of(model, wins)
+    assert float(penalty.loss(base, patched).detach()) == pytest.approx(0., abs=1e-7)
+    _rand_codes(model)
+    with penalty.capture() as patched:
+        E.logits_of(model, wins)
+    loss = penalty.loss(base, patched)
+    assert loss.item() > 0
+    loss.backward()
+    assert any(m.M.grad is not None and bool(m.M.grad.abs().sum()) for m in E.fsa_modules(model))
+    assert all(p.grad is None for p in model.moes[1].router.parameters())
+    changed = wins.clone()
+    changed[0, 1] = 90
+    penalty.base(changed)
+    assert len(penalty.cache) == 1
+    calls_before = len(calls)
+    penalty.base(wins)
+    assert len(calls) == calls_before + 1
+
+
+def test_route_kl_sigmoid_full_distribution_and_exception_cleanup(monkeypatch):
+    class Router(nn.Module):
+        def forward(self, logits):
+            indices = logits.topk(2, -1).indices
+            weights = logits.sigmoid().gather(-1, indices)
+            return indices, weights / weights.sum(-1, keepdim=True), logits
+    model = tiny()
+    model.moes[1].router = Router()
+    penalty = E.RouteKLPenalty(model, [0])
+    logits = torch.tensor([[-2., 0., 1., 3.]], requires_grad=True)
+    with penalty.capture() as captured:
+        model.moes[1].router(logits)
+    expected = logits.sigmoid() / logits.sigmoid().sum(-1, keepdim=True)
+    torch.testing.assert_close(captured[1].exp(), expected)
+    assert captured[1].shape[-1] == 4
+    monkeypatch.setattr(E, "logits_of", lambda *args: (_ for _ in ()).throw(RuntimeError("broken forward")))
+    E.FSAParam.enabled, E.LoRAParam.enabled = False, True
+    try:
+        with pytest.raises(RuntimeError, match="broken forward"):
+            penalty.base(torch.tensor([[1, 65]]))
+        assert (E.FSAParam.enabled, E.LoRAParam.enabled) == (False, True)
+        assert not penalty.cache and not model.moes[1].router._forward_hooks
+    finally:
+        E.set_enabled(True)
+
+
+def test_route_gate_only_uses_fineweb_and_fails_without_evidence():
+    panels = {"wiki": {"mean": {"jaccard": .1}}, "code": {"mean": {"jaccard": .99}},
+              "fw": {"mean": {"jaccard": .87}}}
+    paths = {"wiki": "wikitext.json", "code": "code.json", "fw": "/data/eval-fineweb.json"}
+    assert E.route_gate(panels, paths)["passed"]
+    panels["fw"]["mean"]["jaccard"] = .869
+    assert not E.route_gate(panels, paths)["passed"]
+    assert E.route_gate(panels, {"code": "code.json"})["mean_fineweb_jaccard"] is None
+
+
+def test_mcq_questions_options_accuracy_and_confusion():
+    facts = E.make_world(0, 3, 2, 2)
+    # Give one attribute two people while retaining a three-person attribute.
+    facts = [f for f in facts if not (f.pid == 2 and f.attr == facts[0].attr)]
+    state = random.getstate()
+    items = E.build_mcq_items(TOK, facts, BOS_T)
+    assert items == E.build_mcq_items(TOK, facts, BOS_T) and random.getstate() == state
+    assert Counter(len(it["options"]) for it in items) == {2: 2, 3: 3}
+    predictions = {}
+    for i, it in enumerate(items):
+        prompt = TOK.decode(it["p"])
+        f = facts[it["fi"]]
+        assert prompt.startswith(f"Which is {f.name}'s {f.attr}? A)") and prompt.endswith("Answer: ")
+        assert set(it["options"]) == {fi for fi, other in enumerate(facts) if other.attr == f.attr}
+        pick = (it["correct"] + 1) % len(it["options"]) if i == 0 else it["correct"]
+        predictions[prompt] = it["letters"][pick]
+    class Answers(nn.Module):
+        def forward(self, x):
+            logits = torch.zeros(*x.shape, 128)
+            for row, seq in enumerate(x.tolist()):
+                prompt = TOK.decode(seq)
+                logits[row, len(prompt), predictions[prompt]] = 10
+            return logits
+    result = E.mcq_probe_eval(Answers(), items, "cpu", bs=4)
+    assert result["n"] == 5 and result["accuracy"] == .8 and result["confusion"] == .2
+    assert result["by_arity"][2]["accuracy"] == .5 and result["by_arity"][3]["accuracy"] == 1.
+    assert E.mcq_probe_eval(Answers(), [], "cpu")["accuracy"] is None
+    assert not E.build_mcq_items(TOK, E.make_world(), BOS_T)
+
+
+def test_mcq_keeps_conflicts_with_duplicate_option_values():
+    facts = E.make_world(0, 3, 1, 1)
+    facts[1] = facts[1]._replace(val=facts[0].val)
+    items = E.build_mcq_items(TOK, facts, BOS_T)
+    assert len(items) == 3
+    assert [len(it["correct_options"]) for it in items] == [2, 2, 1]
+
+
+@pytest.mark.parametrize("mode,epoch", [("absgrad", False), ("netcost", False), ("netcost", True)])
+def test_promotion_weights_only_ce_support_gradient(mode, epoch):
+    model = tiny()
+    _attach(model, "fsa_free", budgeted=True)
+    mods = E.fsa_modules(model)
+    for m in mods:
+        m.promote_score = torch.zeros_like(m.score)
+        m.promote_grad = None
+    ids = torch.tensor([[1, 65, 66], [1, 80, 81]])
+    logits = model(ids)[:, :-1]
+    gold = ids[:, 1:]
+    mask = torch.ones_like(gold, dtype=torch.bool)
+    meta, weights = [(0, 1), (1, 1)], [4., 1.]
+    boosted = E.failing_ce_gradients(logits, gold, mask, meta, weights, {0}, mods, .25)
+    total = F.cross_entropy(logits[mask], gold[mask], reduction="sum") * .25
+    # Reference weighted CE uses the very same logits and normalization.
+    ce = F.cross_entropy(logits.reshape(-1, 128), gold.flatten(), reduction="none").reshape_as(gold)
+    weighted = (ce * torch.tensor(weights)[:, None]).sum() * .25
+    expected = torch.autograd.grad(weighted, [m.M for m in mods], retain_graph=True, allow_unused=True)
+    total.backward()
+    normal = [m.M.grad.clone() if m.M.grad is not None else None for m in mods]
+    for m, grad in zip(mods, boosted):
+        m.promote_grad = grad
+    E.accumulate_promoted_scores(mods, 4., mode, epoch)
+    for m, old, want in zip(mods, normal, expected):
+        assert m.promote_grad is None
+        if old is not None:
+            torch.testing.assert_close(m.M.grad, old)
+        if want is not None:
+            want = want if epoch or mode == "netcost" else want.abs()
+            torch.testing.assert_close(m.score.float(), (want * m.mask * (1 if epoch else .1)).to(m.score.dtype).float(),
+                                       atol=2e-5, rtol=.02)
+
+
+@pytest.mark.parametrize("sparse", [False, True])
+def test_promoted_reserve_requires_positive_failing_birth_gain(sparse):
+    W = torch.ones(1, 6)
+    mask = torch.ones_like(W, dtype=torch.bool)
+    m = E.SparseFSAParam(W, mask, "ternary", True) if sparse else E.FSAParam(W, mask, "ternary", True)
+    m.score.flatten().copy_(torch.tensor([10., 9., 8., 7., 6., 5.]))
+    m.bop_ema = torch.ones_like(m.M)
+    m.promote_score = torch.tensor([0., -1., 2., 3., 4., 0.]).reshape_as(m.M)
+    # Ordinary K=1 takes slot 0; opposing evidence excludes slot 1; reserve takes 2 and 3.
+    extra = lambda i, mod: E.promotion_gain(mod, E.module_score(mod, "absgrad", 0, None))
+    E.refresh_support([m], 1, extra_budget=2, extra_scores=extra)
+    assert m.support.flatten().tolist() == [True, False, True, True, False, False]
+    assert m.promoted_support.flatten().tolist() == [False, False, True, True, False, False]
+    with torch.no_grad():
+        m.M.flatten()[2] = -1
+    E.refresh_support([m], 1, extra_budget=2, extra_scores=extra, keep_live=True)
+    assert m.support.sum() == 3 and m.M.flatten()[2] == -1
+    m.promote_score.zero_()
+    E.refresh_support([m], 1, extra_budget=2, extra_scores=extra)
+    assert m.support.sum() == 1 and m.M.flatten()[2] == 0
+
+
+def test_c15_defaults_validation_and_cache_identity(tmp_path):
+    for name in ("heldout-tokens.json", "tokenizer.json"):
+        (tmp_path / name).write_text("[]")
+    args = ["--method", "fsa_forced", "--out", "unused"]
+    a = E.build_parser().parse_args(args)
+    E.validate_c15_args(a)
+    assert (a.route_kl, a.route_kl_set, a.mcq_probe, a.promote_failing, a.promote_budget) == (0., None, False, 0., None)
+    assert E.build_parser().parse_args(args + ["--route-kl-set"]).route_kl_set == "data/rehearsal-fineweb.json"
+    key = lambda: E.base_cache_key(a, E.make_world(), None, None, export=tmp_path, data=tmp_path)
+    old = key()
+    a.mcq_probe = True
+    assert old != key()
+    for flags in (["--route-kl", "nan"], ["--route-kl", "1"], ["--promote-failing", "2"],
+                  ["--promote-failing", ".5"], ["--promote-budget", "-1"]):
+        with pytest.raises(SystemExit):
+            E.validate_c15_args(E.build_parser().parse_args(args + flags))
+
+
+def test_training_audit_failure_rule_is_any_failed_phrasing():
+    items = [dict(fi=fi, p=[BOS_T, prefix], a=[65, 66]) for fi, prefix in [(0, 60), (0, 61), (1, 62)]]
+    class TeacherForced(nn.Module):
+        def forward(self, x):
+            lg = torch.zeros(*x.shape, 128)
+            lg[:, :-1].scatter_(-1, x[:, 1:, None], 10.)
+            lg[x[:, 1] == 61, 2, 67] = 20.  # Just one answer token of one fact-0 phrasing fails.
+            return lg
+    result = E.tf_eval(TeacherForced(), items, "cpu", per_fact=True)
+    assert result["failing_facts"] == [0] and result["exact_match"] == pytest.approx(2 / 3)
+    assert "failing_facts" not in E.tf_eval(TeacherForced(), items, "cpu")
+
+
+def test_promoted_bop_birth_rechecks_evidence_after_audit():
+    m = E.FSAParam(torch.ones(1, 4), torch.ones(1, 4, dtype=torch.bool), "ternary", True)
+    m.promoted_support = torch.tensor([[False, True, True, True]])
+    m.promote_score = torch.tensor([[0., 1., -1., 0.]])
+    m.bop_ema = torch.zeros_like(m.M)
+    m.M.grad = torch.ones_like(m.M)
+    born, _ = E.bop_step([m], 1., .01, True)
+    assert born == 2
+    assert m.M.tolist() == [[-1., -1., 0., 0.]]
+
+
+def test_main_c15_training_and_cached_load_eval(cpu_harness, tmp_path, monkeypatch, capsys):
+    run, paths = cpu_harness
+    (tmp_path / "tokenizer.json").write_text("{}")
+    fineweb = tmp_path / "eval-fineweb.json"
+    fineweb.write_text(Path(paths["extra"]).read_text())
+    monkeypatch.setattr(E, "record_token_routes", lambda model, panels, dev: {
+        name: {"0": torch.tensor([[0, 1]]), "1": torch.tensor([[1, 2]])} for name in panels})
+    flags = ["--anchor", paths["anchor"], "--anchor-len", "16", "--local-lambda", ".01",
+             "--route-kl", ".2", "--route-kl-set", paths["rehearsal"], "--promote-failing", "4",
+             "--train-audit", "6", "--mcq-probe", "--route-drift", "--extra-eval-sets", str(fineweb),
+             "--base-cache", str(tmp_path / "c15-cache"), "--eval-windows", "2"]
+    first, patch = run([*flags, "--steps", "12"], "c15")
+    assert first["promote_budget"] == 2
+    assert first["route_gate"]["passed"]
+    assert first["mcq_probe"]["n"] == 6 and first["base_mcq_probe"]["n"] == 6
+    assert all(t["promoted_facts"] for t in first["trajectory"])
+    assert all(t["nnz"] <= 22 for t in first["trajectory"])
+    assert 4. in first["fact_score_weights"]
+    key = first["base_cache_key"]
+    monkeypatch.setattr(E, "base_cache_key", lambda *args, **kwargs: key)
+    monkeypatch.setattr(E, "evaluate_base", lambda *args, **kwargs: pytest.fail("base MCQ recomputed"))
+    second, _ = run([*flags, "--steps", "0", "--load-patch", str(patch)], "c15_loaded")
+    assert first["mcq_probe"] == second["mcq_probe"]
+    output = capsys.readouterr().out
+    assert "route_kl " in output and "(anchor)" in output and "(route-kl-set)" in output
+    assert "MCQ-PROBE " in output and "ROUTE-GATE pass" in output and "BASE-CACHE hit" in output

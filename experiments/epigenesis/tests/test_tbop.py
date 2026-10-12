@@ -21,7 +21,9 @@ def reference_bop():
     path = Path(__file__).resolve().parents[2] / 'end_to_end/e2e_fsa.py'
     if not path.exists():
         path = Path(os.environ.get('EPI_BOX_ROOT', '/workspace/malleable')) / 'e2e_fsa_v11.py'
-    nodes = [n for n in ast.parse(path.read_text()).body if isinstance(n, ast.FunctionDef) and n.name == 'bop_step']
+    # The current reference uses the wake-row helpers even on ordinary dense patches.
+    names = {'bop_step', 'writable_slots', 'frozen_slots'}
+    nodes = [n for n in ast.parse(path.read_text()).body if isinstance(n, ast.FunctionDef) and n.name in names]
     scope = dict(torch=torch, AGE_CAP=127)
     exec(compile(ast.Module(body=nodes, type_ignores=[]), str(path), 'exec'), scope)
     return scope['bop_step']

@@ -12,6 +12,7 @@
   📄 <a href="paper/freeslot.pdf"><b>Read the paper (PDF)</b></a> <i>(AI-assisted)</i>
   &nbsp;·&nbsp; <a href="#results-forced-zero-mask-2026-10-12">Results</a>
   &nbsp;·&nbsp; <a href="#research-frontier">Research frontier</a>
+  &nbsp;·&nbsp; <a href="ARCHITECTURE.md">Architecture</a>
   &nbsp;·&nbsp; <a href="#best-algorithms-so-far">Algorithms</a>
   &nbsp;·&nbsp; <a href="#how-free-slot-adaptation-works">How it works</a>
   &nbsp;·&nbsp; <a href="#reproduce">Reproduce</a>
@@ -27,17 +28,26 @@ This repo studies reversible learning in a frozen model’s zero weights, one us
 
 FSA writes only into the **pair8 forced-zero mask**: the two pairs pair8 did not select in each 8-weight block, exactly half of every expert weight matrix. The mask is deterministic, derived from the released model and shipped with it. The base weights never change, and zeroing the mask restores the exact pair8 base.
 
-Results on the lambda 8B ternary MoE, forced-zero mask, free-generation exact match (GEN). The first two rows are held-out test
-phrasings; the last two are validation and dev numbers from runs still in progress:
+Results on the lambda 8B ternary MoE, forced-zero mask, free-generation exact match (GEN). Rows marked "val" or "dev" are
+validation or dev numbers from runs whose test evaluation is still pending:
 
 | task | FSA | LoRA r16 (same layers) |
 |---|---|---|
-| 40 facts about one person | **100%** (2 seeds) | 90.0–93.75% (3 seeds) |
-| 2 people × 50 conflicting facts | **97.0–99.5%** (3 seeds) | 94.5–95.5% (3 seeds) |
-| 3 people × 100 conflicting facts | 37.5% best val (2-layer), 49% val at step 100 (4 layers) | 57.5–62.5% val |
-| new rules (EP-1, dev set) | **95.25%** with sleeping-unit gating | 81% at step 250 (mid-layer LoRA); dense all-layer fine-tuning 96% at +0.20 damage |
+| 40 facts about one person (test) | **100%** (2 seeds) | 90.0–93.75% (3 seeds) |
+| 2 people × 50 conflicting facts (test) | **97.0–99.5%** (3 seeds) | 94.5–95.5% (3 seeds) |
+| same 40 facts, asked in unseen phrasings | **88–90%** (2 seeds) | 62–65% (2 seeds) |
+| same 40 facts, indirect questions | **44–51%** (2 seeds) | 22.5–30% (2 seeds) |
+| same 40 facts, pronoun questions | **75%** (1 seed) | 47.5% (1 seed) |
+| 3 people × 100 conflicting facts (val) | 95.0–95.8% (2 seeds, layers 3,16,22,29) | 95.0% (same layers) |
+| new rules (EP-1, multiple choice) | 95.25% dev, 98.2% test (1 seed) with sleeping-unit gating | 94.75% dev, 98.2% test (1 seed); dense all-layer fine-tuning 96% dev at +0.20 damage |
 
-On the small and medium tasks FSA beats LoRA with WikiText damage within noise of zero. It still trails LoRA when hundreds of facts about several people collide; closing that gap is the current work ([research frontier](#research-frontier)). The forced-zero patch can give a block more than two active pairs, so serving needs a sparse overlay or a wider block encoding; that path is not built or benchmarked yet.
+The tested FSA recipes outperform the tested LoRA r16 recipes on the small and medium fact tasks and generalize markedly
+better to questions they were not trained on, with damage within noise of zero on the panels measured. The recipes are not
+identical (rehearsal and penalty strengths differ), so this is a comparison of tuned recipes rather than a pure method ablation.
+On the hardest fact task the two are tied on validation once the patch is spread over four layers and its slots are frozen
+before the end of training. On rules, sleeping-unit gating matches LoRA. The four headline fact and rule claims were checked
+retroactively by an independent result review against the raw logs (verdict: confirmed, with caveats). The forced-zero patch can give a block more
+than two active pairs, so serving needs a sparse overlay or a wider block encoding; that path is not built or benchmarked yet.
 
 ## Why this matters
 
@@ -57,16 +67,24 @@ are the genome and are never edited; what the model learns afterwards is a rever
 
 ## Where it stands (2026-10-12)
 
-- **Works:** single-person facts and two-person conflicting facts, written into the forced-zero mask. FSA beats LoRA r16 on held-out
-  test GEN on every seed, with WikiText damage within noise of zero. The 40-fact patch re-checked on held-out FineWeb is
-  also clean (−0.0007 ± 0.0018) ([results](#results-forced-zero-mask-2026-10-12)).
-- **Works, dev set only:** learning new rules. Sleeping-unit gating reaches 95.25% on a 400-item dev set at +0.001 damage
+- **Works:** single-person facts and two-person conflicting facts, written into the forced-zero mask. The tested FSA recipe beats the tested LoRA r16
+  recipe on held-out test GEN on every seed, and the four re-evaluated patches (two seeds per task) are clean on all three
+  damage panels (WikiText, FineWeb, Python code)
+  ([results](#results-forced-zero-mask-2026-10-12)).
+- **Works, and the strongest result so far:** generalization. The same patches answer unseen phrasings at 88–90% versus LoRA's
+  62–65%, indirect questions at 44–51% versus 22.5–30%, and pronoun questions at 75% versus 47.5%
+  ([realistic questions](#realistic-questions)).
+- **Works, ties LoRA:** learning new rules. Sleeping-unit gating reaches 95.25% dev and 98.2% test (56/57) at +0.001 damage;
+  LoRA reaches 94.75% dev and the same 98.2% test, so the rules result is parity, not an advantage (one seed each)
   ([EP-1](#ep-1-learning-rules-instead-of-facts)). Held-out test numbers are pending.
-- **Main gap:** many conflicting facts. With 3 people × 100 shared attributes, FSA peaks at 37.5% validation recall on two layers
-  versus LoRA’s 57.5–62.5%, and its recall falls after the peak. Spreading the patch over four layers reaches 49% by step 100, so
-  placement is part of the answer ([research frontier](#research-frontier)).
-- **Pending:** the serving path for forced-zero patches (sparse overlay or wider block encoding), code-panel damage for the
-  2-layer winners, realistic-question evaluation, router-drift measurements and multi-session revoke-scope tests.
+- **Closed gap:** many conflicting facts. The earlier deficit on 3 people × 100 shared attributes came from two fixable causes:
+  placement (two adjacent layers starve both FSA and LoRA) and slot churn (the budget kept evicting slots that held learned facts).
+  Spread over layers 3, 16, 22 and 29 with slot selection frozen at step 200, FSA jumps from about 50% to 95.0–95.8% validation by
+  step 300 on two seeds, tying LoRA on the same layers. Test numbers are pending.
+- **Promising:** isolated per-person banks, each holding one person's 100 facts, reach 96–100% validation; whether they work when all
+  are loaded at once is the next measurement ([isolated banks](#isolated-banks)).
+- **Pending:** the serving path for forced-zero patches (sparse overlay or wider block encoding), test numbers for the 300-fact
+  task, composed recall of co-resident banks, router drift for multi-layer and composed patches, and multi-session revoke-scope tests.
   See [limitations](#limitations).
 - **History:** every result before 2026-10-11 used an *in-pair* write set (zeros inside already-selected pairs), which is disjoint
   from the forced-zero mask. Those results, including the serving benchmarks, are kept in
@@ -160,16 +178,52 @@ The 2-layer FSA patch (seed 0) re-measured on held-out FineWeb-Edu gives −0.00
 On the earlier in-pair write set the same FSA recipe scored 64% on this task. Moving to the forced-zero mask turned a loss into
 a win.
 
-**3 people × 100 conflicting facts (main gap; validation only, runs in progress)**
+**3 people × 100 conflicting facts (validation; test pending)**
 
-| method | best val GEN (step) |
-|---|---|
-| LoRA r16, layers 14–15 | 57.5% (1000) / 62.5% (900) |
-| FSA Bop recipe, layers 14–15, 1M budget | 37.5% (500) / 25% (400), then declining |
-| FSA Bop, 4 random layers (3, 16, 22, 29) | 49% (100), 43% at step 200 |
+Every attribute here conflicts across people: 60 attributes are three-way and 60 two-way.
 
-Every attribute here conflicts across people: 60 attributes are three-way and 60 two-way. FSA’s recall peaks and then falls,
-which points at the budget evicting slots that already hold learned facts.
+| method | layers | val GEN (step) |
+|---|---|---|
+| LoRA r16 | 14,15 | 57.5% (1000) / 62.5% (900) |
+| FSA Bop, 1M budget, slots re-chosen throughout | 14,15 | 37.5% (500) / 25% (400), then declining |
+| LoRA r16 | 3,16,22,29 | 70.8% (200), **95.0%** (300), 94.2% (400, 500) |
+| **FSA Bop, 1M budget, slot selection frozen at step 200** | 3,16,22,29 | 43.3% → **95.0%** and 50.8% → **95.8%** (step 200 → 300; 2 seeds) |
+
+Placement is clearly part of the earlier gap: two adjacent layers are too narrow for 300 colliding facts, for LoRA as well as
+FSA. Slot churn is the likely other part: while the budget keeps re-choosing slots it can evict slots holding learned facts,
+and recall climbs sharply right after selection is frozen. These runs do not separate freezing from simply training longer, so
+churn remains a diagnosis consistent with the jump rather than an isolated cause. The two-layer rows are earlier checkpoints;
+later ones reached 27.5% (FSA, step 700) and 60.0–64.2% (LoRA, step 1100). Training is deterministic: a replicate matched its original exactly at step 100.
+
+### Realistic questions
+
+The test set above uses held-out phrasings of the trained question forms. A second set asks the same 40 facts in ways never
+seen in training (120 items per probe; 40 for pronouns), scored by free generation:
+
+| probe | FSA, 2 layers (2 seeds) | LoRA r16, same layers (2 seeds) |
+|---|---|---|
+| unseen question phrasing | **90.0% / 88.3%** | 65.0% / 61.7% |
+| indirect ("the person whose X is Y, what is her Z?") | **50.8% / 44.2%** | 22.5% / 30.0% |
+| pronoun after a mention ("…Tamsin… what is her Z?") | **75.0%** (seed 0) | 47.5% (seed 0) |
+
+With a single person in the set, the indirect probe does not require resolving "whose X is Y"; it tests answering through an
+unfamiliar, indirect question form, not a true two-hop chain. Knowledge written into the forced zeros transfers to new question forms far better than a LoRA adapter trained on the same
+data. Questions that need two facts in one answer score near zero for both methods under the strict scorer; that scorer
+requires both values in the first sentence, and a lenient rescore is pending.
+
+### Isolated banks
+
+Instead of one patch for all 300 facts, each person gets a separate bank trained only on their 100 facts (layers 12, 14, 17,
+20; validation GEN):
+
+| bank layout | person 0 | person 1 | person 2 |
+|---|---|---|---|
+| each bank may use an unpartitioned 50% sample of the forced mask | 98.3% | 98.3% | 100% |
+| each bank gets a disjoint third of that sample | 95.8% | 100% | 97.5% |
+
+One seed; validation scores 60 of each bank's 100 facts. A sixth of the reserve was enough for each person's 100 facts here. The open question is
+composition: recall when all banks are resident in one model, and choosing the right bank for a question. The current
+disjoint split is block-level, so different people's banks can share hidden units; a rerun with whole units per bank is queued.
 
 ### Placement
 
@@ -188,7 +242,20 @@ held-out panels that turned out to be adaptation toward prose, not preservation:
 | every 4th layer | −0.029 | −0.0076 ± 0.0021 | **+0.0065 ± 0.0020** |
 | random layers | −0.024 | −0.0056 ± 0.0015 | +0.0001 ± 0.0016 |
 
-Fact runs now use no WikiText rehearsal, and damage is reported on all three panels.
+The apparent gain follows the rehearsal corpus: rehearsing on FineWeb instead moves the FineWeb panel (−0.0084) and leaves code
+at −0.0013, and with no rehearsal the same placement is +0.0018 on FineWeb and +0.0014 on code. Fact runs now use no rehearsal
+and report all three panels.
+
+The 2-layer winners are clean everywhere:
+
+| patch | test GEN | WikiText | FineWeb-Edu | Python code |
+|---|---|---|---|---|
+| 40 facts, seed 0 | 100% | −0.0006 ± 0.0020 | −0.0007 ± 0.0018 | +0.0003 ± 0.0017 |
+| 40 facts, seed 1 | 100% | +0.0019 ± 0.0014 | −0.0007 ± 0.0016 | −0.0001 ± 0.0015 |
+| 2p×50, seed 0 | 97.0% | −0.0015 | −0.0020 ± 0.0019 | −0.0001 ± 0.0018 |
+| 2p×50, seed 1 | 99.5% | +0.0000 | −0.0011 ± 0.0020 | −0.0005 ± 0.0016 |
+
+Expert routing on FineWeb barely moves: about 98–99% top-k overlap with the base.
 
 ### EP-1: learning rules instead of facts
 
@@ -211,29 +278,32 @@ Ternary writes go into the forced-zero mask of those units’ rows.
 | dense fine-tuning of all layers (placement study) | 96.25% (step 350) | +0.20 |
 
 Every tested gated 10% learns the rules; choosing the units that are asleep on general text kept damage at noise level. The facts
-recipe’s constraints choke rule learning. These are dev-set numbers used for checkpoint selection, so they are optimistic;
-held-out test numbers and a second seed are pending. Gating does not help facts (at most 22% on the 300-fact task).
+recipe’s constraints choke rule learning. Dev numbers were used for checkpoint selection, so they are optimistic. On
+the 57-item held-out test, sleeping-unit gating and a LoRA r16 reference both score 98.2% (56/57), and LoRA reaches 94.75% on
+dev at a similar +0.001 damage, so gating matches LoRA rather than beating it. A second seed is pending. Gating does not help facts (at most 22% on the 300-fact task).
 
 The first EP-1 attempt (v1, in-pair write set) was not a valid test: its in-context teacher had the answer leaked into its
 context, and with a non-leaking context the teacher scored only 0.30 ([findings](experiments/epigenesis/EP1_V1_FINDINGS.md)).
 
 ## Research frontier
 
-The open problem is many conflicting facts. The current diagnosis:
+Storage looks much less limiting than before: the frozen-slot global patch holds 300 colliding facts at 95.0–95.8% validation,
+and isolated banks reach 96–100% validation per bank (one seed, 60 facts scored per bank, composition not yet measured).
+The open problems are now about access:
 
-- **Collisions, not capacity (hypothesis).** The mask has far more slots than the patches use. The suspected difficulty is that
-  “Tamsin’s tram stop” and “Ilse’s tram stop” look almost the same to the model, so the patch needs units that recognise each person-attribute
-  combination. Batch fact-editing methods report the same collapse when many edits share a subject.
-- **Too little exposure.** With 40 facts per step, each fact is seen about half as often as on the two-person task.
-- **Destructive churn.** The slot budget re-chooses slots every few steps and can evict slots that already hold a learned fact,
-  zeroing their evidence. That matches the peak-then-decline curves.
+- **Composition:** do separately trained banks keep their recall when all are resident, and can the model pick the right one?
+- **Indirect access:** indirect and multi-fact questions (44–51% and near zero today), true two-hop chains, and where the model resolves who a pronoun
+  refers to.
+- **Cheap writes:** the fewest training steps per new bank (slots chosen early, then frozen; stop each fact once learned).
 
-Directions being tested (in progress; none has yet shown an improvement over the baseline):
+Directions:
 
 | direction | idea | source |
 |---|---|---|
-| spread placement | write across 4–8 middle layers instead of 2, with a larger budget | batch fact editing spreads edits over several layers |
-| keep-live + binding loss | never evict slots holding learned facts; penalise giving one person’s value for another’s | our churn and conflict diagnostics |
+| isolated banks + routing | one bank per person or topic; select the right bank per question, including all banks resident at once | branching result above |
+| reverse index + cleanup | an index from (relation, value) to entity for "whose X is Y"; snap each hop to a canonical entity before the next read | multi-hop failures |
+| late-layer addressing | read a bank's address from the layers where the model has resolved who is being discussed | separability probe |
+| binding loss | penalise giving one person’s value for another’s | conflict diagnostics |
 | saturation sampling | stop drilling a fact once it is answered cleanly; resample it when forgotten | exposure analysis |
 | context-teacher distillation | the base model with the fact sheet in context is the teacher; train the patch to match its full answer distribution | self-study distillation ([Cartridges](https://arxiv.org/abs/2506.06266)) |
 | Hebbian write | sum output-direction × whitened input key per fact, keep the mask positions, round to ternary; use as a start for Bop | associative memory; closed-form editors |
@@ -243,8 +313,9 @@ Directions being tested (in progress; none has yet shown an improvement over the
 | router stability | measure and limit how much a patch changes expert routing downstream | [MoEEdit](https://arxiv.org/abs/2602.10965) |
 | learned editor | a small network that maps a fact to a patch in one pass, trained on patches found by the methods above | [MEND](https://arxiv.org/abs/2110.11309), [MALMEN](https://arxiv.org/abs/2311.04661) |
 
-Evaluation is being tightened as well. Teacher-forced scores can overstate edits badly, so GEN is the headline and a
-realistic-question set is being added: unseen phrasings, multi-fact questions and indirect references to the person. The win
+Already adopted from this list: spread placement and slot freezing (they closed the 300-fact gap). GEN is the headline metric
+because teacher-forced scores can overstate edits. New experiments now require a design review before launch and a result review
+against the raw logs before they are reported; the earlier headline claims were reviewed retroactively. The win
 condition for the 300-fact task is at least 5 GEN points over LoRA r16 on the same layers, damage ≤ +0.003 on every panel, exact
 revoke and 2–3 seeds.
 
@@ -480,13 +551,14 @@ leave-out by expert and by layer is running.
 
 ## Limitations
 
-- Damage. The forced-zero headline runs were trained with WikiText rehearsal and are measured mainly on WikiText; the
-  40-fact patch is also clean on FineWeb, but code-panel checks of the 2-layer winners are pending. Multi-layer patches
-  trained with rehearsal showed real code damage (up to +0.0076).
-- Evaluation. GEN uses held-out phrasings of the trained questions. Realistic questions (new phrasings, multi-fact,
-  indirect references) and router-drift measurements are not done yet; teacher-forced scores are known to overstate edits.
-- Seeds. Facts winners have 2–3 seeds; EP-1 gating has one seed and dev-set numbers only.
-- Capacity. FSA trails LoRA on 3 people × 100 conflicting facts (37.5% versus 57.5–62.5% validation).
+- Damage. The 2-layer winners are clean on WikiText, FineWeb and code. Multi-layer patches trained with rehearsal showed real
+  code damage (up to +0.0076). Without rehearsal they are clean on FineWeb and code, but one placement (causal-trace
+  layers) still shows +0.0079 ± 0.0023 on WikiText.
+- Evaluation. Realistic-question probes use 120 items (40 for pronouns) and the pronoun row has one seed per method. Two-fact
+  questions are near zero for both methods under a strict scorer; a lenient rescore is pending.
+- Seeds. Facts winners have 2–3 seeds; EP-1 gating and its LoRA comparison have one seed each, and the 57-item test set separates them by at most one item.
+- 300-fact task. FSA and LoRA are tied on validation (about 95%); test numbers are pending. Isolated banks have not yet been
+  measured with all banks resident.
 - Multi-tenant serving. A patch lives inside the weights, so one copy of the weights serves one user's patch at
   a time. LoRA adapters can be batched across many users on one shared base. FSA fits single-tenant and on-device use.
 - Revoke scope. Zeroing the mask restores the base exactly. Removing one session's influence after later sessions
