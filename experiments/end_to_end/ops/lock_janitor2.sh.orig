@@ -1,0 +1,33 @@
+#!/bin/bash
+# lock_janitor2.sh [SKIP_GPUS]: (1) removes stale EMPTY GPU lock dirs (GPU <1000 MiB, lock >30 min old, idle on 3
+# consecutive 2-min checks; never GPUs in reserved_gpus.txt or SKIP). (2) Hang detector, heartbeat-based only: a job
+# (python with TRITON_CACHE_DIR=/tmp/triton_<name>) whose logs/<name>.log has contained a HEARTBEAT line and whose log
+# has not been written for HANG_MIN minutes is sent SIGABRT (PYTHONFAULTHANDLER=1 dumps all thread stacks into the
+# log), then SIGKILL after 60 s. Its log is renamed logs/<name>.log.hang_<UTC> so the queue runner relaunches the same
+# line (C44 --resume auto continues from out/<name>/resume.pt). At most MAX_RETRY relaunches per name
+# (logs/<name>.hangcount); beyond that the log is left in place (no relaunch). Jobs that never printed HEARTBEAT are
+# never touched (positive evidence only).
+cd /workspace/malleable; SKIP="$1"; HANG_MIN=${HANG_MIN:-30}; MAX_RETRY=${MAX_RETRY:-2}; declare -A idle
+while true; do
+  [ -e janitor.stop ] && exit 0
+  while IFS=", " read -r g used; do
+    d=locks/gpu$g; [ -d $d ] || { idle[$g]=0; continue; }
+    case " $SKIP " in *" $g "*) continue;; esac
+    grep -qx "$g" reserved_gpus.txt 2>/dev/null && continue
+    old=$(find $d -maxdepth 0 -mmin +30 | wc -l)
+    if [ "$used" -lt 1000 ] && [ "$old" = 1 ]; then idle[$g]=$(( ${idle[$g]:-0} + 1 )); else idle[$g]=0; fi
+    if [ "${idle[$g]}" -ge 3 ]; then rmdir $d 2>/dev/null && echo "janitor removed stale lock gpu$g $(date -u)" >> logs/lock_janitor.log; idle[$g]=0; fi
+  done < <(nvidia-smi --query-gpu=index,memory.used --format=csv,noheader,nounits)
+  for p in $(pgrep -f "^/venv/main/bin/python"); do
+    n=$(tr '\0' '\n' < /proc/$p/environ 2>/dev/null | grep ^TRITON_CACHE_DIR=/tmp/triton_ | sed 's#.*/triton_##')
+    [ -n "$n" ] && [ -f logs/$n.log ] || continue
+    grep -aq '^HEARTBEAT ' logs/$n.log || continue
+    [ -n "$(find logs/$n.log -mmin +$HANG_MIN)" ] || continue
+    c=$(cat logs/$n.hangcount 2>/dev/null || echo 0)
+    echo "janitor: HANG $n pid $p (no log write for >${HANG_MIN} min after heartbeats); SIGABRT for stack dump; retry $((c+1))/$MAX_RETRY $(date -u)" | tee -a logs/$n.log >> logs/lock_janitor.log
+    kill -ABRT $p; for i in $(seq 1 12); do kill -0 $p 2>/dev/null || break; sleep 5; done; kill -9 $p 2>/dev/null
+    echo "$n hang $(date -u)" >> logs/killed_by_fsa_owner.log
+    if [ "$c" -lt "$MAX_RETRY" ]; then echo $((c+1)) > logs/$n.hangcount; sleep 5; mv logs/$n.log logs/$n.log.hang_$(date -u +%H%MZ); fi
+  done
+  sleep 120
+done

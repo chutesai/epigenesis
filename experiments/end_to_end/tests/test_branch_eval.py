@@ -213,7 +213,7 @@ def test_branch_main_all_arms_cpu(cpu_harness, monkeypatch, tmp_path, capsys, pa
     assert result['zero_patch_control']['passed']
     for arm, report in result["arms"].items():
         assert report["partition_mode"] == (mode if arm[0] in "EFG" else "full-mask")
-        assert "two_fact_both" in report["two_fact"] and "two_fact_both_lenient" in report["two_fact"]
+        assert "two_fact_presence_stop" in report["two_fact"] and "two_fact_presence" in report["two_fact"]
         assert report["test_gen"]["n"] == 6 * len(E.TEST_T)
         assert report["g_set"]["n"] == 4 and report["abstention"]["n"] == 40
         assert set(report["damage"]) == {"WikiText", "FineWeb", "code"}

@@ -266,7 +266,7 @@ def test_fsa_patch_roundtrip(tmp_path, budgeted):
     n = E.save_patch(m1, tmp_path / "p.pt", {"k": 1})
     assert n > 0
     st = torch.load(tmp_path / "p.pt", weights_only=False)
-    assert st["format"] == "e2e-fsa-patch-v1" and st["meta"] == {"k": 1}
+    assert st["format"] == "e2e-fsa-patch-v1" and st["meta"] == {"k": 1, "eda_backend": "naive_fp32"}
     nnz = sum(int(e["idx"].numel()) for e in st["entries"].values())
     assert nnz == E.patch_stats(E.fsa_modules(m1))[0]
     for e in st["entries"].values():
@@ -2947,7 +2947,7 @@ def test_qa_eval_uses_generation_and_reports_both_correct(monkeypatch):
 
     monkeypatch.setattr(E, "greedy_generate", generate)
     score = E.qa_probe_eval(None, TOK, groups, "cpu")
-    assert score == dict(unseen=1., two_fact_both=1., two_fact_both_lenient=1., two_hop=1., indirect=1., pronoun=1., pronoun_recent=0.,
+    assert score == dict(unseen=1., two_fact_correct=0., two_fact_presence_stop=1., two_fact_presence=1., two_hop=1., indirect=1., pronoun=1., pronoun_recent=0.,
                          n_each={key: len(group) for key, group in groups.items()})
     assert len(calls) == 4
 
@@ -3313,3 +3313,248 @@ def test_main_c15_training_and_cached_load_eval(cpu_harness, tmp_path, monkeypat
     output = capsys.readouterr().out
     assert "route_kl " in output and "(anchor)" in output and "(route-kl-set)" in output
     assert "MCQ-PROBE " in output and "ROUTE-GATE pass" in output and "BASE-CACHE hit" in output
+# ---------------------------------------------------------------------------------------------- C47 gap ladder
+@pytest.mark.parametrize("sparse", [False, True])
+def test_c47_quinary_grid_nesting_and_ste(sparse):
+    W = torch.tensor([[2., 0., 0., -2., 0., 0., 0., 0.]])
+    cls = E.SparseFSAParam if sparse else E.FSAParam
+    pm = cls(W, W == 0, fmt="quinary", budgeted=True)
+    masters = torch.tensor([-2., -1., -.6, -.5, -.26, -.25, 0., .25, .26, .5, .6, 1., 2.])
+    expected = torch.tensor([-1., -1., -.5, -.5, -.5, 0., 0., 0., .5, .5, .5, 1., 1.])
+    assert torch.equal(pm._quant(masters), expected)
+    for code in (-1., 0., 1.):
+        pm.fmt = "ternary"
+        ternary = pm._quant(torch.tensor(code)) * pm.alpha
+        pm.fmt = "quinary"
+        assert torch.equal(pm._quant(torch.tensor(code)) * pm.alpha, ternary)
+    with torch.no_grad():
+        pm.M.fill_(.5)
+        pm.support.zero_()  # gradients must reach off-support slots as well
+    weights = torch.arange(1., 9.).reshape_as(W)
+    (pm.delta() * weights).sum().backward()
+    expected_grad = weights * pm.alpha * (W == 0)
+    if sparse:
+        expected_grad = expected_grad.flatten()[pm.idx.long()]
+    assert torch.equal(pm.M.grad, expected_grad)
+
+
+@pytest.mark.parametrize("sparse", [False, True])
+def test_c47_quinary_export_load_bit_exact(tmp_path, sparse):
+    models = [tiny(), tiny()]
+    for model in models:
+        E.attach(model, [0, 1], "fsa_free", 2, fmt="quinary", sparse=sparse, budgeted=True)
+    with torch.no_grad():
+        for pm in E.fsa_modules(models[0]):
+            pm.M.copy_((torch.arange(pm.M.numel()).reshape_as(pm.M) % 5 - 2) / 2)
+            pm.support.copy_(pm.mask)
+    path = tmp_path / "quinary.pt"
+    E.save_patch(models[0], path)
+    state = torch.load(path, weights_only=False)
+    assert state["meta"]["eda_backend"] == "naive_fp32"
+    for e in state["entries"].values():
+        assert e["fmt"] == "quinary" and e["val"].dtype == torch.int8
+        assert set(e["val"].tolist()) == {-2, -1, 1, 2}
+    E.load_patch(models[1], state)
+    x = torch.tensor([[BOS_T, 40, 50, 60]])
+    assert torch.equal(models[0](x), models[1](x))
+    for (name, lin), pm2 in zip(E.patched_linears(models[0]), E.fsa_modules(models[1])):
+        pm1 = lin.parametrizations.weight[0]
+        assert torch.equal(pm1.delta(), pm2.delta())
+        resident = E.ResidentParam(lin.parametrizations.weight.original,
+                                   state["entries"][name])
+        assert torch.equal(resident.delta_w(), pm1.delta())
+
+
+def test_c47_storage_quinary_and_fp16_row_scales():
+    for fmt, dense_bits, nz_bits in (("ternary", math.log2(3), 1), ("quinary", math.log2(5), 2)):
+        nnz, reserve, rows = 10, 1024, 7
+        plain = E.fsa_storage(nnz, reserve, fmt)
+        learned = E.fsa_storage(nnz, reserve, fmt, rows, scale_bits=16)
+        assert learned["pos_bits"] == 10
+        assert learned["bytes_dense"] == (reserve * dense_bits + 16 * rows) / 8
+        assert learned["bytes_sparse"] == (nnz * (10 + nz_bits) + 16 * rows) / 8
+        for key in ("bytes", "bytes_dense", "bytes_sparse", "bytes_entropy"):
+            assert learned[key] == pytest.approx(plain[key] + 2 * rows)
+        block = E.fsa_storage(nnz, reserve, fmt, rows)
+        assert block["bytes_sparse"] == plain["bytes_sparse"] + 4 * rows
+
+
+@pytest.mark.parametrize("fmt", ["ternary", "quinary"])
+def test_c47_arm_c_and_d_adam_sparse_budget_smoke(cpu_harness, monkeypatch, fmt):
+    run, _ = cpu_harness
+    updates, refreshes = [], []
+    old_step, old_refresh = torch.optim.AdamW.step, E.refresh_support
+
+    def step(opt, *args, **kwargs):
+        updates.append(sum(int(p.grad is not None) for group in opt.param_groups for p in group["params"]))
+        return old_step(opt, *args, **kwargs)
+
+    def refresh(mods, *args, **kwargs):
+        result = old_refresh(mods, *args, **kwargs)
+        refreshes.append(sum(int(m.support.sum()) for m in mods))
+        assert refreshes[-1] <= 20
+        return result
+
+    monkeypatch.setattr(torch.optim.AdamW, "step", step)
+    monkeypatch.setattr(E, "refresh_support", refresh)
+    result, patch = run(["--steps", "2", "--optim", "adam", "--bop-tau-abs", "0", "--fmt", fmt,
+                         "--sparse-state", "--refresh-every", "1", "--lr", ".05"], "c47_" + fmt)
+    assert len(updates) == len(refreshes) == 2 and all(updates)
+    assert any(refreshes)
+    assert result["storage"]["nnz"] <= 20
+    assert result["revoked"]["weights_bit_exact"] and result["revoked"]["logits_bit_exact"]
+    state = torch.load(patch, weights_only=False)
+    assert state["meta"]["eda_backend"] == result["eda_backend"] == "naive_fp32"
+    assert all(e["fmt"] == fmt for e in state["entries"].values())
+
+
+def test_c47_rowlearn_delta_gradients_cost_and_occupied_flips():
+    W = torch.tensor([[2., 0., 0., -2.], [0., 3., 0., -3.]])
+    pm = E.SparseFSAParam(W, W == 0, occupied=True)
+    pm.enable_row_scale()
+    with torch.no_grad():
+        pm.logr.copy_(torch.tensor([4., 5.]).log())
+        pm.M.copy_(torch.tensor([1., -1., 1., 0., 1., 1., -1., 1.]))
+    expected = torch.tensor([[-4., -4., 4., 0.], [5., -6., -5., 6.]])
+    assert torch.equal(pm.delta(), expected)
+    pm.col_energy = torch.tensor([1., 2., 3., 4.])
+    cost = E.slot_cost(pm, 2)
+    scales = torch.tensor([4., 4., 4., 4., 5., 6., 5., 6.])
+    assert torch.equal(cost, scales.square() * pm.col_energy[pm.cols()] / 2)
+    assert not cost.requires_grad
+    pm.M.requires_grad_(False)  # scale optimizer's sole trainable parameter
+    pm.delta().square().sum().backward()
+    assert torch.equal(pm.logr.grad, torch.tensor([64., 100.]))
+    assert pm.M.grad is None and pm.scale.grad is None and pm.alpha.grad is None
+
+
+def test_c47_rowlearn_frozen_init_reproduces_bop_births_deaths():
+    W = torch.tensor([[2., 0., -2., 0.], [0., 3., 0., -3.]])
+    legacy = E.SparseFSAParam(W, W == 0, budgeted=True)
+    learned = E.SparseFSAParam(W, W == 0, budgeted=True)
+    learned.enable_row_scale()
+    learned.logr.requires_grad_(False)
+    for pm in (legacy, learned):
+        pm.support.copy_(pm.mask)
+        pm.bop_ema = torch.zeros_like(pm.M)
+    trajectory = []
+    for grad in ([1., -1., .8, -.8], [-1., 1., -.8, .8], [-1., 1., -.8, .8]):
+        for pm in (legacy, learned):
+            pm.M.grad = torch.tensor(grad)
+        a = E.bop_step([legacy], 1., .5, True)
+        b = E.bop_step([learned], 1., .5, True)
+        trajectory.append(a)
+        assert a == b
+        assert torch.equal(legacy.M, learned.M) and torch.equal(legacy.bop_ema, learned.bop_ema)
+        assert torch.allclose(legacy.delta(), learned.delta(), atol=1e-6, rtol=1e-6)
+    assert trajectory == [(4, 0), (0, 4), (4, 0)]
+
+
+def test_c47_rowlearn_export_load_fp16_bound_and_revoke(tmp_path):
+    models = [tiny(), tiny()]
+    for model in models:
+        E.attach(model, [0, 1], "fsa_free", 2, sparse=True, occupied=True)
+        for pm in E.fsa_modules(model):
+            pm.enable_row_scale()
+    with torch.no_grad():
+        for pm in E.fsa_modules(models[0]):
+            pm.M.copy_((torch.arange(pm.M.numel()) % 3 - 1).float())
+            pm.logr.add_(.12345)
+    E.save_patch(models[0], tmp_path / "rowlearn.pt")
+    state = torch.load(tmp_path / "rowlearn.pt", weights_only=False)
+    E.load_patch(models[1], state)
+    for (name, lin), loaded in zip(E.patched_linears(models[0]), E.fsa_modules(models[1])):
+        pm = lin.parametrizations.weight[0]
+        e = state["entries"][name]
+        assert e["scale"] == "rowlearn" and e["logr"].dtype == torch.float16
+        assert torch.equal(loaded.logr, pm.logr.half().float())
+        assert torch.equal(pm.codes(), loaded.codes()) and torch.equal(pm.flip_codes(), loaded.flip_codes())
+        finite = pm.logr.isfinite()
+        assert torch.equal(pm.logr[~finite], loaded.logr[~finite])  # zero-alpha rows stay exactly zero
+        epsilon = (pm.logr.detach()[finite] - loaded.logr.detach()[finite]).abs().max()
+        bound = pm.delta().abs().max() * torch.expm1(epsilon)
+        assert (pm.delta() - loaded.delta()).abs().max() <= bound + 1e-6
+        resident = E.ResidentParam(lin.parametrizations.weight.original, e)
+        assert torch.equal(resident.delta_w(), loaded.delta())
+    E.set_enabled(False)
+    try:
+        x = torch.tensor([[BOS_T, 40, 50, 60]])
+        assert torch.equal(models[1](x), tiny()(x))
+        for _, lin in E.patched_linears(models[1]):
+            assert torch.equal(lin.weight, lin.parametrizations.weight.original)
+    finally:
+        E.set_enabled(True)
+
+
+def test_c47_rowlearn_main_separate_optimizer_and_accounting(cpu_harness, monkeypatch):
+    run, paths = cpu_harness
+    counts, deltas = [], []
+    old_step, old_sgd = torch.optim.AdamW.step, torch.optim.SGD.__init__
+
+    def sgd(opt, params, *args, **kwargs):
+        params = list(params)
+        assert all(p.ndim == 1 and p.numel() not in (16, 32) for p in params)
+        return old_sgd(opt, params, *args, **kwargs)
+
+    def step(opt, *args, **kwargs):
+        assert len(opt.param_groups) == 1
+        group = opt.param_groups[0]
+        assert group["lr"] == 1e-3 and group["weight_decay"] == 0
+        params = group["params"]
+        assert all(p.shape in ((16,), (32,)) for p in params)
+        before = [p.detach().clone() for p in params]
+        result = old_step(opt, *args, **kwargs)
+        counts.append(len(params))
+        deltas.append(any(not torch.equal(p, b) for p, b in zip(params, before)))
+        return result
+
+    monkeypatch.setattr(torch.optim.AdamW, "step", step)
+    monkeypatch.setattr(torch.optim.SGD, "__init__", sgd)
+    result, patch = run(["--steps", "4", "--sparse-state", "--patch-scale", "rowlearn",
+                         "--support-score", "netcost", "--anchor", paths["anchor"], "--anchor-len", "16",
+                         "--local-lambda", "1", "--refresh-every", "1"], "c47_rowlearn")
+    assert len(counts) == 4 and any(deltas)
+    assert result["scale_lr"] == 1e-3
+    state = torch.load(patch, weights_only=False)
+    rows = sum(e["shape"][0] for e in state["entries"].values())
+    expected = E.fsa_storage(result["storage"]["nnz"], result["reserve_slots"], "ternary", rows, scale_bits=16)
+    assert result["storage"]["fsa"] == expected
+    assert result["patch_bytes"] == expected["bytes"]
+    assert result["revoked"]["weights_bit_exact"] and result["revoked"]["logits_bit_exact"]
+    assert state["meta"]["scale_lr"] == state["meta"]["training_recipe"]["scale_lr"] == 1e-3
+    assert all(e["logr"].dtype == torch.float16 for e in state["entries"].values())
+
+
+def test_c47_bop_quinary_stays_rejected(cpu_harness):
+    run, _ = cpu_harness
+    with pytest.raises(AssertionError, match="quinary-Bop is unimplemented"):
+        run(["--steps", "2", "--sparse-state", "--fmt", "quinary"], "c47_reject_quinary_bop")
+
+
+@pytest.mark.parametrize("flags", [[], ["--optim", "adam"], ["--optim", "sgd"], ["--sparse-state", "--method", "lora"]])
+def test_c47_rowlearn_validation(cpu_harness, flags):
+    run, _ = cpu_harness
+    with pytest.raises(SystemExit, match="rowlearn requires"):
+        run(["--patch-scale", "rowlearn", *flags], "c47_invalid_rowlearn")
+
+
+def test_c47_rowlearn_frozen_init_matches_control_training(cpu_harness, monkeypatch):
+    run, paths = cpu_harness
+    flags = ["--steps", "4", "--sparse-state", "--anchor", paths["anchor"], "--anchor-len", "16",
+             "--local-lambda", "1", "--support-score", "netcost", "--refresh-every", "1"]
+    control, patch = run(flags, "c47_control")
+    saved = torch.load(patch, weights_only=False)
+    enable = E.SparseFSAParam.enable_row_scale
+
+    def frozen(pm):
+        enable(pm)
+        pm.logr.requires_grad_(False)
+
+    monkeypatch.setattr(E.SparseFSAParam, "enable_row_scale", frozen)
+    learned, patch = run([*flags, "--patch-scale", "rowlearn"], "c47_frozen_scale")
+    frozen_state = torch.load(patch, weights_only=False)
+    assert control["bop_events"] == learned["bop_events"]
+    assert control["churn"] == learned["churn"]
+    for name, e in saved["entries"].items():
+        other = frozen_state["entries"][name]
+        assert torch.equal(e["idx"], other["idx"]) and torch.equal(e["val"], other["val"])

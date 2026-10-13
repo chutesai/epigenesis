@@ -128,6 +128,29 @@ def binding_score(text, item, facts):
     return all((name.lower(), attr, value) in found for name, attr, value in bindings)
 
 
+def ordered_two_value_score(text, values, candidates=()):
+    """Primary score for prompts requesting two terse values in question order.
+
+    Only the first sentence is scored. Exactly two value occurrences, in order,
+    joined by 'and' or a comma are allowed. This rejects attribution swaps,
+    candidate listings, negation and duplicate values without requiring names.
+    """
+    if len(values) != 2:
+        raise ValueError('ordered conjunction requires two values')
+    clause = re.split(r'[!?\n]|\.(?=\s|$)', text.strip(), maxsplit=1)[0]
+    if re.search(r"\b(?:not|never|neither|no|cannot|isn't|aren't|doesn't|don't)\b", clause, re.I):
+        return False
+    # Longest alternatives first prevent a multiword value's substring from
+    # being counted twice. Equal gold values still require two occurrences.
+    pool = sorted(set(candidates) | set(values), key=len, reverse=True)
+    pattern = r"(?<![\w'’\-])(?:" + '|'.join(re.escape(v) for v in pool) + r")(?![\w'’\-]|\.\w)"
+    emitted = [m.group().casefold() for m in re.finditer(pattern, clause, re.I)]
+    if emitted != [v.casefold() for v in values]:
+        return False
+    grammar = r'\s*' + re.escape(values[0]) + r'\s*(?:and|,)\s*' + re.escape(values[1]) + r'\s*'
+    return re.fullmatch(grammar, clause, re.I) is not None
+
+
 def supplied_evidence(tok, items, facts, encode, bos):
     out = []
     for it in items:

@@ -183,7 +183,7 @@ def test_branch_ac_dg_end_to_end_train_isolated_fixed_patches(cpu_harness, monke
         assert set(report["damage"]) == {"WikiText", "FineWeb", "code"}
         assert 0 <= report["false_activations"]["general"] <= 1
         assert report["address_accuracy"]["test"]["n"] == 6*len(E.TEST_T)
-        assert "two_fact_lenient" in report["composed_recall"]
+        assert "two_fact_presence" in report["composed_recall"]
     assert result["revoked"]["logits_bit_exact"]
     assert all(B.Path(path).read_bytes() == data for path, data in originals.items())
     assert "ADDR-CEILING " in capsys.readouterr().out

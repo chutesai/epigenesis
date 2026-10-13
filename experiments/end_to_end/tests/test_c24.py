@@ -174,10 +174,10 @@ def test_qa_probe_scores_same_40_token_generation_and_handles_empty_groups(monke
                 (["Quillon. Varnholt.", "Quillon and Varnholt."] if len(prompts) == 2 else ["Quillon."])]
     monkeypatch.setattr(E, "greedy_generate", generate)
     result = E.qa_probe_eval(None, TOK, groups, "cpu", max_new=max_new)
-    assert result["two_fact_both"] == .5 and result["two_fact_both_lenient"] == 1.
+    assert result["two_fact_presence_stop"] == .5 and result["two_fact_presence"] == 1.
     assert calls[0][1] == 40 and calls[1][1] == (max_new or 5)
     assert E.qa_probe_eval(None, TOK, {"two_fact": []}, "cpu") == dict(
-        n_each=dict(two_fact=0), two_fact_both=0., two_fact_both_lenient=0.)
+        n_each=dict(two_fact=0), two_fact_presence_stop=0., two_fact_presence=0., two_fact_correct=0.)
 
 
 @pytest.mark.parametrize("mode", [[], ["--paired"], ["--saturation-sampling"],

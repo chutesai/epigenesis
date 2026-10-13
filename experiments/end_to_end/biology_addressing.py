@@ -1,9 +1,9 @@
-from itertools import combinations
 """C27 train-only addressing prototypes; persistent fact patches stay fixed.
 
-The explicit mention table and diagonal resolver are prototypes, not recurrent
+The explicit mention table and candidate resolvers are prototypes, not recurrent
 model state. All thresholds use TRAIN anchor positions, never preservation data.
 """
+from itertools import combinations
 import math
 import re
 import time
@@ -323,7 +323,7 @@ def addressing_arm(arm, branches, tok, facts, groups, anchor, seed, panels, base
         selector_seconds = time.perf_counter()-start
         def benchmark_route(items, mode=mode):
             return [tuple(p for p in r if p in branches.states) for r in index.select(
-                B.indexer_features(branches.model,[it['p'] for it in items],layer,dev),mode)]
+                B.address_eval_features(branches.model,tok,{'benchmark':items},layer,dev)['benchmark'],mode)]
         reports[mode] = route_report(branches, tok, facts, groups, routes, panels, droutes, base_nll, dev, a,benchmark_route)
         reports[mode]["selector_seconds"] = selector_seconds
         reports[mode]["selector_feature_seconds"] = feature_seconds

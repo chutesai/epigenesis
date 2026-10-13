@@ -38,14 +38,15 @@ validation or dev numbers from runs whose test evaluation is still pending:
 | same 40 facts, asked in unseen phrasings | **88–90%** (2 seeds) | 62–65% (2 seeds) |
 | same 40 facts, indirect questions | **44–51%** (2 seeds) | 22.5–30% (2 seeds) |
 | same 40 facts, pronoun questions | **75%** (1 seed) | 47.5% (1 seed) |
-| 3 people × 100 conflicting facts (val) | 95.0–95.8% (2 seeds, layers 3,16,22,29) | 95.0% (same layers) |
+| 3 people × 100 conflicting facts (test) | **99.2%** with a 4M-slot budget, 91.3% with 1M (seed 1, layers 3,16,22,29; code damage +0.011, fails the 0.003 gate) | 96.2% (seed 1, same layers; code damage +0.008, also fails) |
 | new rules (EP-1, multiple choice) | 95.25% dev, 98.2% test (1 seed) with sleeping-unit gating | 94.75% dev, 98.2% test (1 seed); dense all-layer fine-tuning 96% dev at +0.20 damage |
 
 The tested FSA recipes outperform the tested LoRA r16 recipes on the small and medium fact tasks and generalize markedly
 better to questions they were not trained on, with damage within noise of zero on the panels measured. The recipes are not
 identical (rehearsal and penalty strengths differ), so this is a comparison of tuned recipes rather than a pure method ablation.
-On the hardest fact task the two are tied on validation once the patch is spread over four layers and its slots are frozen
-before the end of training. On rules, sleeping-unit gating matches LoRA. The four headline fact and rule claims were checked
+On the hardest fact task (3 people × 100 conflicting facts) FSA with a 4M-slot budget reaches 99.2% test against LoRA's 96.2%,
+in 5.8 MB of patch against LoRA's 88 MB (bf16); with the earlier 1M budget FSA lost (91.3–93.2%). One seed each, and both patches
+fail the code-damage gate (+0.011 and +0.008 ΔNLL, within noise of each other). On rules, sleeping-unit gating matches LoRA. The four headline fact and rule claims were checked
 retroactively by an independent result review against the raw logs (verdict: confirmed, with caveats). The forced-zero patch can give a block more
 than two active pairs, so serving needs a sparse overlay or a wider block encoding; that path is not built or benchmarked yet.
 
@@ -77,10 +78,12 @@ are the genome and are never edited; what the model learns afterwards is a rever
 - **Works, ties LoRA:** learning new rules. Sleeping-unit gating reaches 95.25% dev and 98.2% test (56/57) at +0.001 damage;
   LoRA reaches 94.75% dev and the same 98.2% test, so the rules result is parity, not an advantage (one seed each)
   ([EP-1](#ep-1-learning-rules-instead-of-facts)). Held-out test numbers are pending.
-- **Closed gap:** many conflicting facts. The earlier deficit on 3 people × 100 shared attributes came from two fixable causes:
-  placement (two adjacent layers starve both FSA and LoRA) and slot churn (the budget kept evicting slots that held learned facts).
-  Spread over layers 3, 16, 22 and 29 with slot selection frozen at step 200, FSA jumps from about 50% to 95.0–95.8% validation by
-  step 300 on two seeds, tying LoRA on the same layers. Test numbers are pending.
+- **Wins on recall, damage open:** many conflicting facts. On 3 people × 100 conflicting facts, spread over layers 3, 16, 22
+  and 29, raising the slot budget from 1M to 4M (1.6M slots actually used, 5.8 MB) lifts FSA from 91.3% to 99.2% test GEN, above
+  LoRA r16's 96.2% (one seed each, same test split, both scored at their final step). The cost is code-panel damage of +0.011 ΔNLL,
+  which fails the 0.003 gate; LoRA's +0.008 fails it too. More seeds and a better preservation term are running. Dropping WikiText
+  rehearsal made damage worse (FineWeb +0.013, code +0.015), so rehearsal was masking expert damage, not adding it. Both methods
+  write exactly the same matrices (routed-expert up and down projections).
 - **Promising:** isolated per-person banks, each holding one person's 100 facts, reach 96–100% validation; whether they work when all
   are loaded at once is the next measurement ([isolated banks](#isolated-banks)).
 - **Pending:** the serving path for forced-zero patches (sparse overlay or wider block encoding), test numbers for the 300-fact
@@ -178,7 +181,7 @@ The 2-layer FSA patch (seed 0) re-measured on held-out FineWeb-Edu gives −0.00
 On the earlier in-pair write set the same FSA recipe scored 64% on this task. Moving to the forced-zero mask turned a loss into
 a win.
 
-**3 people × 100 conflicting facts (validation; test pending)**
+**3 people × 100 conflicting facts (validation; test results below the table)**
 
 Every attribute here conflicts across people: 60 attributes are three-way and 60 two-way.
 
@@ -188,6 +191,12 @@ Every attribute here conflicts across people: 60 attributes are three-way and 60
 | FSA Bop, 1M budget, slots re-chosen throughout | 14,15 | 37.5% (500) / 25% (400), then declining |
 | LoRA r16 | 3,16,22,29 | 70.8% (200), **95.0%** (300), 94.2% (400, 500) |
 | **FSA Bop, 1M budget, slot selection frozen at step 200** | 3,16,22,29 | 43.3% → **95.0%** and 50.8% → **95.8%** (step 200 → 300; 2 seeds) |
+
+**Test (held-out phrasings, 600 items), seed 1, layers 3,16,22,29:** FSA Bop (slot selection frozen at step 200) 93.2% GEN,
+damage WikiText −0.025 (rehearsal-trained), FineWeb −0.005, code +0.009; LoRA r16 96.2% GEN. LoRA wins that comparison by 3 points on one
+seed each. With a 4M-slot budget (gap-closing ladder, same seed and split, current harness) FSA reaches 99.2% test GEN
+(WikiText −0.036 with rehearsal, FineWeb −0.005, code +0.011), against 91.3% for the 1M control rerun on the same harness.
+The 4M result is one seed; the code damage fails the gate, as LoRA's does.
 
 Placement is clearly part of the earlier gap: two adjacent layers are too narrow for 300 colliding facts, for LoRA as well as
 FSA. Slot churn is the likely other part: while the budget keeps re-choosing slots it can evict slots holding learned facts,

@@ -139,7 +139,7 @@ def collect_residuals(model, sequences, layer_ids, device, positions=None, progr
             hooks.append(layers[li].register_forward_pre_hook(
                 lambda mod, inp, kw, li=li: capture(mod, inp, kw, li), with_kwargs=True))
         forward = getattr(model, "forward_hidden", model)
-        for start in range(0, len(sequences), BATCH_SIZE):
+        for start in E.progress(range(0, len(sequences), BATCH_SIZE), 'residual_features'):
             seqs = [s[:p + 1] for s, p in zip(
                 sequences[start:start + BATCH_SIZE], positions[start:start + BATCH_SIZE])]
             targets = torch.tensor([len(s) - 1 for s in seqs], dtype=torch.long)
@@ -435,6 +435,7 @@ def best_layers(reports):
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
+    E.eda.add_argument(parser)
     parser.add_argument("--legacy-cloze-train", action="store_true", help="reproduce original train phrasings")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--export", type=Path, default=E.EXPORT)
@@ -453,6 +454,7 @@ def parse_args(argv=None):
 @torch.no_grad()
 def main(argv=None):
     args = parse_args(argv)
+    E.eda.announce(args)
     if not torch.cuda.is_available():
         raise SystemExit("CUDA and the /workspace/malleable model/data are required")
     sys.path.insert(0, "/workspace/malleable/mlf")
@@ -472,9 +474,9 @@ def main(argv=None):
     labels, counts, attrs = label_panels(panels, facts)
     windows, positions, starts = general_windows(
         json.loads(args.general_text.read_text()), args.seed)
-    model, _cfg, device = build_model(
+    model, _cfg, device = E.eda.build_model(build_model, args,
         args.export, device="cuda:0", model_config=None, step=args.export_step,
-        expert_format="bf16", eda_kernel_backend="naive_fp32")
+        expert_format="bf16")
     model.eval()
     model.requires_grad_(False)
     # Exact resident dispatch reduces Python overhead without new weight banks.
@@ -494,7 +496,7 @@ def main(argv=None):
     del model
     torch.cuda.empty_cache()
     result = dict(
-        baselines=baselines, legacy_cloze_train=args.legacy_cloze_train,
+        eda_backend=E.eda.selected(args), baselines=baselines, legacy_cloze_train=args.legacy_cloze_train,
         baseline_protocol=dict(target="person", last_token="raw input embedding",
                                name_token_layer=LAYERS[0], name_position="last overlapping tokenizer offset"),
         seed=args.seed, export=str(args.export), export_step=args.export_step,

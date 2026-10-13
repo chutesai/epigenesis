@@ -1,0 +1,30 @@
+#!/bin/bash
+# fsaq.sh <queuefile>: persistent queue runner. Re-reads the queue file every 60 s, so lines can be appended at any time.
+# Line format: "<script> <args>|<name>". A line runs once (skipped when logs/<name>.log exists), on a GPU with <1000 MiB used
+# whose lock dir locks/gpuN it can create (same lock convention as schedq.sh). Touch <queuefile>.stop to end the loop.
+cd /workspace/malleable; mkdir -p locks run_own logs out
+PY=/venv/main/bin/python
+Q=$1
+free_gpu(){ for g in $(nvidia-smi --query-gpu=index,memory.used --format=csv,noheader,nounits | awk -F", " '$2<1000{print $1}'); do
+  mkdir locks/gpu$g 2>/dev/null && { echo $g; return; }; done; }
+while true; do
+  [ -e "$Q.stop" ] && { echo "stop file, exiting"; exit 0; }
+  while IFS= read -r item <&3; do
+    [ -z "$item" ] && continue; [[ "$item" == \#* ]] && continue
+    cmd="${item%|*}"; name="${item##*|}"
+    [ -e "logs/$name.log" ] && continue
+    G=$(free_gpu); [ -z "$G" ] && break
+    touch run_own/$name
+    if [[ "$cmd" == SH\ * ]]; then      # "SH <shell command>": run as-is (it must write its own outputs)
+      ( env OMP_NUM_THREADS=20 MKL_NUM_THREADS=20 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True PYTHONUNBUFFERED=1 PYTHONFAULTHANDLER=1 \
+          TRITON_CACHE_DIR=/tmp/triton_$name CUDA_VISIBLE_DEVICES=$G bash -c "${cmd#SH }" > logs/$name.log 2>&1 < /dev/null
+        rmdir locks/gpu$G; rm -f run_own/$name ) &
+    else
+      ( env OMP_NUM_THREADS=20 MKL_NUM_THREADS=20 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True PYTHONUNBUFFERED=1 PYTHONFAULTHANDLER=1 \
+          TRITON_CACHE_DIR=/tmp/triton_$name CUDA_VISIBLE_DEVICES=$G $PY $cmd --out out/$name.json > logs/$name.log 2>&1 < /dev/null
+        rmdir locks/gpu$G; rm -f run_own/$name ) &
+    fi
+    echo "launched $name on GPU $G $(date -u +%H:%MZ)"; sleep 90
+  done 3< "$Q"
+  sleep 60
+done

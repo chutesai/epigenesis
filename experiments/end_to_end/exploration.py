@@ -434,8 +434,8 @@ def kill_decision(arm, result):
     return dict(verdict="kill" if killed else "survive", rule=SPECS[arm][1])
 
 
-def emit(arm, control, result, started, verdict=None):
-    report = dict(arm=arm, prior=SPECS[arm][0], kill=SPECS[arm][1], control=control,
+def emit(arm, control, result, started, verdict=None, eda_backend=E.eda.DEFAULT):
+    report = dict(eda_backend=eda_backend, arm=arm, prior=SPECS[arm][0], kill=SPECS[arm][1], control=control,
                   result=result, wall_seconds=time.perf_counter()-started)
     report.update(verdict="control-failed" if not control["passed"] else verdict or kill_decision(arm, result)["verdict"])
     print("EXPLORE " + json.dumps(report, allow_nan=False), flush=True)
@@ -444,7 +444,7 @@ def emit(arm, control, result, started, verdict=None):
 
 def load_runtime(args):
     states = [torch.load(p, map_location="cpu", weights_only=False) for p in args.patches]
-    banks = B.validate_patches(states)
+    banks = B.validate_patches(states, eda_backend=E.eda.selected(args))
     meta = states[0]["meta"]
     for state in states:
         E.validate_patch_export(state["meta"], args.export, args.export_step)
@@ -465,8 +465,8 @@ def load_runtime(args):
     from tokenizers import Tokenizer
     torch.manual_seed(meta["seed"])
     tok = Tokenizer.from_file(str(E.DATA/"tokenizer.json"))
-    model, _, dev = build_model(args.export, device="cuda:0", model_config=None, step=args.export_step,
-                               expert_format="bf16", eda_kernel_backend="naive_fp32")
+    model, _, dev = E.eda.build_model(build_model, args, args.export, device="cuda:0", model_config=None, step=args.export_step,
+                               expert_format="bf16")
     model._fsa_export, model._fsa_export_step = args.export, args.export_step
     model.eval()
     for param in model.parameters():
@@ -630,9 +630,9 @@ def run_arm(arm, runtime, data, args, tensor_layers, control, started, shared_se
                           missing_attribute_cells="zero usage", tensor_unit_selection="fixed prefix")
         if arm == "vsa":
             result["equal_byte_comparison"] = "all tensor payloads including projection, codes, center and dense reserve"
-        return emit(arm, control, result, started-shared_seconds)
+        return emit(arm, control, result, started-shared_seconds, eda_backend=E.eda.selected(args))
     except TimeoutError:
-        return emit(arm, control, None, started-shared_seconds, "budget-exceeded")
+        return emit(arm, control, None, started-shared_seconds, "budget-exceeded", E.eda.selected(args))
     finally:
         branches.activate(())
         E.set_enabled(False)
@@ -640,6 +640,7 @@ def run_arm(arm, runtime, data, args, tensor_layers, control, started, shared_se
 
 def build_parser():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    E.eda.add_argument(p)
     p.add_argument("--arm", required=True, choices=tuple(SPECS)+("all",))
     p.add_argument("--control-only", "--positive-control", dest="control_only", action="store_true")
     p.add_argument("--patches", type=Path, nargs="+")
@@ -668,6 +669,7 @@ def build_parser():
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
+    E.eda.announce(args)
     if (args.indexer_layer < 0 or not 8 <= args.dimensions <= 4096 or min(args.tensor_units, args.cp_rank, args.cp_steps,
             args.train_per_bank,
             args.qa_n, args.compose_n, args.gen_max_new, args.gen_stop_k) < 1
@@ -687,7 +689,7 @@ def main(argv=None):
         print("POSITIVE-CONTROL " + json.dumps(dict(arm=arm, **controls[arm])), flush=True)
         if not controls[arm]["passed"] or args.control_only:
             reports.append(emit(arm, controls[arm], None, started,
-                                "control-passed" if controls[arm]["passed"] else "control-failed"))
+                                "control-passed" if controls[arm]["passed"] else "control-failed", E.eda.selected(args)))
         else:
             active.append(arm)
     if not active:
@@ -710,7 +712,7 @@ def main(argv=None):
     except TimeoutError:
         runtime[0].activate(())
         E.set_enabled(False)
-        return reports+[emit(arm, controls[arm], None, shared_start, "budget-exceeded") for arm in active]
+        return reports+[emit(arm, controls[arm], None, shared_start, "budget-exceeded", E.eda.selected(args)) for arm in active]
     shared_seconds = time.perf_counter()-shared_start
     print("EXPLORE-SHARED " + json.dumps(dict(wall_seconds=shared_seconds, layers=layers,
                                              n_train=len(data[0]), n_direct=len(data[1]), n_composed=len(data[2]))), flush=True)

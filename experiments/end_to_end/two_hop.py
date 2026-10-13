@@ -125,7 +125,7 @@ def train_pointer(model, items, codes, early, late, dev, steps, rank, lr, seed, 
     enabled = E.FSAParam.enabled
     try:
         E.set_enabled(False)
-        for step in range(steps):
+        for step in E.progress(range(steps), 'two_hop:train_pointer'):
             batch = rng.sample(items, min(bs, len(items)))
             positions = [it["position"] for it in batch]
             x, _ = E.batchify([it["q"] for it in batch], dev)
@@ -148,9 +148,9 @@ def train_pointer(model, items, codes, early, late, dev, steps, rank, lr, seed, 
 def evaluate(model, branches, patch, indexer, codes, tok, facts, items, early, late, dev, max_new, stop_k):
     try:
         reports = {}
-        for mode in ("no_hop1", "no_pointer_oracle_bank", "resolved_name_oracle", "pointer", "oracle_bank"):
+        for mode in E.progress(("no_hop1", "no_pointer_oracle_bank", "resolved_name_oracle", "pointer", "oracle_bank"), 'two_hop:evaluate'):
             gens, routes, cosines = [], [], []
-            for i, original in enumerate(items):
+            for i, original in E.progress(enumerate(items), 'two_hop:evaluate', total=len(items)):
                 it = resolved_name_item(tok, facts, original, E.BOS) if mode == 'resolved_name_oracle' else original
                 branches.activate(())
                 x = torch.tensor([it["q"]], device=dev)
@@ -226,11 +226,11 @@ def evaluate_cleanup(model, branches, patch, indexer, codes, tok, facts, items, 
     reports = {}
     conflicts = E.conflict_map(facts)
     try:
-        for mode in ("raw_cascade", "raw_beam", "cleanup", "cleanup_beam", "oracle_pointer"):
+        for mode in E.progress(("raw_cascade", "raw_beam", "cleanup", "cleanup_beam", "oracle_pointer"), 'two_hop:evaluate_cleanup'):
             routes, gens, decisions, lps, reads = [], [], [], [], []
             start = time.perf_counter()
             selector_seconds = 0.
-            for it in items:
+            for it in E.progress(items, 'two_hop:evaluate_cleanup'):
                 branches.activate(())
                 with pointer_hook(model, early, patch, [it["position"]]):
                     code = code_forward(model, torch.tensor([it["q"]], device=dev), late, [it["position"]])
@@ -249,7 +249,7 @@ def evaluate_cleanup(model, branches, patch, indexer, codes, tok, facts, items, 
                     selector_seconds += time.perf_counter()-begin
                     decisions.append(decision)
                     generated = []
-                    for pid in candidates:
+                    for pid in E.progress(candidates, 'two_hop:evaluate_cleanup'):
                         branches.activate((pid,))
                         @contextmanager
                         def snapped():
@@ -307,6 +307,7 @@ def evaluate_cleanup(model, branches, patch, indexer, codes, tok, facts, items, 
 
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
+    E.eda.add_argument(p)
     p.add_argument("--positive-control", action="store_true")
     p.add_argument("--cleanup-thetas", type=float, nargs="+", default=[.5,.7,.9])
     p.add_argument("--cleanup-margins", type=float, nargs="+", default=[.05,.1,.2])
@@ -392,7 +393,7 @@ def preservation(model, branches, patch, indexer, early, late, wins, dev, codes=
     base_logits = E.logits_of(model,revoke_input).clone()
     before = E.nll_windows(model,wins,dev,bs=1)
     try:
-        for win in wins:
+        for win in E.progress(wins, 'two_hop:preservation'):
             position = min(63,len(win)-1)
             branches.activate(())
             with pointer_hook(model,early,patch,[position]):
@@ -414,7 +415,7 @@ def preservation(model, branches, patch, indexer, early, late, wins, dev, codes=
                             yield
                 if len(candidates)>1:
                     scored=[]
-                    for pid in candidates:
+                    for pid in E.progress(candidates, 'two_hop:preservation'):
                         branches.activate((pid,))
                         with snap(pid):
                             gen=E.greedy_generate(model,[win[:position+1].tolist()],dev,24,bs=1)[0]
@@ -438,6 +439,7 @@ def preservation(model, branches, patch, indexer, early, late, wins, dev, codes=
 
 def main(argv=None):
     a = parse_args(argv)
+    E.eda.announce(a)
     if a.positive_control:
         control = positive_control()
         payload = dict(control=control,verdict='control-passed' if control['passed'] else 'control-failed')
@@ -446,11 +448,11 @@ def main(argv=None):
             a.out.write_text(json.dumps(payload,indent=2)+'\n')
         return payload
     states = [torch.load(p, map_location="cpu", weights_only=False) for p in a.patches]
-    banks = B.validate_patches(states)
+    banks = B.validate_patches(states, eda_backend=E.eda.selected(a))
     meta = states[0]["meta"]
     if meta["people"] != 3:
         raise SystemExit("two-hop prototype requires the three-person world")
-    for state in states:
+    for state in E.progress(states, 'two_hop:main'):
         E.validate_patch_export(state["meta"], a.export, a.export_step)
     if not torch.cuda.is_available():
         raise SystemExit("CUDA and the /workspace/malleable model/data are required")
@@ -459,16 +461,17 @@ def main(argv=None):
     from tokenizers import Tokenizer
     torch.manual_seed(meta["seed"])
     tok = Tokenizer.from_file(str(E.DATA / "tokenizer.json"))
-    facts = E.make_world(meta["seed"], 3, meta["facts_per_person"], meta["shared_attrs"], meta["values"])
-    relations = {0: 1, 1: 2, 2: 0}
+    facts = E.make_world(meta["seed"], 3, meta["facts_per_person"], meta["shared_attrs"], meta["values"],
+                         meta.get("relation_world", False))
+    relations = B.sister_relations(facts, meta.get("relation_world", False))
     train_all = pointer_items(tok, facts, relations, TRAIN, E.BOS)
     train = pointer_split(train_all)['train']
     val = pointer_split(pointer_items(tok,facts,relations,VAL,E.BOS))['wording']
     if not train or not val:
         raise SystemExit('need enough attributes/combinations for disjoint pointer training and validation')
     test = pointer_items(tok, facts, relations, TEST, E.BOS)
-    model, _, dev = build_model(a.export, device="cuda:0", model_config=None, step=a.export_step,
-                                expert_format="bf16", eda_kernel_backend="naive_fp32")
+    model, _, dev = E.eda.build_model(build_model, a, a.export, device="cuda:0", model_config=None, step=a.export_step,
+                                expert_format="bf16")
     model.eval().requires_grad_(False)
     model._fsa_export, model._fsa_export_step = a.export, a.export_step
     validate_bank_layers(model, meta, a.hop2_layer)
@@ -504,8 +507,8 @@ def main(argv=None):
     reports = evaluate(model, branches, patch, indexer, codes, tok, facts, test,
                         a.hop1_layer, a.hop2_layer, dev, a.gen_max_new, a.gen_stop_k)
     validation = []
-    for theta in dict.fromkeys(a.cleanup_thetas+[a.cleanup_theta]):
-        for margin in dict.fromkeys(a.cleanup_margins+[a.cleanup_margin]):
+    for theta in E.progress(dict.fromkeys(a.cleanup_thetas+[a.cleanup_theta]), 'two_hop:main'):
+        for margin in E.progress(dict.fromkeys(a.cleanup_margins+[a.cleanup_margin]), 'two_hop:main'):
             report = evaluate_cleanup(model,branches,patch,indexer,codes,tok,facts,val,a.hop1_layer,a.hop2_layer,
                                       dev,a.gen_max_new,a.gen_stop_k,theta,margin)
             score = report['subarms']['cleanup']['end_to_end']['recall']
@@ -515,7 +518,7 @@ def main(argv=None):
                                a.hop1_layer, a.hop2_layer, dev, a.gen_max_new, a.gen_stop_k,theta,margin)
     cleanup['selection'] = dict(validation_recall=score,locked=True,theta=theta,margin=margin)
     heldout_reports = {}
-    for name, subset in pointer_split(test).items():
+    for name, subset in E.progress(pointer_split(test).items(), 'two_hop:main'):
         if name=='train' or not subset:
             continue
         heldout_reports[name] = evaluate(model,branches,patch,indexer,codes,tok,facts,subset,a.hop1_layer,a.hop2_layer,
@@ -527,7 +530,7 @@ def main(argv=None):
     wins = torch.tensor([[E.BOS]+anchor_tokens[i*511:(i+1)*511] for i in range(a.damage_n)],device=dev)
     damage = preservation(model,branches,patch,indexer,a.hop1_layer,a.hop2_layer,wins,dev)
     damage_by_mode = {'raw_cascade':damage}
-    for mode in ('raw_beam','cleanup','cleanup_beam'):
+    for mode in E.progress(('raw_beam','cleanup','cleanup_beam'), 'two_hop:main'):
         damage_by_mode[mode] = preservation(model,branches,patch,indexer,a.hop1_layer,a.hop2_layer,wins,dev,codes,mode,theta,margin)
     cleanup['damage'] = damage_by_mode
     cleanup['kill']['passed'] = cleanup['kill']['passed'] and all(p['dnll']<=.003 for p in damage_by_mode.values())
@@ -545,7 +548,7 @@ def main(argv=None):
     print('POINTER-CLEANUP-KILL '+json.dumps(cleanup['kill']),flush=True)
     print('POINTER-KILL '+json.dumps(decision),flush=True)
     names = {f.pid: f.name for f in facts}
-    result = dict(world=meta, export=str(a.export), export_step=a.export_step,
+    result = dict(eda_backend=E.eda.selected(a), world=meta, export=str(a.export), export_step=a.export_step,
         relations=[f"{names[p]}'s sister is {names[q]}" for p, q in relations.items()],
         hop1_layer=a.hop1_layer, hop2_layer=a.hop2_layer, layer_indexing="zero-based full block inputs",
         train_templates=TRAIN, test_templates=TEST, n_train=len(train), n_test=len(test),

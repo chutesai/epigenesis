@@ -114,6 +114,7 @@ def group_ids(names, mi, level):
 
 def main():
     ap = argparse.ArgumentParser()
+    E.eda.add_argument(ap)
     ap.add_argument("--patch", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--score", choices=["u", "net"], default="u")
@@ -134,9 +135,11 @@ def main():
     ap.add_argument("--group", choices=["expert", "linear"], default="expert")
     ap.add_argument("--eval-micro", type=int, default=24, help="micro-batch for no-grad fact-loss evaluations")
     a = ap.parse_args()
+    E.eda.announce(a)
 
     st = torch.load(a.patch, map_location="cpu", weights_only=False)
     meta = st["meta"]
+    E.eda.require_backend(st, E.eda.selected(a), "source patch")
     assert meta["method"].startswith("fsa") and meta["fmt"] == "ternary" and not meta.get("patch_scale") == "block"
     if meta.get("n_experts") or meta.get("selection"):
         raise SystemExit("patches on profiled expert subsets are not supported here")
@@ -148,8 +151,8 @@ def main():
     from tokenizers import Tokenizer
     torch.manual_seed(meta["seed"])
     tok = Tokenizer.from_file(str(E.DATA / "tokenizer.json"))
-    model, cfg, dev = build_model(E.EXPORT, device="cuda:0", model_config=None, step=58814,
-                                  expert_format="bf16", eda_kernel_backend="naive_fp32")
+    model, cfg, dev = E.eda.build_model(build_model, a, E.EXPORT, device="cuda:0", model_config=None, step=58814,
+                                  expert_format="bf16")
     model.eval()
     for p in model.parameters():
         p.requires_grad_(False)
@@ -231,7 +234,7 @@ def main():
                     conv_gen=E.gen_eval(model, tok, items_conv, dev, GMAX, K, 1, conflicts), big=big_eval())
 
     t0 = time.time()
-    res = dict(protocol=dict(proto, val_facts=vf, conv_facts=cf), patch=a.patch, score=a.score, cost_rel=a.cost_rel, chunk=a.chunk, n_slots=n_slots, meta=meta)
+    res = dict(eda_backend=E.eda.selected(a), protocol=dict(proto, val_facts=vf, conv_facts=cf), patch=a.patch, score=a.score, cost_rel=a.cost_rel, chunk=a.chunk, n_slots=n_slots, meta=meta)
     mi, fi = nonzero_table(mods)
     vals = torch.cat([m.M.view(-1)[fi[mi == i]] for i, m in enumerate(mods)])
     # vals is ordered by module, same as (mi, fi) from nonzero_table

@@ -8,8 +8,6 @@
 !/requirements.txt
 !/ROADMAP.md
 
-
-
 !/paper/
 /paper/*
 !/paper/freeslot.tex
@@ -118,6 +116,7 @@
 !/experiments/end_to_end/data/prune_v11c_u.json
 
 # never, anywhere
+/reviews/
 __pycache__/
 *.py[cod]
 .ruff_cache/
@@ -162,3 +161,113 @@ ROADMAP.md
 !/experiments/end_to_end/tests/test_c32.py
 !/experiments/end_to_end/C32_REPORT.md
 !/experiments/end_to_end/tests/test_exploration.py
+
+# C33 hierarchical attribute-bank selection and CPU regressions
+!/experiments/end_to_end/hierarchical_banks.py
+!/experiments/end_to_end/tests/test_c33.py
+!/experiments/end_to_end/C33_REPORT.md
+
+# C34 decisive evaluation and CPU regressions
+!/experiments/end_to_end/decisive_eval.py
+!/experiments/end_to_end/tests/test_c34.py
+!/experiments/end_to_end/C34_REPORT.md
+
+# C35 training recipes and CPU regressions
+!/experiments/end_to_end/tests/test_c35.py
+!/experiments/end_to_end/C35_REPORT.md
+
+# C36 independent review fixes and CPU regressions
+!/experiments/end_to_end/tests/test_c36.py
+!/experiments/end_to_end/C36_REPORT.md
+
+# C37 novel-idea learning experiments and CPU regressions
+!/experiments/end_to_end/tests/test_c37.py
+!/experiments/end_to_end/C37_REPORT.md
+
+# C38 design-review fixes, comparison tools and CPU regressions
+!/experiments/end_to_end/c38_analysis.py
+!/experiments/end_to_end/tests/test_c38.py
+!/experiments/end_to_end/C38_REPORT.md
+
+# C40 relation-world and served-negative fixes and CPU regressions
+!/experiments/end_to_end/tests/test_c40.py
+!/experiments/end_to_end/C40_REPORT.md
+
+# C42 calibrated selector analysis, GPU runtime and CPU regressions
+!/experiments/end_to_end/c42_selector.py
+!/experiments/end_to_end/c42_runtime.py
+!/experiments/end_to_end/tests/test_c42.py
+!/experiments/end_to_end/C42_REPORT.md
+!/experiments/end_to_end/C43_REPORT.md
+
+# C41 write-recipe refinements, measured controls and CPU regressions
+!/experiments/end_to_end/c41_birth_match.py
+!/experiments/end_to_end/tests/test_c41.py
+!/experiments/end_to_end/C41_REPORT.md
+
+# C44 training recovery and progress diagnostics
+!/experiments/end_to_end/c44_runtime.py
+!/experiments/end_to_end/bench_fast_moe.py
+!/experiments/end_to_end/tests/test_c44.py
+!/experiments/end_to_end/C44_REPORT.md
+
+# C45 explicit EDA backends and diagnostic entry points
+!/experiments/end_to_end/eda_backend.py
+!/experiments/end_to_end/tests/test_c45.py
+!/experiments/end_to_end/C45_REPORT.md
+!/experiments/end_to_end/build_forced_mask.py
+!/experiments/end_to_end/geometry_probe.py
+!/experiments/end_to_end/hebbian_write.py
+!/experiments/end_to_end/lora_project.py
+!/experiments/end_to_end/ls_diag.py
+!/experiments/end_to_end/masked_solve.py
+!/experiments/end_to_end/trace.py
+
+# C46 review fixes and queue operations
+!/experiments/end_to_end/C46_REPORT.md
+!/experiments/end_to_end/C47_REPORT.md
+!/experiments/end_to_end/tests/test_c46.py
+!/experiments/end_to_end/tests/test_ops_scripts.py
+!/experiments/end_to_end/ops/
+/experiments/end_to_end/ops/*
+!/experiments/end_to_end/ops/*.sh
+!/experiments/end_to_end/ops/*.orig
+
+# C48 export identity and queue review regressions/runbook
+!/experiments/end_to_end/C48_REPORT.md
+!/experiments/end_to_end/tests/test_c48.py
+!/experiments/end_to_end/ops/README.md
+
+# C49 quiet-unit census and split in-topic damage panel
+!/experiments/end_to_end/census.py
+!/experiments/end_to_end/token_streams.py
+!/experiments/end_to_end/in_topic.py
+!/experiments/end_to_end/build_in_topic_panel.py
+!/experiments/end_to_end/tests/test_c49.py
+!/experiments/end_to_end/C49_REPORT.md
+
+# C50 token-dosed preservation KL and exact/semantic metrics
+!/experiments/end_to_end/c50.py
+!/experiments/end_to_end/tests/test_c50.py
+!/experiments/end_to_end/C50_REPORT.md
+
+# C51 corrected census measurements and confirmation checks
+!/experiments/end_to_end/tests/test_c51.py
+!/experiments/end_to_end/C51_REPORT.md
+
+# C52 joint-bank continue-training and presence dropout
+!/experiments/end_to_end/c52.py
+!/experiments/end_to_end/tests/test_c52.py
+!/experiments/end_to_end/C52_REPORT.md
+
+# C55 cross-backend evaluation flag
+!/experiments/end_to_end/tests/test_c55.py
+!/experiments/end_to_end/C55_REPORT.md
+
+# C54 entity firing screen and value-only unit-list control
+!/experiments/end_to_end/c54.py
+!/experiments/end_to_end/tests/test_c54.py
+!/experiments/end_to_end/C54_REPORT.md
+
+# C56 minimal review fixes and final v57 launch commands
+!/experiments/end_to_end/C56_REPORT.md
