@@ -28,6 +28,16 @@
 !/figures/fig_chaos_floor.pdf
 !/figures/fig_e2e_trajectory.png
 !/figures/fig_e2e_trajectory.pdf
+# progress charts at the top of the README and the script that regenerates them
+!/figures/make_story_figs.py
+!/figures/fig_story_recall_vs_size.png
+!/figures/fig_story_recall_vs_size.pdf
+!/figures/fig_story_generalisation.png
+!/figures/fig_story_generalisation.pdf
+!/figures/fig_story_gap_ladder.png
+!/figures/fig_story_gap_ladder.pdf
+!/figures/fig_story_damage.png
+!/figures/fig_story_damage.pdf
 
 !/experiments/
 /experiments/*
