@@ -120,7 +120,7 @@ def test_damage_and_benchmark_follow_routes_and_match_base_batch_size(monkeypatc
         return [1.+len(banks.active)]*len(wins)
     monkeypatch.setattr(E,'nll_windows',nll)
     monkeypatch.setattr(E,'logits_of',lambda *args:torch.zeros(1))
-    monkeypatch.setattr(E,'qa_probe_eval',lambda *args:{})
+    monkeypatch.setattr(E,'qa_probe_eval',lambda *args, **kwargs:{})
     wins={'text':torch.zeros(2,5,dtype=torch.long)}
     a=SimpleNamespace(gen_max_new=1,gen_stop_k=2,gen_bs=1)
     base=B.evaluate_branch_base(banks.model,TOK,wins,{},None,'cpu',a)

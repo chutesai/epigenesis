@@ -45,7 +45,7 @@ def gate_reference():
     epi_gpu uses e2e_fsa_v7, whose enable flags are independent of e2e_fsa's.
     Keep that module intact and disable its patches explicitly during stats.
     """
-    candidates = [Path(__file__).resolve().parent.parent / 'end_to_end/e2e_fsa.py',
+    candidates = ([Path(os.environ['EPI_REFERENCE_HARNESS'])] if os.environ.get('EPI_REFERENCE_HARNESS') else []) + [Path(__file__).resolve().parent.parent / 'end_to_end/e2e_fsa.py',
                   Path(__file__).resolve().parent / 'fsa_ref/e2e_fsa.py',
                   Path(os.environ.get('EPI_BOX_ROOT', '/workspace/malleable')) / 'epi_tbop/fsa_ref/e2e_fsa.py']
     path = next((p for p in candidates if p.is_file()), None)
@@ -71,6 +71,78 @@ def restrict_gate_mask(mask, proj, selected):
     return mask & (selected[:, None] if proj == 'up_proj' else selected[None, :])
 
 
+
+def excluded_units(args):
+    if not getattr(args, 'exclude_units', None):
+        return {}
+    gate_reference()
+    from export_units import load_units
+    return load_units(args.exclude_units)
+
+
+def select_eligible_units(stats, frac, mode, seed, excluded, fact_stats=None):
+    """Select k from the ownership complement; never select an excluded unit."""
+    _, select_units, _ = gate_reference()
+    result = {}
+    for key, st in stats.items():
+        if key not in excluded:
+            raise ValueError('ownership record missing expert: ' + key)
+        owned = excluded[key]
+        if owned.shape != st['rate'].shape:
+            raise ValueError('ownership shape mismatch: ' + key)
+        idx = (~owned).nonzero().flatten()
+        sel = torch.zeros_like(owned)
+        if idx.numel():
+            eligible = {k: v[idx] if torch.is_tensor(v) and v.shape == owned.shape else v for k,v in st.items()}
+            fs = ({key: {k:v[idx] if torch.is_tensor(v) and v.shape == owned.shape else v
+                         for k,v in fact_stats[key].items()}} if fact_stats and key in fact_stats else None)
+            picked = select_units({key:eligible},frac,mode,seed,fs)[key]
+            sel[idx[picked]] = True
+        result[key] = sel
+    return result
+
+
+@torch.no_grad()
+def exclude_write_units(model, fsa, args, owned):
+    layers = fsa.moe_layers(model)
+    for li, ei, proj, lin in patched_linears(model,fsa,args.layers,args.projs):
+        key = f'{layers[li][0]}.experts.{ei}'
+        if key not in owned:
+            raise ValueError('ownership record missing expert: '+key)
+        m = lin.parametrizations.weight[0]
+        hidden = m.mask.shape[0 if proj=='up_proj' else 1]
+        if owned[key].numel()!=hidden:
+            raise ValueError('ownership shape mismatch: '+key)
+        m.mask.copy_(restrict_gate_mask(m.mask,proj,~owned[key]))
+
+
+@torch.no_grad()
+def served_checkpoint(model, fsa, args, step, test_probes, dev_probes, test_score, dev_score):
+    """Last-step served Q(M)*mask*support; never best_state or committed_state."""
+    entries, geometry = {}, {}
+    layers = fsa.moe_layers(model)
+    for li,ei,proj,lin in patched_linears(model,fsa,args.layers,args.projs):
+        m = lin.parametrizations.weight[0]
+        if not isinstance(m,LadderParam) or m.arm!='ladder_tern' or m.beta_factors!=(1.,):
+            raise ValueError('PR3 served export requires ladder_tern beta=1')
+        q = m.codes()[0].detach()
+        flat = q.flatten(); idx = flat.nonzero().flatten()
+        name = f'{layers[li][0]}.experts.{ei}.{proj}'
+        entries[name] = dict(kind='fsa',fmt='ternary',shape=list(q.shape),idx=idx.cpu().to(torch.int32),
+                             val=flat[idx].cpu().to(torch.int8),alpha=m.alpha.detach().cpu().flatten().clone(),
+                             scale='row',fp4_step=.25)
+        geometry[name] = dict(codes=q.cpu().to(torch.int8).clone(),mask=m.mask.detach().cpu().clone(),
+                              alpha=m.alpha.detach().cpu().clone(),layer=li)
+    return dict(format='e2e-fsa-patch-v1',entries=entries,
+                meta=dict(method='fsa_forced',fmt='ternary',patch_scale='row',layers=args.layers,
+                          projs=args.projs,eda_backend='naive_fp32',export_step=58814,
+                          tested_step=step,final_test_checkpoint='last step',
+                          recipe={k:str(v) if isinstance(v,Path) else v for k,v in vars(args).items()},
+                          moe_layer_names=[n for n,_ in layers]),
+                served=geometry,ep1=dict(test_probes=test_probes,dev_probes=dev_probes,
+                                       test=test_score,dev=dev_score))
+
+
 def configure_gate(model, fsa, args, anchors, acquisition):
     if not args.gate_units_frac:
         return None, None
@@ -85,7 +157,9 @@ def configure_gate(model, fsa, args, anchors, acquisition):
                       if args.gate_select == 'specific' else None)
     finally:
         fsa.set_enabled(enabled)
-    units = select_units(stats, args.gate_units_frac, args.gate_select, args.seed, fact_stats)
+    owned = excluded_units(args)
+    units = (select_eligible_units(stats,args.gate_units_frac,args.gate_select,args.seed,owned,fact_stats)
+             if owned else select_units(stats,args.gate_units_frac,args.gate_select,args.seed,fact_stats))
     layers = fsa.moe_layers(model)
     for li, ei, proj, lin in patched_linears(model, fsa, args.layers, args.projs):
         selected = units[f'{layers[li][0]}.experts.{ei}']
@@ -740,6 +814,12 @@ def best_dev_step(trajectory):
 
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--exclude-units', type=Path, help='PR3 whole-unit ownership JSON; exclude before gate selection')
+    p.add_argument('--save-served', action='store_true', help='dump the last-step served ternary patch and scored probes')
+    p.add_argument('--eda-backend', choices=['naive_fp32'], default='naive_fp32')
+    p.add_argument('--export',type=Path,choices=[Path('/workspace/malleable/data/hf/exports/725B-tokens_step58814')],
+                   default=Path('/workspace/malleable/data/hf/exports/725B-tokens_step58814'))
+    p.add_argument('--export-step',type=int,choices=[58814],default=58814)
     p.add_argument('--write-set', choices=('inpair', 'forced'), default='inpair')
     p.add_argument('--run', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
@@ -773,6 +853,8 @@ def parse_args(argv=None):
     args = p.parse_args(argv)
     if args.dev_large < 0 or args.dev_large % 2:
         p.error('dev-large must be nonnegative and even (half per family)')
+    if (args.exclude_units or args.save_served) and (args.arm != 'ladder_tern' or args.write_set != 'forced' or args.patch_beta != 1.):
+        p.error('PR3 exclusion/export requires forced ladder_tern beta=1')
     all_layers = args.layers == 'all'
     try:
         args.layers = list(range(32)) if all_layers else [int(v) for v in args.layers.split(',')]
@@ -861,6 +943,9 @@ def run(args):
     else:
         params, _, _ = fsa.attach(model, [14, 15], 'fsa_free' if ternary else 'lora', 16,
                                  fmt='ternary', budgeted=ternary)
+    owned = excluded_units(args)
+    if owned:
+        exclude_write_units(model,fsa,args,owned)
     mods = fsa.fsa_modules(model)
     for m in mods:
         if ternary:
@@ -1110,7 +1195,14 @@ def run(args):
                     evaluate_dev(step)
             tic = time.monotonic()
             torch.cuda.reset_peak_memory_stats()
-            test = evaluate.concept_acc(model, tok, dev, filtered_probes(corpus, 'test', policy_ids, limit))
+            test_probes = filtered_probes(corpus, 'test', policy_ids, limit)
+            test = evaluate.concept_acc(model, tok, dev, test_probes)
+            if getattr(args,'save_served',False):
+                checkpoint = served_checkpoint(model,fsa,args,args.steps,test_probes,dev_probes,test,trajectory[-1]['dev'])
+                # Dump item-for-item controls using the identical production scorer.
+                checkpoint['ep1']['test_hits'] = [int(evaluate.concept_acc(model,tok,dev,[p])['acc']) for p in test_probes]
+                checkpoint['ep1']['dev_hits'] = [int(evaluate.concept_acc(model,tok,dev,[p])['acc']) for p in dev_probes]
+                torch.save(checkpoint,out / 'served_state.pt')
             emit(dict(phase='test', step=args.steps, test=test, nnz=trajectory[-1]['nnz'],
                       seconds=time.monotonic() - tic, peak_gib=torch.cuda.max_memory_allocated() / 2**30))
             diagnose(args.steps, 'test')

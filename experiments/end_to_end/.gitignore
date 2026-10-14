@@ -1,0 +1,10 @@
+# Keep C61 review artifacts visible under the repository's experiment allowlist.
+!.gitignore
+!C61_REPORT.md
+!tests/test_c61.py
+
+# C64 in-process training profiler and recipe reference.
+!profile_patch_train.py
+!C64_REPORT.md
+!C64_ECTRL_ARGV.txt
+!tests/test_c64.py

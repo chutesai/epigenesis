@@ -2369,7 +2369,7 @@ def test_swap_margin_uses_population_std_and_global_incumbents():
     assert not mods[0].support.any() and int(mods[1].support.sum()) == 1
 
 
-def test_main_c3_age_reheat_adam_switch_accumulation_and_loaded_patch(cpu_harness, monkeypatch):
+def test_main_c3_age_reheat_adam_switch_and_loaded_patch(cpu_harness, monkeypatch):
     run, _ = cpu_harness
     steps = []
     old_advance = E.advance_step_age
@@ -2382,13 +2382,14 @@ def test_main_c3_age_reheat_adam_switch_accumulation_and_loaded_patch(cpu_harnes
             assert torch.equal(m.age[live], prev[live] + 1)
         steps.append(1)
 
-    result, patch = run(['--steps', '3', '--no-churn', '--sparse-state', '--death-age-mult',
+    result, patch = run(['--steps', '2', '--no-churn', '--sparse-state', '--death-age-mult',
                           '--reheat-every', '1', '--reheat-frac', '1', '--adam-phase', '1'], 'c3_age_adam')
     assert result['revoked']['logits_bit_exact']
     monkeypatch.setattr(E, 'advance_step_age', advance)
     result, _ = run(['--steps', '4', '--no-churn', '--sparse-state', '--death-age-mult',
-                      '--load-patch', str(patch), '--budget', '0', '--bop-accum', '2'], 'c3_age_accum')
+                      '--load-patch', str(patch), '--budget', '20'], 'c3_age_accum')
     assert len(steps) == 4 and result['revoked']['logits_bit_exact']
+    assert result['budget'] == 20 and result['budget_freeze'] == -1
 
 # ---------------------------------------------------------------------------------------------- C6
 from concurrent.futures import ThreadPoolExecutor

@@ -22,6 +22,8 @@
 
 > [!NOTE]
 > **The paper and this write-up were generated with AI assistance**, from experiments run and verified by the authors. Treat the prose as a draft under human review. The results have not been peer-reviewed.
+>
+> **The paper (`paper/freeslot.tex` / PDF) describes the earlier in-pair variant**, not the forced-zero mask that all current results on this page use. It has not been updated yet; where it disagrees with this page, this page is current.
 
 ## The idea
 
@@ -49,8 +51,13 @@ seeds and run names are in the [results](#results-forced-zero-mask-2026-10-13) a
 **Recall per value written.** On three fact tasks of rising difficulty, FSA writes 175k to 2.1M ternary slots and
 scores 100% / 100% (40 facts, 2 seeds), 97.0–99.5% (2 people × 50 conflicting facts, 3 seeds) and 99.8% (3 people
 × 100 conflicting facts, one seed, 16M-slot budget cap). LoRA r16 writes 22M–44M parameters for 90.0–93.75%,
-94.5–95.5% and 96.2%. On the 300-fact task the FSA patch is 7.7 MB against 88 MB of bf16 adapter, and every final
-patch fails the code-damage gate (FSA +0.007, LoRA +0.008 ΔNLL).
+94.5–95.5% and 96.2%. On the 300-fact task the 16M-cap FSA patch is 3.3 MB as a measured lossless packed file
+against 88 MB of bf16 adapter, about 27× smaller. The per-row scale is re-derived from the base and verified
+bit-identical on load, so the file does not store it ([what it costs](#what-it-costs)). Smaller LoRA variants
+(r1/r4, INT4) have not been run on this task, so that ratio is against r16 bf16 only.
+Every final patch fails the code-damage gate (FSA +0.007, LoRA +0.008 ΔNLL). One newer run (open diamond, one
+seed) doubled the 1M-budget recipe's training to 800 steps and scored 99.5% with 0.81M slots (1.66 MB packed,
+about 53× smaller than the adapter) at +0.001 on code (details below).
 
 <p align="center">
   <img src="figures/fig_story_generalisation.png" width="820" alt="Grouped bars: FSA versus LoRA on unseen phrasings, indirect questions and pronoun questions.">
@@ -68,7 +75,11 @@ answer (strict scorer).
 **Closing the gap on 300 colliding facts.** With two adjacent layers FSA fit 18.2% of the test items (earlier
 in-pair write set) and LoRA 65.7%. Spreading the write over MoE layers 3, 16, 22 and 29 and freezing the slot choice at
 step 200 took FSA to 93.2%; LoRA on the same layers reached 96.2%. Raising the slot budget from 1M to 4M took FSA
-to 99.2%, and to 16M 99.8% (599 of 600 items). One seed per point.
+to 99.2%, and to 16M 99.8% (599 of 600 items). One seed per point. Doubling the 1M-budget run to 800 steps
+gave 99.5% (597 of 600) on one seed; that run is not on this chart because it changes training length rather than
+budget, and because run-to-run variance also contributes to it (see [results](#results-forced-zero-mask-2026-10-13)). The spread placement is not clean everywhere: for
+the per-person banks, a spread placement that includes layer 3 (layers 3, 16, 22, 29) failed the damage gate
+(FineWeb +0.017, code +0.015), while mid-layer banks (layers 12–20) were much cleaner (at most +0.005 on any panel).
 
 <p align="center">
   <img src="figures/fig_story_damage.png" width="900" alt="Damage to general text on WikiText, FineWeb-Edu and Python code for FSA, LoRA, dense fp low-rank and dense ternary low-rank writes.">
@@ -79,12 +90,18 @@ to 99.2%, and to 16M 99.8% (599 of 600 items). One seed per point.
 instead of into the forced zeros (1 person × 100 facts, matched Adam recipe, one seed, an interim result) reaches
 100% recall and costs +2.04 nats on WikiText. The tested small forced-zero patches left these panels within noise;
 the dense ternary low-rank cell did not. Larger forced-zero patches are not free either: the 300-fact patches cost
-+0.011 (4M budget) and +0.007 (16M) on code, above the +0.003 gate.
++0.011 (4M budget) and +0.007 (16M) on code, above the +0.003 gate. The 800-step 1M-budget patch
+(light blue, one seed) measures +0.001 ± 0.002 on code: under the gate on the point estimate, but the one-sided 95%
+upper bound is above it. Its WikiText gain (−0.028) comes from training with WikiText rehearsal.
 
 Takeaways:
 
 - Knowledge can be stored in slots that are guaranteed zero by the weight format, with the base frozen, and
-  revoked exactly. Every patch on this page revokes bit-exactly.
+  revoked exactly. Every patch on this page revokes bit-exactly as a whole patch: zeroing its slots restores the
+  exact base. Disjoint slots give mechanical revoke; functional independence requires training against the base forward.
+  A bank trained with another bank resident depends on it (−99.5 points, paired 95% CI [−100, −98.5]); mask-only
+  training (resident coordinates excluded, resident forward not applied) keeps it independent at 99.5% (capacity
+  cost −0.5 points). One seed.
 - On the fact tasks measured, FSA matches or beats a LoRA r16 adapter on held-out recall while writing one to two
   orders of magnitude fewer values, and it transfers far better to question forms it was never trained on.
 - On the hardest task, successive recipe changes closed the gap: spread placement plus a frozen slot choice
@@ -102,11 +119,12 @@ Takeaways:
 | same 40 facts, asked in unseen phrasings | 88–90% (2 seeds) | 62–65% (2 seeds) |
 | same 40 facts, indirect questions | 44–51% (2 seeds) | 22.5–30% (2 seeds) |
 | same 40 facts, pronoun questions | 75% (1 seed) | 47.5% (1 seed) |
-| 3 people × 100 conflicting facts (test) | 99.8% with a 16M-slot budget cap (7.7 MB), 99.2% with 4M (5.8 MB), 91.3% with 1M (seed 1, layers 3,16,22,29; code damage +0.007 / +0.011 / +0.004, all fail the 0.003 gate) | 96.2% (seed 1, same layers; 88 MB bf16; code damage +0.008, also fails) |
+| 3 people × 100 conflicting facts (test) | 99.8% with a 16M-slot budget cap (3.3 MB packed), 99.2% with 4M (2.66 MB), 91.3% with 1M (1.66 MB) (seed 1, layers 3,16,22,29; code damage +0.007 / +0.011 / +0.004, all fail the 0.003 gate); 800 steps instead of 400 at 1M: 99.5% (1.66 MB packed, code +0.001 ± 0.002, one seed) | 96.2% (seed 1, same layers; 88 MB bf16 / 177 MB saved fp32; code damage +0.008, also fails) |
 | new rules (EP-1, multiple choice) | 95.25% / 94.25% dev, 98.2% / 98.2% test (2 seeds) with sleeping-unit gating on 10% of units | 94.75% / 91.25% dev, 98.2% / 96.5% test (2 seeds); dense all-layer fine-tuning 96% dev at +0.20 damage |
 
 The four headline fact and rule claims were checked retroactively by an independent result review against the raw
-logs (verdict: confirmed, with caveats). The 300-fact ladder results (4M and 16M) were reviewed the same way.
+logs (verdict: confirmed, with caveats). The 300-fact ladder results (4M and 16M) and the 800-step 1M run were
+reviewed the same way.
 
 ## Where it stands and what comes next
 
@@ -123,19 +141,32 @@ and 98.2% / 98.2% test (56/57) at +0.001 / +0.002 damage on two seeds; LoRA reac
 ([EP-1](#ep-1-learning-rules-instead-of-facts)).
 
 Wins on recall, damage open: many conflicting facts. On 3 people × 100 conflicting facts, spread over layers 3, 16,
-22 and 29, raising the slot budget from 1M to 4M (1.6M slots actually used, 5.8 MB) lifts FSA from 91.3% to 99.2%
-test recall, and a 16M cap (2.13M slots, 7.7 MB) to 99.8%, above LoRA r16's 96.2% (one seed each, same test split,
+22 and 29, raising the slot budget from 1M to 4M (1.6M slots actually used, 2.66 MB packed) lifts FSA from 91.3% to
+99.2% test recall, and a 16M cap (2.13M slots, 3.3 MB packed) to 99.8%, above LoRA r16's 96.2% (one seed each, same test split,
 all scored at their final step). The cost is code-panel damage: +0.011 ΔNLL at 4M and +0.007 at 16M, both failing
-the 0.003 gate; LoRA's +0.008 fails it too. Replication seeds are queued and a preservation-term arm is running.
+the 0.003 gate; LoRA's +0.008 fails it too. Trained for 800 steps instead of 400, the 1M recipe reaches 99.5% (0.81M
+slots, 1.66 MB packed) at +0.001 ± 0.002 on code, which passes the gate on the point estimate but not on the
+one-sided 95% upper bound. That is one seed, and the 400- and 800-step runs of the same recipe diverge from the
+second optimizer update (cause not yet isolated: GPU nondeterminism or a step-count-dependent code path; a same-command replay is queued), so the jump from 91.3% mixes training length with run-to-run
+variance. Two more seeds of this run and LoRA r16 at 800 steps (the fair comparison) are queued, and a
+preservation-term arm is running.
 Dropping WikiText rehearsal made damage worse (FineWeb +0.013, code +0.015), which means rehearsal had been masking
 expert damage rather than causing it. Both methods write exactly the same matrices (routed-expert up and down
 projections). Validation recall of the original 1M-budget run (the 93.2% patch) peaked at 95.8% at step 300 and fell
-to 90.8% by the scored step 400, so late-training decline is a live suspect; the control rerun rose (91.7% to 93.3%)
-and the 4M run shows little decline (100% at step 300, 99.2% at 400). Freezing the slot selection early stays the
-best schedule, and Adam-based writers remain far behind Bop ([results](#results-forced-zero-mask-2026-10-13)).
+to 90.8% by the scored step 400. The no-rehearsal arm fell too (97.5% to 91.7% between steps 300 and 400); the
+control rerun rose (91.7% to 93.3%) and the 4M run shows little decline (100% at step 300, 99.2% at 400). The 800-step
+1M run did not decline at all (validation 100% from step 400 through 800), so the 400-step drops may be run-to-run
+variance rather than instability. Arms aimed at the decline (a slower Bop EMA after the freeze, and a rising
+threshold) are still running. Freezing the slot selection early stays the best schedule, and Adam-based writers
+remain far behind Bop ([results](#results-forced-zero-mask-2026-10-13)).
 
 Promising: isolated per-person banks, each holding one person's 100 facts, reach 96–100% validation; whether they
 work when all are loaded at once is the next measurement ([isolated banks](#isolated-banks)).
+
+Repository patches: measured on our own agent sessions (998 transcripts, 89M tool-result tokens), only 4.9% of
+tokens were stable orientation (file discovery and re-reads of files unchanged for a week), while 48% were reads of
+files changed within a week. Token savings from a repository patch would be small; its value would have to come from
+navigation and override competence.
 
 Open problems, in the order we are working on them:
 
@@ -159,12 +190,19 @@ Open problems, in the order we are working on them:
   wider block encoding beside the packed kernel. Neither exists yet, so no serving cost is measured for these
   patches. For the earlier in-pair variant, which keeps the format legal, no slowdown was detected on synthetic
   patches ([serving](#serving-in-pair-variant)).
-- Revoke scope: zeroing the mask restores the base exactly. Whether one session's slots can be removed after
-  later sessions trained on top of it is being measured (sequential-revoke arms are at 100% and 99.2% validation;
-  the base control is pending).
+- Revoke scope: revoke is bit-exact for a whole patch: zeroing the patch's slots restores the exact base.
+  Separate slots make revoke mechanical, but a bank stays functionally independent only if it was trained against
+  the base forward. In the sequential-revoke test (bank A for one person, then bank B for another, 300 facts world, one seed), B trained with A
+  loaded recalled 99.0% of its own facts with A present and 0% after A was revoked (bit-exact revoke). Mask-only
+  training (A's coordinates excluded, A's forward not applied) kept 99.5% alone, and B trained on the plain base 100%.
+  A bank trained with another bank resident therefore depends on it (−99.5 points, paired 95% CI [−100, −98.5]);
+  mask-only training keeps it independent at a capacity cost of −0.5 points, and is now the protocol for every
+  sequential write.
 
-Every result before 2026-10-11 used an *in-pair* write set (zeros inside already-selected pairs), which is disjoint
-from the forced-zero mask. Those results, including the serving benchmarks, are kept in
+Every result before 2026-10-11 used an *in-pair* write set (zeros inside already-selected pairs: 66.8M slots in MoE
+layers 14–15, served by the existing packed kernel), which is disjoint from the current forced-zero mask (the two
+unselected pairs of every block, about half of every routed-expert weight matrix; patches break pair8 block
+occupancy and their serving path is not built). Those results, including the serving benchmarks, are kept in
 [earlier results](#earlier-results-in-pair-variant-2026-10-10).
 
 The rest of this page goes one level deeper at a time: the name, the weight format, the method and what it costs,
@@ -219,16 +257,43 @@ The mask rule is fixed: a block’s selected pairs are the ones holding a base n
 pair index if fewer hold one. It is computed once from the released export (sha256 `25a85fd2…`) and never recomputed
 from patched weights. Patch values are plain ternary at the row’s scale α.
 
-Filling forced-zero pairs can give a block more than two nonzero pairs, making it illegal pair8. Serving therefore
-needs either a sparse overlay beside the packed kernel or the touched blocks re-encoded in a wider format; that
-kernel does not exist yet and nothing below reports a serving cost for forced-zero patches.
+Filling forced-zero pairs can give a block more than two nonzero pairs, breaking pair8 block occupancy. Serving
+therefore needs either a sparse overlay beside the packed kernel or the touched blocks re-encoded in a wider format;
+that path is not built, so its overhead is unmeasured. It is potentially low, since patches are sparse, but nothing
+below claims or reports a serving cost for forced-zero patches.
+
+Two write sets appear on this page and they should not be confused:
+
+| | in-pair (earlier, until 2026-10-10) | forced-zero (current) |
+|---|---|---|
+| which zeros | zeros inside the pairs pair8 already selected | the two pairs pair8 did not select in every 8-weight block |
+| capacity | 66,807,179 slots in MoE layers 14–15 | exactly half of every routed-expert weight matrix: about 227M slots in MoE layers 14–15 and roughly 3.6 billion model-wide (estimated from the 906 MB bf16 size of the layer 14–15 experts, see [serving](#serving-in-pair-variant), times 32 MoE layers) |
+| pair8 legality | kept: the block still has at most two active pairs | broken: a block can end up with three or four active pairs |
+| serving | the existing packed kernel; synthetic patches measured with no detectable slowdown | needs a sparse overlay or wider encoding; not built, overhead unmeasured |
 
 ### What it costs
 
-Patch storage records positions and signs. The best forced-zero patches use 175k–760k slots, a few hundred kilobytes
-to about 2 MB, versus 44 MB for a bf16 LoRA r16 at the same two layers; the 300-fact patches are 2.95 MB (0.81M
-slots), 5.8 MB (1.6M slots) and 7.7 MB (2.13M slots) against 88 MB. Serving cost for the forced-zero overlay is
-pending. For the earlier in-pair variant no slowdown was detected on synthetic patches
+Patch storage is measured as a lossless packed file: delta-coded slot coordinates, packed signs and a JSON metadata
+header. The per-row scale (α, the mean |nonzero base weight| of each of 1,376,256 rows) is not stored. The loader
+re-derives it from the base and checks that it is bit-identical. Every file round-trips bit-identically. Sizes are
+the file as shipped, header included, in decimal MB. The 300-fact patches are 1.66 MB (0.81M slots, 1M budget),
+2.66 MB (1.6M slots, 4M) and 3.31 MB (2.13M slots, 16M cap) against 88 MB for a bf16 LoRA r16 on the same four
+layers. The 1M file breaks down into 1.03 MB of positions, 0.10 MB of signs and a 0.53 MB metadata header.
+
+| 3 people × 100, seed 1 | earlier estimate | packed, scale derived (measured) | packed, scale stored | saved `final.pt` | per fact (derived) | vs LoRA r16 |
+|---|---|---|---|---|---|---|
+| FSA, 1M budget (GL_CTRL_s1; the 800-step GL_ECTRL_s1 is also 1.66 MB, 7.14 MB stored) | 2.95 MB | 1.66 MB | 7.15 MB | 10.44 MB | 5.5 KB | ≈ 53× |
+| FSA, 4M budget (GL_B4M_s1) | 5.80 MB | 2.66 MB | 8.14 MB | 14.38 MB | 8.9 KB | ≈ 33× |
+| FSA, 16M budget (GL_B16M_s1) | 7.74 MB | 3.31 MB | 8.80 MB | 17.06 MB | 11.0 KB | ≈ 27× |
+| LoRA r16 (R4_lora16_rand4_s1) | 88.1 MB (bf16) | 88.1 MB (bf16) | 88.1 MB (bf16) | 176.7 MB (fp32) | 294 KB | 1× |
+
+Per fact is total size divided by the 300 facts. Storing the scale would add 5.5 MB to every file of these four
+layers, whatever its slot count. Smaller patches are cheap the same way: each 100-fact per-person bank is
+1.51–1.64 MB packed (about 15–16 KB per fact; 7.0–7.1 MB with the scale stored), and the 40-fact patch on layers
+14 and 15 is 0.51 MB (about 12.7 KB per fact; 3.25 MB stored). The header is about 0.5 MB on every four-layer
+file and 0.25 MB on the two-layer one, so it is about a third of the smaller patches; compacting it is planned. LoRA r1 and r4, and INT4 adapters, have not
+been compared on the 300-fact task. Serving cost for the
+forced-zero overlay is pending. For the earlier in-pair variant no slowdown was detected on synthetic patches
 ([serving](#serving-in-pair-variant)).
 
 ### Why this matters
@@ -239,7 +304,7 @@ There are three common ways to give a deployed model new knowledge, and each has
 |---|---|---|---|---|
 | where the knowledge lives | the context window | an external database | new adapter weights | the pair8 forced-zero mask of the existing weights |
 | new parameters | none | a separate store | yes | none |
-| extra compute per token | grows with the context | retrieval + longer context | an extra matmul (unmerged) | forced-zero: sparse overlay, pending; earlier in-pair variant: none measured |
+| extra compute per token | grows with the context | retrieval + longer context | an extra matmul (unmerged); none if merged | forced-zero: needs a sparse overlay that is not built, overhead unmeasured; earlier in-pair variant: no slowdown detected on the existing kernel |
 | deployed model file | unchanged | unchanged | adapter file, or a merged bf16 copy | base file unchanged plus a small patch (overlay format pending) |
 | undo one user's knowledge | drop the text | delete the records | drop the adapter | zero the mask: exact base |
 
@@ -267,7 +332,9 @@ ordinals (0–31), the indices the training code takes.
 | LoRA r16 + penalty | 93.75% / 92.5% / 90.0% | 96.25% / 93.75% / 88.75% | +0.0012 to +0.0015 | 22M params | 3 |
 | LoRA r4 / r1 | 96.25% / 93.75% | 96.25% / 93.75% | ~0 | 5.5M / 1.4M params | 1 each |
 
-The 2-layer FSA patch (seed 0) re-measured on held-out FineWeb-Edu gives −0.0007 ± 0.0018.
+The 2-layer FSA patch (seed 0) re-measured on held-out FineWeb-Edu gives −0.0007 ± 0.0018. A 40-fact patch is
+0.51 MB as a measured packed file with the scale re-derived from the base (about 12.7 KB per fact; 3.25 MB with
+the scale stored; the earlier estimate was 0.63 MB) ([what it costs](#what-it-costs)).
 
 **2 people × 50 shared attributes with conflicting values (200 test items)**
 
@@ -295,23 +362,47 @@ Every attribute here conflicts across people: 60 attributes are three-way and 60
 93.2% GEN, damage WikiText −0.025 (rehearsal-trained), FineWeb −0.005, code +0.009; LoRA r16 96.2% GEN. LoRA wins
 that comparison by 3 points on one seed each. With a 4M-slot budget (gap-closing ladder, same seed and split, current
 training code) FSA reaches 99.2% test GEN (WikiText −0.036 with rehearsal, FineWeb −0.005, code +0.011), against
-91.3% for the 1M control rerun on the same code. With a 16M cap (2.13M slots actually written, 7.7 MB) FSA reaches
+91.3% for the 1M control rerun on the same code. With a 16M cap (2.13M slots actually written, 3.3 MB packed) FSA reaches
 99.8% test GEN (599/600), WikiText −0.039 with rehearsal, FineWeb −0.002, code +0.007. Code damage falls as the
 budget grows from 4M to 16M but still fails the 0.003 gate, as LoRA's +0.008 does. One seed. The LoRA run used an
 earlier version of the training code than the ladder.
+Every ladder row is a single seed. Two runs of the same recipe and seed that differ only in step count diverge from the
+second optimizer update (cause not yet isolated), so single-seed differences of a few points may be run-to-run
+variance; a recipe is promoted only after two seeds.
+
+A longer run of the 1M-budget recipe (GL_ECTRL_s1, seed 1, same split, 800 steps with slot selection still frozen
+at step 200) reaches 99.5% test GEN (597/600), with WikiText −0.028
+(rehearsal-trained), FineWeb −0.007 ± 0.002 and code +0.0010 ± 0.0019. Code passes the 0.003 gate on the point
+estimate; the one-sided 95% upper bound does not. It writes 0.81M slots, 1.66 MB packed (about 53× smaller than
+LoRA r16 bf16). Validation GEN at steps 100 / 200 / 300 / 400 / 500–800 was 27.5% / 47.5% / 96.7% / 100% / 100%,
+with no late decline. Caveats: one seed, and the 400- and 800-step runs of this recipe diverge from the second
+optimizer update (cause not yet isolated: GPU nondeterminism or a step-count-dependent code path; a same-command replay is queued) (at step 400 this run was already at 100% validation where the
+400-step rerun was at 93.3%), so the jump from 91.3% mixes training length with run-to-run variance. LoRA r16 at
+800 steps, the fair comparison, and seeds 0 and 2 are queued. It replaces the 16M row as the headline only if a
+second seed reaches at least 99%.
 
 Placement is clearly part of the earlier gap: two adjacent layers are too narrow for 300 colliding facts, for LoRA as
 well as FSA. Slot churn is the likely other part: while the budget keeps re-choosing slots it can evict slots holding
 learned facts, and recall climbs sharply right after selection is frozen. These runs do not separate freezing from
 simply training longer, so churn remains a diagnosis consistent with the jump rather than an isolated cause. The
 two-layer rows are earlier checkpoints; later ones reached 27.5% (FSA, step 700) and 60.0–64.2% (LoRA, step 1100).
-Training is deterministic: a replicate matched its original exactly at step 100.
+An earlier two-layer replicate matched its original exactly at step 100; the 300-fact ladder runs with different step counts diverge from the second optimizer update (see the ladder caveat below).
 
 Refreshing slot selection for longer hurts. With 800 steps, freezing selection at step 200 reaches 100% validation
-by step 400, against 69% when freezing at step 600 and 52% at step 200 when never freezing. Adam-based writers
-(straight-through ternary, and quinary slots under Adam) stay far behind Bop at the same budget and steps (best
-72.8% test). Whether finer slot values help is therefore still open; it needs a Bop-native quinary writer, which
-does not exist yet.
+by step 400. Freezing at step 600 collapses to 48% validation at step 500 (val ΔNLL +0.086) but recovers to 100% by step 800
+and scores 99.5% test (code +0.003, one seed); never freezing reaches about 50% by step 300. All of these are 3 people × 100, seed 1, validation GEN.
+
+Recall sometimes declined after the freeze in 400-step runs. Between steps 300 and 400 the no-rehearsal arm fell from
+97.5% to 91.7% validation, and the original recipe from 95.8% to 90.8%. The 800-step 1M run showed no decline (100%
+validation from step 400 through 800), so the earlier drops may be run-to-run variance rather than a property of the
+recipe; one run cannot settle that. Two arms aimed at the decline are still running: a slower Bop EMA after the
+freeze, and a rising threshold.
+
+Adam-based writers (straight-through ternary, and quinary slots under Adam) stay far behind Bop at the same budget
+and steps (best 72.8% test). Whether finer slot values help is therefore still open; it needs a Bop-native quinary
+writer, which does not exist yet. A per-row learned scale under Bop (ternary slots plus one learned fp16 scale per
+output row; 1M budget, 400 steps, seed 1) reaches 99.5% test GEN but costs +0.007 on code (fails the gate) and
+4.45 MB packed (the learned fp16 scale is kept, 2.75 MB), against 1.66 MB for plain ternary.
 
 ### Realistic questions
 
@@ -340,7 +431,8 @@ layers 12, 14, 17, 20; validation GEN at the final step 300):
 | each bank may use an unpartitioned 50% sample of the forced mask | 96.7% | 99.2% | 99.2% |
 | each bank gets a disjoint third of that sample | 98.3% | 98.3% | 100% |
 
-One seed; validation scores 60 of each bank's 100 facts. A sixth of the reserve was enough for each person's 100
+One seed; validation scores 60 of each bank's 100 facts. Each bank is 1.51–1.64 MB as a packed file (about 15–16 KB per
+fact). A sixth of the reserve was enough for each person's 100
 facts here. The open question is composition: recall when all banks are resident in one model, and choosing the
 right bank for a question. The current disjoint split is block-level, so different people's banks can share hidden
 units; a rerun with whole units per bank is queued.
@@ -351,6 +443,11 @@ Layer matters. On 40 facts with one layer each (test TF): layer 12 98.75%, layer
 92.5%, layer 25 88.75%, layer 6 86.25%. Middle layers (12–20) are best. Choosing layers by causal tracing was the
 worst option on the 300-fact task (7–10% validation), consistent with reports that causal tracing does not predict
 where edits work.
+
+Spread placements cost more damage. For per-person banks, a spread placement including layer 3 (layers 3, 16, 22,
+29, block-partitioned) failed the damage gate (FineWeb +0.017, code +0.015), while the mid-layer banks (layers 12,
+14, 17, 20) were clean to borderline (at most +0.005 on any panel; code +0.004 for the block-partitioned set). The 300-fact ladder results use the spread placement and fail the code gate as
+well.
 
 ### Damage panels
 
@@ -434,6 +531,9 @@ composition not yet measured). The open problems are now about access and about 
 - Cheap writes: the fewest training steps per new bank. For small writes the slot support must stay free to turn
   over (locking it early gave 0–5% on 10 facts); stop each fact once learned.
 - Preservation at scale: a preservation term that keeps larger patches under the 0.003 gate on every panel.
+- Recurrent state: a fair one-head rotation inside the hybrid costs no perplexity (2 seeds, reviewed); rotation
+  everywhere regresses, and phase/resonance addressing is closed (details in the oscillation track's internal
+  findings).
 
 Directions:
 
@@ -586,7 +686,7 @@ forced-zero mask ([EP-1 above](#ep-1-learning-rules-instead-of-facts)). Multi-se
 
 All serving measurements below use synthetic ternary in-pair patches, including the same kernel, file size, memory
 and byte-identical packed-file revoke checks. The forced-zero design needs its own overlay kernel, which has not been
-built, so its serving cost, file size and memory are pending.
+built, so its serving cost and memory are pending; its packed file sizes are in [what it costs](#what-it-costs).
 
 Measured on the released lambda GGUF, with the in-pair patch written into the packed pair8 experts
 ([`experiments/serving/`](experiments/serving/README.md)). Synthetic patches use uniformly drawn slots with random
@@ -717,27 +817,52 @@ estimate, rather than proving there is no removable slack; exact leave-out by ex
   method. Two-fact questions score near zero for FSA and LoRA alike with the strict scorer; a lenient rescore is pending.
 - Seeds. Facts winners have 2–3 seeds; the 300-fact ladder has one seed; EP-1 gating and its LoRA comparison have
   two seeds at 10% of units and one at 20%, and the 57-item rules test set separates arms by one or two items.
-- 300-fact task. The 4M and 16M-budget wins are one seed each; the 1M recipe lost to LoRA on the same seed and
-  declined late in training. Isolated banks have not yet been measured with all banks resident.
+- 300-fact task. The 4M and 16M-budget wins are one seed each; the 1M recipe at 400 steps lost to LoRA on the same
+  seed and declined late in training. At 800 steps it reached 99.5% without a decline, on one seed, with run-to-run
+  variance mixed into the gain and no 800-step LoRA comparison yet. Isolated banks have not yet been measured with all banks resident.
 - Multi-tenant serving. A patch lives inside the weights, so one copy of the weights serves one user's patch at a
   time. LoRA adapters can be batched across many users on one shared base. FSA fits single-tenant and on-device use.
-- Revoke scope. Zeroing the mask restores the base exactly. Removing one session's influence after later sessions
-  have learned on top of it is not guaranteed by zeroing that session's slots alone; multi-session tests are
-  running.
+- Revoke scope. Revoke is bit-exact for a whole patch: zeroing the patch's slots restores the exact base. Selective
+  unlearning is only safe when later sessions were trained against the base forward: a bank trained while an earlier
+  bank was loaded became dependent on it (0% recall alone after the earlier bank was revoked, one seed), while mask-only training (the earlier bank's slots excluded, its forward not
+  applied) kept 99.5% (capacity cost −0.5 points).
 - Format. Forced-zero patches can exceed pair8’s two-pair limit, so they need a sparse overlay or a wider block
-  encoding; serving cost, file size and memory are not measured yet.
+  encoding; serving cost and memory are not measured yet. Packed file sizes are measured, with the per-row scale
+  re-derived from the base and verified bit-identical on load; about 0.5 MB of each file is a JSON metadata header.
 - Privacy. Knowledge in weights can be elicited from the model; a per-user model is the safe deployment.
 
 ## Reproduce
 
+The current results use `--method fsa_forced` (the forced-zero mask). Commands below are the logged command lines;
+they need one 32 GB GPU, the lambda 8B export and the mesh-lambda code (see the harness header), and run from a box
+holding the export and the `data/` anchor and evaluation panels.
+
 ```bash
-# needs one 32 GB GPU, the lambda 8B export and the mesh-lambda code (see the harness header)
+# 3 people × 100 conflicting facts, 4M slot budget (99.2% test, GL_B4M_s1).
+# Use --budget 16000000 for the 16M run (99.8%) and --budget 1000000 for the 1M control (91.3%).
+python experiments/end_to_end/e2e_fsa.py --method fsa_forced --optim bop --bop-gamma 0.05 --bop-tau 0.7 \
+    --local-lambda 10 --support-score netcost --cost-rel 1 --rehearsal-frac 0.2 --no-churn --budget 4000000 \
+    --people 3 --facts-per-person 100 --shared-attrs 30 --fact-batch 40 --val-facts 60 --conv-test --conv-facts 60 \
+    --steps 400 --eval-every 100 --micro 6 --no-pareto --sparse-state --expert-checkpoint --layers 3,16,22,29 \
+    --slot-frac 0.5 --anchor data/anchor-wikitext.json --anchor-bs 2 --anchor-len 96 --answer-only \
+    --eval-set data/eval-wikitext.json --aug --extra-eval-sets data/eval-fineweb.json,data/eval-code.json \
+    --train-audit 120 --strata --fast-moe exact --base-cache base_cache --seed 1
+python figures/make_story_figs.py                                # rebuild the charts at the top of this page
+```
+
+No exact training command line was logged for the 40-fact runs (F40_bopck_s0/s1), so none is given here. Their
+recipe flags (Bop τ 0.7, λ=10, 300k netcost budget, rehearsal 0.2, layers 14,15) appear in the load-evaluation
+command in [`experiments/end_to_end/C56_REPORT.md`](experiments/end_to_end/C56_REPORT.md) (section PG_eval_fla2).
+
+Earlier in-pair variant (2026-10-10 results only; `fsa_free` writes zeros inside already-selected pairs, not the
+forced-zero mask):
+
+```bash
 python experiments/end_to_end/e2e_fsa.py --method fsa_free --optim bop --bop-tau 0.7 --bop-gamma 0.05 \
     --layers 14,15 --answer-only --aug --anchor <anchor.json> --eval-set <eval.json> --steps 300 --out bop.json
 python experiments/end_to_end/e2e_fsa.py --method lora --rank 16 --lr 3e-4 --layers 14,15 --local-lambda 100 \
     --answer-only --aug --anchor <anchor.json> --eval-set <eval.json> --steps 300 --out lora.json
 python figures/make_e2e_figs.py experiments/end_to_end/data      # rebuild the in-pair figures from the saved runs
-python figures/make_story_figs.py                                # rebuild the charts at the top of this page
 ```
 
 Every run, including the ones that did not work, is described in

@@ -16,6 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 # categorical palette (validated for colour-vision deficiency in adjacent order): FSA, LoRA, dense fp, dense ternary
 C_FSA, C_LORA, C_DFP, C_DTERN = "#2a78d6", "#eb6834", "#1baf7a", "#6250d6"
+C_FSA_LIGHT = "#9cc3ef"  # single-seed 3p×100 FSA bar (damage chart)
 INK, INK2, INK3, GRID = "#0b0b0b", "#52514e", "#8a8984", "#e6e5e1"
 
 plt.rcParams.update({
@@ -59,13 +60,39 @@ TASKS = [
      "3 seeds each · FSA slots 733k–757k (drawn at the midpoint)"),
     ("3 people × 100 conflicting facts\n(600 test items)",
      {"fsa": [(0.81e6, 91.3), (1.60e6, 99.2), (2.13e6, 99.8)],               # GL_CTRL_s1 (1M), GL_B4M_s1 (4M), GL_B16M_s1 (16M)
+      "fsa_one": [(0.81e6, 99.5)],                                          # GL_ECTRL_s1 (1M budget, 800 steps)
       "lora16": [(44.0e6, 96.2)]},                                           # R4_lora16_rand4_s1
-     "seed 1 only · MoE layers 3,16,22,29 · final step · budgets 1M / 4M / 16M"),
+     "seed 1 only · MoE layers 3,16,22,29 · final step · budgets 1M / 4M / 16M\nopen diamond: 1M trained 800 steps (one seed)"),
 ]
 
 
+# 3p×100 patch bytes, seed 1 (MB decimal), measured 2026-10-14 (LEADERBOARD.md "derived-scale packed sizes";
+# result review confirmed-with-caveats, reviews/experiments/c62_sizes_result/). packed = lossless packed file
+# as shipped (delta-coded coordinates + packed signs + JSON metadata header), bit-identical round trip; the per-row
+# fp32 scale is re-derived from the base and verified bit-identical on load. "stored" = same file with the scale
+# stored. Per fact = total / 300 facts (KB). Ratio = LoRA r16 bf16 (88,080,384 B) / FSA packed bytes.
+# GL_CTRL_s1 (1M) 1,659,543 B, GL_B4M_s1 (4M) 2,655,054 B, GL_B16M_s1 (16M) 3,311,039 B,
+# GL_ECTRL_s1 (1M, 800 steps) 1,657,298 B, R4_lora16_rand4_s1 (LoRA r16 bf16)
+BYTES_TABLE = ("          MB  stored KB/fact vs LoRA\n"
+               "FSA 1M   1.66   7.15    5.5    53×\n"
+               "FSA 4M   2.66   8.14    8.9    33×\n"
+               "FSA 16M  3.31   8.80   11.0    27×\n"
+               "FSA 1M*  1.66   7.14    5.5    53×\n"
+               "LoRA r16 88.1   88.1    294     1×\n\n"
+               "FSA: measured lossless packed file,\n"
+               "  scale re-derived from the base\n"
+               "  (bit-identical on load). 1M file:\n"
+               "  1.03 MB positions, 0.10 MB signs,\n"
+               "  0.53 MB metadata header.\n"
+               "stored: same file with the per-row\n"
+               "  fp32 scale stored\n"
+               "LoRA: bf16 parameters\n"
+               "per fact = size / 300 facts\n"
+               "* 1M budget, 800 steps (GL_ECTRL_s1)")
+
+
 def fig_recall_vs_size():
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4.9), sharey=True)
+    fig, axes = plt.subplots(1, 4, figsize=(17, 5.3), sharey=True, gridspec_kw={"width_ratios": [1, 1, 1, 0.9]})
     for ax, (title, series, sub) in zip(axes, TASKS):
         style(ax)
         ax.set_xscale("log")
@@ -79,6 +106,10 @@ def fig_recall_vs_size():
             xs = [p[0] for p in series[key]]
             ys = [p[1] for p in series[key]]
             ax.scatter(xs, ys, s=s, marker=m, color=c, edgecolor="white", linewidth=1.5, zorder=5)
+        if "fsa_one" in series:  # single-seed 800-step point: open marker so it reads as provisional
+            xs = [p[0] for p in series["fsa_one"]]
+            ys = [p[1] for p in series["fsa_one"]]
+            ax.scatter(xs, ys, s=110, marker="D", facecolor="white", edgecolor=C_FSA, linewidth=2, zorder=6)
         ax.set_title(title, loc="left", fontsize=11.5)
         ax.text(0.01, 0.03, sub, transform=ax.transAxes, fontsize=8.5, color=INK3, ha="left", va="bottom")
         ax.set_xlabel("values written (log scale)")
@@ -94,14 +125,21 @@ def fig_recall_vs_size():
                      fontsize=9, color=INK2)
     axes[1].annotate("LoRA r16 94.5–95.5%", (22e6, 95.0), xytext=(0, -20), textcoords="offset points", ha="center",
                      fontsize=9, color=INK2)
-    axes[2].annotate("FSA, 4M budget\n99.2% · 5.8 MB", (1.60e6, 99.2), xytext=(-12, -6), textcoords="offset points",
-                     ha="right", va="top", fontsize=9, color=INK2)
-    axes[2].annotate("FSA, 16M budget\n99.8% · 7.7 MB", (2.13e6, 99.8), xytext=(12, 2), textcoords="offset points",
-                     ha="left", va="top", fontsize=9, color=INK2)
-    axes[2].annotate("FSA, 1M budget\n91.3% · 2.95 MB", (0.81e6, 91.3), xytext=(0, 10), textcoords="offset points",
-                     ha="center", va="bottom", fontsize=9, color=INK2)
-    axes[2].annotate("LoRA r16\n96.2% · 88 MB bf16", (44e6, 96.2), xytext=(0, -14), textcoords="offset points",
+    axes[2].annotate("FSA, 4M budget\n99.2%", (1.60e6, 99.2), xytext=(4, -12), textcoords="offset points",
                      ha="center", va="top", fontsize=9, color=INK2)
+    axes[2].annotate("FSA, 16M budget\n99.8%", (2.13e6, 99.8), xytext=(12, 2), textcoords="offset points",
+                     ha="left", va="top", fontsize=9, color=INK2)
+    axes[2].annotate("FSA, 1M budget\n91.3%", (0.81e6, 91.3), xytext=(0, 10), textcoords="offset points",
+                     ha="center", va="bottom", fontsize=9, color=INK2)
+    axes[2].annotate("1M, 800 steps\n99.5% · 1.66 MB packed", (0.81e6, 99.5), xytext=(-12, 0), textcoords="offset points",
+                     ha="right", va="center", fontsize=9, color=INK2)
+    axes[2].annotate("LoRA r16\n96.2%", (44e6, 96.2), xytext=(0, -14), textcoords="offset points",
+                     ha="center", va="top", fontsize=9, color=INK2)
+    # patch bytes: packed file (scale derived) and scale stored, total and per fact (bytes / 300 facts)
+    axes[3].axis("off")
+    axes[3].set_title("3 people × 100: patch size\n(packed, scale derived)", loc="left", fontsize=11.5)
+    axes[3].text(0.0, 0.93, BYTES_TABLE, transform=axes[3].transAxes, ha="left", va="top", fontsize=8.2,
+                 family="DejaVu Sans Mono", color=INK2, linespacing=1.6)
     handles = [Line2D([], [], marker="D", color=C_FSA, ls="", ms=9, label="FSA: ternary writes into the forced zeros (frozen base)"),
                Line2D([], [], marker="o", color=C_LORA, ls="", ms=9, label="LoRA adapter on the same expert matrices")]
     fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.005, 0.935), ncol=2)
@@ -109,9 +147,11 @@ def fig_recall_vs_size():
                  fontsize=14, fontweight="bold", y=0.985)
     footnote(fig, "Test = held-out phrasings, greedy generation, whole answer must match. x: FSA = filled ternary slots, LoRA = adapter "
                   "parameters (bf16 bytes = 2 × params; int4 factors would be 4× smaller). Lambda 8B ternary MoE, 725B export. "
-                  "3p×100 (MoE layers 3,16,22,29): one seed each; every final patch fails the +0.003 code-damage gate (FSA +0.004 / +0.011 / +0.007 at 1M / 4M / 16M, "
-                  "LoRA +0.008). Recipes are tuned per method (rehearsal, penalty, steps differ), so this compares tuned recipes rather than isolating the method.")
-    fig.tight_layout(rect=(0, 0.08, 1, 0.88))
+                  
+                  "3p×100 (MoE layers 3,16,22,29): one seed each; the 400-step patches fail the +0.003 code-damage gate (FSA +0.004 / +0.011 / +0.007 at 1M / 4M / 16M, "
+                  "LoRA +0.008); the 1M 800-step patch (open diamond) is +0.001 ± 0.002, under the gate on the point estimate but not on its 95% upper bound, "
+                  "and its 400- and 800-step runs diverge from the second update for a reason not yet isolated, as well as differing in length. Recipes are tuned per method (rehearsal, penalty, steps differ), so this compares tuned recipes rather than isolating the method.")
+    fig.tight_layout(rect=(0, 0.1, 1, 0.88))
     save(fig, "fig_story_recall_vs_size")
 
 
@@ -165,7 +205,7 @@ STEPS = [  # (x label, FSA test GEN or None, LoRA test GEN or None, lever text)
 
 
 def fig_gap_ladder():
-    fig, ax = plt.subplots(figsize=(10, 5.4))
+    fig, ax = plt.subplots(figsize=(10, 6.0))
     style(ax)
     xs = list(range(len(STEPS)))
     fsa = [s[1] for s in STEPS]
@@ -193,14 +233,15 @@ def fig_gap_ladder():
     ax.set_xlim(-0.5, 3.5)
     ax.set_ylim(0, 108)
     ax.set_ylabel("held-out recall, free generation (% exact)")
-    ax.set_title("3 people × 100 conflicting facts: successive recipes took FSA from 18% to 99.8% test recall", loc="left")
+    ax.set_title("3 people × 100 conflicting facts:\nsuccessive recipes took FSA from 18% to 99.8% test recall", loc="left")
     ax.legend(loc="lower right")
     footnote(fig, "One seed per point (seed 1 for the 4-layer runs). Step 1 (2 layers): FSA used the earlier in-pair write set, LoRA "
                   "r16 + penalty, both single-seed test runs; the steps do not isolate write set, placement, freezing and training length from one another. "
                   "The 1M-budget recipe rerun on the current code scored 91.3% (vs 93.2%). "
-                  "Patches: 5.8 MB at 4M (code damage +0.011), 7.7 MB at 16M (2.13M slots written, code +0.007); both fail the +0.003 gate, "
-                  "as LoRA's +0.008 does. Every point is final-step test scoring.")
-    fig.tight_layout(rect=(0, 0.1, 1, 1))
+                  "Patches (packed, scale derived from the base; measured): 2.66 MB at 4M (code damage +0.011), 3.31 MB at 16M (2.13M slots written, code +0.007); both fail the +0.003 gate, "
+                  "as LoRA's +0.008 does. Every point is final-step test scoring. Not shown: the 1M recipe trained 800 steps instead of 400 scored 99.5% "
+                  "(one seed; the 400- and 800-step runs also diverge early for a reason not yet isolated).")
+    fig.tight_layout(rect=(0, 0.14, 1, 1))
     save(fig, "fig_story_gap_ladder")
 
 
@@ -211,6 +252,7 @@ DAMAGE = [  # (label, colour, [WikiText, FineWeb-Edu, Python code])
     ("FSA, ternary in the forced zeros\n(40 facts, seed 0 / seed 1)", C_FSA,
      [[-0.0006, -0.0007, +0.0003], [+0.0019, -0.0007, -0.0001]]),
     ("LoRA r16, same layers\n(40 facts, seed 0)", C_LORA, [[+0.0014, +0.0002, +0.0009]]),
+    ("FSA, 3 people × 100, 1M budget,\n800 steps (seed 1, rehearsal)", C_FSA_LIGHT, [[-0.028, -0.007, +0.0010]]),
     ("dense fp low-rank, all slots\n(1 person × 100 facts, seed 0)", C_DFP, [[+0.028, +0.014, +0.013]]),
     ("dense ternary low-rank\n(1 person × 100 facts, seed 0)", C_DTERN, [[+2.04, +1.69, +0.76]]),
 ]
@@ -218,39 +260,41 @@ PANELS = ["WikiText", "FineWeb-Edu", "Python code"]
 
 
 def fig_damage():
-    fig, ax = plt.subplots(figsize=(11.5, 6.2))
+    fig, ax = plt.subplots(figsize=(11.5, 7.0))
     style(ax)
     n = len(DAMAGE)
-    w, gap = 0.19, 0.02
+    w, gap = 0.16, 0.015
     for j, (label, c, runs) in enumerate(DAMAGE):
         mean = [sum(r[k] for r in runs) / len(runs) for k in range(3)]
         xs = [i + (j - (n - 1) / 2) * (w + gap) for i in range(3)]
-        ax.bar(xs, mean, width=w, color=c, zorder=3, label=label)
+        ax.bar(xs, mean, width=w, color=c, zorder=3, label=label, edgecolor=C_FSA if c == C_FSA_LIGHT else c)
         if len(runs) > 1:
             for r in runs:
                 ax.scatter(xs, r, s=30, color="white", edgecolor=c, linewidth=1.3, zorder=4)
-        for x, v in zip(xs, mean):
-            if abs(v) >= 0.003:  # bars inside the clean band are left unlabelled; the README table has their values
-                ax.text(x, v, f"{v:+.3g}", ha="center", va="bottom", fontsize=9, color=INK2)
+        for k, (x, v) in enumerate(zip(xs, mean)):
+            if abs(v) >= 0.003 or (j == 2 and k == 2):  # bars inside the clean band are left unlabelled; the README table has their values
+                ax.text(x, max(v, 0), f"{v:+.3g}", ha="center", va="bottom", fontsize=9, color=INK2)
     ax.set_yscale("symlog", linthresh=0.003, linscale=1.2)
-    ax.set_ylim(-0.003, 4)
+    ax.set_ylim(-0.04, 4)
     ax.axhline(0, color=INK3, lw=1, zorder=2)
     ax.axhline(0.003, color=INK3, lw=1, ls=(0, (3, 3)), zorder=2)
     ax.text(-0.47, 0.0033, "+0.003 'clean' gate", ha="left", va="bottom", fontsize=8.5, color=INK3)
-    ax.set_yticks([0, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3])
-    ax.set_yticklabels(["0", "+0.003", "+0.01", "+0.03", "+0.1", "+0.3", "+1", "+3"])
+    ax.set_yticks([-0.03, -0.01, 0, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3])
+    ax.set_yticklabels(["−0.03", "−0.01", "0", "+0.003", "+0.01", "+0.03", "+0.1", "+0.3", "+1", "+3"])
     ax.set_xticks(range(3))
     ax.set_xticklabels(PANELS)
     ax.set_ylabel("damage to general text: ΔNLL vs base (nats/token, symlog)")
     ax.set_title("Small forced-zero patches leave general text within noise;\ndense ternary low-rank writes cost +0.8 to +2.0 nats per token",
                  loc="left")
-    fig.legend(loc="lower center", bbox_to_anchor=(0.5, 0.115), ncol=4, fontsize=9, handlelength=1.2, columnspacing=1.4)
+    fig.legend(loc="lower center", bbox_to_anchor=(0.5, 0.125), ncol=3, fontsize=9, handlelength=1.2, columnspacing=1.4)
     footnote(fig, "ΔNLL on held-out windows (40×512 WikiText; FineWeb-Edu and Python code panels), paired SE ≈ 0.002, so FSA and LoRA "
                   "on 40 facts (MoE layers 14,15, Bop / LoRA recipes) are within noise of zero. The dense cells are the interim 2×2 factorial "
                   "(1 person × 100 facts, matched Adam recipe, val-selected LR, one seed; sparse cells still running): dense ternary reaches "
                   "100% test recall at +2.0 nats; dense fp was LR-limited at 200 steps (17.5% recall). Larger forced-zero patches are not free: "
-                  "the 3p×100 patches are +0.011 (4M) and +0.007 (16M) on code, above the gate.")
-    fig.tight_layout(rect=(0, 0.2, 1, 1))
+                  "the 400-step 3p×100 patches are +0.011 (4M) and +0.007 (16M) on code, above the gate. The light-blue 3p×100 bar is one seed "
+                  "(1M budget, 800 steps): its WikiText gain comes from training with WikiText rehearsal; code +0.001 ± 0.002 is under "
+                  "the gate on the point estimate, not on the one-sided 95% upper bound.")
+    fig.tight_layout(rect=(0, 0.27, 1, 1))
     save(fig, "fig_story_damage")
 
 

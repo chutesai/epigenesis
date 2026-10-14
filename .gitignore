@@ -7,6 +7,7 @@
 !/LICENSE
 !/requirements.txt
 !/ROADMAP.md
+!/ARCHITECTURE.md
 
 !/paper/
 /paper/*
@@ -137,7 +138,7 @@ __pycache__/
 *.out
 *.synctex.gz
 
-ROADMAP.md
+
 
 # EP-1 epigenesis harness (synthetic user, self-study, consolidation, evaluation); outputs stay local
 !/experiments/epigenesis/
@@ -145,6 +146,7 @@ ROADMAP.md
 !/experiments/epigenesis/DESIGN.md
 !/experiments/epigenesis/EP1_PREREG.md
 !/experiments/epigenesis/EP1_V1_FINDINGS.md
+!/experiments/epigenesis/LEADERBOARD.md
 !/experiments/epigenesis/epi_common.py
 !/experiments/epigenesis/epi_gpu.py
 !/experiments/epigenesis/make_user.py
@@ -281,3 +283,19 @@ ROADMAP.md
 
 # C56 minimal review fixes and final v57 launch commands
 !/experiments/end_to_end/C56_REPORT.md
+
+# C57 lossless serialization, composition contract and panel fixes
+!/experiments/end_to_end/serialize_patch.py
+!/experiments/end_to_end/composition_contract.py
+!/experiments/end_to_end/tests/test_c57.py
+!/experiments/end_to_end/C57_REPORT.md
+
+# C59 continuation calibration and regressions
+!/experiments/end_to_end/c59.py
+!/experiments/end_to_end/C59_REPORT.md
+!/experiments/end_to_end/tests/test_c59.py
+
+# C60 GPU crash fixes and CPU regressions
+!/experiments/end_to_end/rank1_solve.py
+!/experiments/end_to_end/tests/test_c60.py
+!/experiments/end_to_end/C60_REPORT.md

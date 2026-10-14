@@ -227,13 +227,14 @@ def test_candidate_gold_mentions_pool_concepts_and_no_fiction():
     assert find('a green Volvo Amazon and PERIWINKLE.') == ['a green Volvo Amazon','periwinkle']
 
 
-def test_filter_gpu_pass_keeps_base_correct_records_accuracy(monkeypatch):
+def test_filter_gpu_pass_keeps_both_strata_records_accuracy(monkeypatch):
     fake_qa(monkeypatch,lambda i:i%3==0)
     rows = [dict(concept='Ljubljana',prompt=f'QA item {i}: In which country is Ljubljana?',answers=['Slovenia']) for i in range(300)]
     kept, selection = P.filter_qa(None,TOK,rows,'cpu',BOS_T)
-    assert len(kept) == 200 and selection['base_accuracy'] == pytest.approx(2/3)
-    assert all(r['base_correct'] and r['base_answer'] == 'Slovenia.' for r in kept)
-    with pytest.raises(ValueError,match='base-correct QA'):
+    assert len(kept) == 300 and selection['base_accuracy'] == pytest.approx(2/3)
+    assert sum(r['base_correct'] for r in kept) == 200 and selection['base_incorrect'] == 100
+    assert all(r['base_answer'] == ('Slovenia.' if r['base_correct'] else 'wrong.') for r in kept)
+    with pytest.raises(ValueError,match='scored QA'):
         P.filter_qa(None,TOK,rows[:100],'cpu',BOS_T)
 
 
@@ -248,16 +249,16 @@ def test_concept_fineweb_windows_exclude_training_overlap():
         P.select_windows(TOK,tokens,{'train':tokens},64,2)
 
 
-@pytest.mark.parametrize('lost,passed',[(0,True),(2,True),(3,True),(4,False)])
+@pytest.mark.parametrize('lost,passed',[(0,True),(2,True),(3,False),(4,False)])
 def test_knowledge_gate_paired_loss(lost,passed):
     result = I.paired_flags([True]*200,[False]*lost+[True]*(200-lost))
     assert result['lost'] == lost and result['passed'] is passed
     assert result['accuracy_delta'] == pytest.approx(-lost/200)
 
 
-def test_noise_gate_accepts_ci_covering_zero():
+def test_noise_gate_does_not_accept_ci_covering_zero():
     result = I.paired_flags([True]*50+[False]*50,[False]*52+[True]*48)
-    assert result['accuracy_delta'] == -.02 and result['passed']
+    assert result['accuracy_delta'] == -.02 and not result['passed']
     assert result['ci95'][0] <= 0 <= result['ci95'][1]
 
 
@@ -287,7 +288,7 @@ def test_evaluate_text_paired_se_written_fact_gate(monkeypatch,tmp_path):
     monkeypatch.setattr(I,'fact_flags',lambda *args:[False]*2+[True]*98)
     args = SimpleNamespace(gen_bs=4,gen_stop_k=2,gen_max_new=32)
     result = I.evaluate(None,TOK,panel,dict(qa=[True]*200,nll=[1.,1.]),[group],'cpu',BOS_T,args)
-    assert result['knowledge_qa']['passed']
+    assert not result['knowledge_qa']['passed']  # legacy one-directional panel is report-only
     assert result['text_dnll']['dnll'] == pytest.approx(.006)
     assert result['text_dnll']['dnll_se'] == pytest.approx(.002)
     assert not result['text_dnll']['passed'] and not result['written_facts']['passed']
@@ -349,25 +350,31 @@ def test_learning_branch_in_topic_result(cpu_harness,tmp_path,monkeypatch,capsys
 
 
 def test_panel_builder_main_cpu_loader_and_roundtrip(cpu_harness,tmp_path,monkeypatch):
-    _, paths = cpu_harness
+    run, paths = cpu_harness
+    _, template = run(['--steps','0'], 'calibration')
     tokenizer = tmp_path/'tokenizer.json'; tokenizer.write_text('{}')
-    rows = [dict(concept='Ljubljana',prompt=f'QA item {i}: In which country is Ljubljana? Answer:',
-                 answers=['Slovenia']) for i in range(250)]
-    monkeypatch.setattr(P,'candidate_qa',lambda *args: rows)
+    rows = [dict(concept='Ljubljana' if i < 250 else 'Vienna',
+                 prompt=f'QA item {i}: In which country is '+('Ljubljana' if i < 250 else 'Vienna')+'? Answer:',
+                 answers=['Slovenia'], pair='Ljubljana', category='city', stratum='value' if i < 250 else 'neighbour') for i in range(500)]
+    monkeypatch.setattr(P,'matched_candidates',lambda *args: rows)
     fake_qa(monkeypatch,lambda i:i%5==0)
     tokens = [t for c in ('K','L','M') for t in TOK.encode('Ljubljana '+c*54).ids]
-    source = tmp_path/'fineweb.bin'; np.array(tokens,dtype='<u4').tofile(source)
+    source = tmp_path/'fineweb.bin'; np.array([11]*64+tokens,dtype='<u4').tofile(source)
+    tail_sources = P.tail_sources
+    monkeypatch.setattr(P, 'tail_sources', lambda f, paths, **kw: tail_sources(f, paths, tail_tokens=192, **kw))
     out = tmp_path/'in-topic-built.json'
     panel = P.main(['--fineweb',str(source),'--anchor',paths['anchor'],'--training-text',paths['rehearsal'],
-                    '--eval-panels',paths['eval'],'--context-length','64','--text-windows','2','--out',str(out)])
-    assert panel['selection']['kept'] == 200 and panel['selection']['base_accuracy'] == .8
-    assert len(panel['text_windows']) == 2 and all(r['base_correct'] for r in panel['knowledge_qa'])
+                    '--eval-panels',paths['eval'],'--calibration-patch',str(template),
+                    '--context-length','64','--text-windows','2','--out',str(out)])
+    assert panel['selection']['kept'] == 500 and panel['selection']['base_accuracy'] == .8
+    assert len(panel['text_windows']) == 2 and sum(r['base_correct'] for r in panel['knowledge_qa']) == 400
+    assert 'random_forced_zero' in panel['calibration'] and not panel['gate_ready']
     args = E.build_parser().parse_args(['--out',str(tmp_path/'result'),'--anchor',paths['anchor']])
     loaded = I.load_panel(out,args,TOK,'cpu')
     assert loaded['raw'] == panel
-    # The GPU-filter protocol uses fixed generation limits independent of the
-    # patched harness's fact-gen settings and agrees on the retained subset.
-    assert I.base_scores(tiny(),TOK,loaded,'cpu',BOS_T)['qa'] == [True]*200
+    # Fixed generation limits/order reproduce flags in both correctness strata,
+    # independently of the patched harness's fact-generation settings.
+    assert I.base_scores(tiny(),TOK,loaded,'cpu',BOS_T)['qa'] == [r['base_correct'] for r in panel['knowledge_qa']]
 
 
 def test_branch_main_in_topic_final_and_result(cpu_harness,tmp_path,monkeypatch,capsys):

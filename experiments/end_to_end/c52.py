@@ -18,6 +18,11 @@ import time
 import torch
 import torch.nn.functional as F
 
+try:
+    from . import c59 as C59
+except ImportError:
+    import c59 as C59
+
 
 ARGUMENT_NAMES = ('joint_banks', 'joint_frozen_distractors', 'joint_schedule_seed',
                   'p_iso', 'max_distractors', 'distractor_mode', 'presence_dropout', 'presence_target', 'joint_negative_n')
@@ -85,7 +90,7 @@ def validate(a):
         '--values', '--relation-world', '--layers', '--steps', '--fact-batch', '--micro', '--answer-only',
         '--aug', '--aug-all', '--bop-gamma', '--bop-gamma-late',
         '--bop-gamma-switch', '--bop-tau', '--bop-tau-abs', '--tau-anneal', '--keep-ema', '--death-tau-mult',
-        '--budget', '--budget-freeze', '--refresh-every', '--keep-live', '--sparse-state', '--no-churn',
+        '--death-grace', '--budget', '--budget-freeze', '--refresh-every', '--keep-live', '--sparse-state', '--no-churn',
         '--local-lambda', '--anchor', '--anchor-len', '--anchor-bs', '--expert-checkpoint', '--fast-moe',
         '--eval-set', '--eval-windows', '--eval-every', '--val-windows', '--extra-eval-sets', '--in-topic-panel',
         '--fact-class-metrics', '--decisive-eval', '--qa-probe', '--qa-n', '--gen-max-new', '--gen-bs',
@@ -104,6 +109,8 @@ class Bank:
     budget: int
     tau: float | None = None
     source_state: str = 'inference codes (EMA unavailable)'
+    calibration: dict | None = None
+    initial_nnz: int = 0
 
 
 def _indices(entry, size):
@@ -240,6 +247,12 @@ def attach_banks(E, model, states):
             registrations.append((lin, pm))
         if bank.budget and sum(int(m.support.sum()) for m in bank.modules.values()) > bank.budget:
             raise ValueError('bank support exceeds saved budget')
+        continuation = state.get('continue_state')
+        if continuation is not None:
+            C59.restore(bank.modules, continuation)
+            bank.source_state = 'continue_state'
+        elif saved is not None and saved.get('calibration'):
+            C59.restore(bank.modules, saved)
         banks.append(bank)
     for lin, pm in registrations:
         E.P.register_parametrization(lin, 'weight', pm)
@@ -379,49 +392,15 @@ def restore_legacy_checkpoint(E, bank, path):
     Older inference-only banks contain codes, no continuous masters or EMA;
     these use codes as Bop masters, live support, and an explicit zero EMA.
     """
-    if bank.source_state == 'joint_state':
+    if bank.source_state in ('joint_state', 'continue_state'):
         return
-    checkpoint = path.with_name('resume.pt')
-    if not checkpoint.exists() or path.name != 'final.pt':
+    saved = C59.legacy_state(bank.state, path, bank.modules)
+    if saved is None:
         return
-    saved = torch.load(checkpoint, map_location='cpu', weights_only=False)
-    if saved.get('step') != bank.state['meta'].get('step') or saved.get('phase') != 'training':
-        return
-    training = saved.get('training', {})
-    modules = training.get('modules', {})
-    candidates = {}
-    for name, pm in bank.modules.items():
-        key = name+'.parametrizations.weight.0'
-        if key not in modules:
-            return
-        row = modules[key]
-        attrs, weights = row['attributes'], row['weights']
-        reserve = pm.idx.long().cpu()
-        sparse = attrs.get('sparse', False)
-        if sparse and not torch.equal(weights['idx'].long(), reserve):
-            raise ValueError('legacy checkpoint writable mask differs: '+name)
-        def slots(value):
-            return value if sparse else value.flatten()[reserve]
-        master = slots(weights['M'])
-        support = slots(weights.get('support', attrs.get('support', attrs.get('mask'))))
-        codes = torch.sign(master) * (master.abs() > .5) * support
-        entry = bank.state['entries'][name]
-        live = codes.nonzero().flatten()
-        if not torch.equal(reserve[live], entry['idx'].long()) or not torch.equal(codes[live], entry['val'].float()):
-            raise ValueError('matching-step legacy checkpoint codes differ from final.pt: '+name)
-        candidates[name] = dict(M=master, support=support, bop_ema=slots(attrs['bop_ema']),
-                                score=slots(attrs['score']) if attrs.get('score') is not None else None)
-    with torch.no_grad():
-        for name, row in candidates.items():
-            pm = bank.modules[name]
-            for key, value in row.items():
-                dest = getattr(pm, key)
-                if value is not None and dest is not None and (key != 'support' or bank.budget):
-                    dest.copy_(value.to(dest.device))
-    if bank.budget and sum(int(m.support.sum()) for m in bank.modules.values()) > bank.budget:
-        raise ValueError('legacy checkpoint support exceeds bank budget')
-    bank.tau = training.get('values', {}).get('bop_tau')
-    bank.source_state = str(checkpoint)
+    C59.restore(bank.modules, saved)
+    bank.tau = saved['calibration']['tau']
+    bank.state['meta']['bop_calibration'] = saved['calibration']
+    bank.source_state = str(path.with_name('resume.pt'))
 
 
 def export_bank(E, bank, schedule, arm, steps):
@@ -438,8 +417,11 @@ def export_bank(E, bank, schedule, arm, steps):
                 value_steps=bank.state['meta'].get('value_steps',bank.state['meta'].get('step',0))+steps,
                 c52=dict(arm=arm, continue_steps=steps, schedule=schedule.report(),
                          source_state=bank.source_state))
-    return dict(format='e2e-fsa-patch-v1', meta=meta, entries=entries,
-                joint_state=dict(version=1, budget=bank.budget, tau=bank.tau, modules=tensors))
+    joint = dict(version=1, budget=bank.budget, tau=bank.tau, modules=tensors)
+    if bank.calibration is not None:
+        joint.update(C59.snapshot(bank.modules, bank.calibration))
+        meta['bop_calibration'] = dict(bank.calibration)
+    return dict(format='e2e-fsa-patch-v1', meta=meta, entries=entries, joint_state=joint)
 
 
 @torch.no_grad()
@@ -642,8 +624,13 @@ def run(E, a):
     banks = attach_banks(E,model,states)
     for bank,path in zip(banks,a.joint_banks):
         restore_legacy_checkpoint(E,bank,path)
-        if a.bop_tau_abs:
-            bank.tau = a.bop_tau_abs
+        bank.calibration = C59.calibration(bank.state, path, bank.tau)
+        bank.tau = bank.calibration['tau']
+        C59.prepare(bank.modules, bank.calibration, exact_support=bank.source_state != 'inference codes (EMA unavailable)',
+                    E=E, model=model, meta=bank.state['meta'], path=path)
+        bank.initial_nnz = C59.nnz(bank.modules.values())
+        print('C59-CALIBRATION '+json.dumps(dict(path=str(path), nnz=bank.initial_nnz, **bank.calibration)), flush=True)
+    a.budget_freeze = -1
     if a.expert_checkpoint:
         E.checkpoint_experts(model,layers)
     anchor = None
@@ -675,20 +662,15 @@ def run(E, a):
                         (loss/len(rows)).backward()
                     else:
                         no_grad += 1
-            # Threshold calibration/support scores use answer gradients before
-            # local preservation, as in the single-bank Bop path.
+            # Update answer scores without recalibrating the saved threshold.
             for bank in banks:
                 mods = list(bank.modules.values())
-                grads = [m.M.grad for m in mods if m.M.grad is not None]
-                if bank.tau is None and grads:
-                    rms = math.sqrt(sum(float(g.double().square().sum()) for g in grads)/sum(g.numel() for g in grads))
-                    bank.tau = a.bop_tau*rms
                 if bank.budget:
                     with torch.no_grad():
                         for m in mods:
                             m.score.mul_(.9)
                             if m.M.grad is not None:
-                                m.score.add_(m.M.grad.abs(),alpha=.1)
+                                m.score.add_(m.M.grad if bank.calibration['support_score'] == 'netcost' else m.M.grad.abs(),alpha=.1)
             # Local preservation is applied separately to each bank alone. This
             # retains F's rule: no gradient enters a distractor on another bank's
             # question, including via preservation/checkpoint replay.
@@ -709,11 +691,11 @@ def run(E, a):
             updates = []
             for i,bank in enumerate(banks):
                 mods = list(bank.modules.values())
-                mult = 1+(a.tau_anneal-1)*step/max(a.steps-1,1)
-                nb,nd = E.bop_step(mods,E.bop_gamma_at(a,step+1),bank.tau*mult,bool(bank.budget),
-                    keep_ema=a.keep_ema,death_mult=a.death_tau_mult) if bank.tau is not None else (0,0)
-                if bank.budget and E.refresh_due(step+1,a.refresh_every,a.budget_freeze):
-                    E.refresh_support(mods,bank.budget,keep_live=a.keep_live)
+                cal = bank.calibration
+                nb,nd = E.bop_step(mods,cal['gamma'],bank.tau,True,
+                    keep_ema=cal['keep_ema'],death_mult=cal['death_tau_mult'],grace=cal['death_grace'])
+                E.advance_step_age(mods)
+                C59.check_growth(bank.initial_nnz,C59.nnz(mods),step+1,f'bank {i}')
                 updates.append(dict(bank=i,births=nb,deaths=nd,tau=bank.tau,
                     nnz=sum(int((m.M.detach().abs()>.5).logical_and(m.support).sum()) for m in mods)))
             trajectory.append(dict(step=step+1,loss=loss_sum,examples=len(rows),no_gradient_examples=no_grad,banks=updates))
@@ -741,6 +723,8 @@ def run(E, a):
         bank_inputs=[dict(path=str(p.resolve()),sha256=E.file_sha(p)) for p in a.joint_banks],
         presence_target=a.presence_target,microbatch_policy='one forward/backward per example; --micro is an upper bound',
         source_states=[b.source_state for b in banks],budgets=[b.budget for b in banks],revoked=revoked,
+        bop_calibrations=[b.calibration for b in banks],budget_freeze=-1,
+        initial_nnz=[b.initial_nnz for b in banks],
         **E.C50.metric_metadata(facts))
     result['evaluation'] = evaluate(E,model,tok,banks,facts,scopes,dev,E.BOS,a,panels,base,in_topic)
     result['by_fact_class'] = E.C50.collect_splits(result['evaluation'])

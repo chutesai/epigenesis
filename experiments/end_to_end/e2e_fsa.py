@@ -52,9 +52,11 @@ except ImportError:                         # direct script execution / CPU test
 try:
     from . import eda_backend as eda
     from . import c50 as C50
+    from . import c59 as C59
 except ImportError:
     import eda_backend as eda
     import c50 as C50
+    import c59 as C59
 
 try:
     from . import c44_runtime as recovery
@@ -1290,7 +1292,12 @@ def export_patch(model, meta=None):
             if hasattr(pm, "excluded_idx"):
                 e["excluded_idx"] = pm.excluded_idx.cpu().clone()
         ent[name] = e
-    return {"format": "e2e-fsa-patch-v1", "meta": meta or {}, "entries": ent}
+    state = {"format": "e2e-fsa-patch-v1", "meta": meta or {}, "entries": ent}
+    if meta.get('bop_calibration', {}).get('tau') is not None:
+        modules = {name: lin.parametrizations.weight[0] for name, lin in patched_linears(model)
+                   if isinstance(lin.parametrizations.weight[0], FSAParam)}
+        state['continue_state'] = C59.snapshot(modules, meta['bop_calibration'])
+    return state
 
 
 def save_patch(model, path, meta=None):
@@ -1479,10 +1486,11 @@ def restore_lora_(mods, saved):
 def collect_col_energy(model, mods, windows):
     """Frozen-base general-text statistics for every patched linear: per-input-column energy sum_t x_tj^2 and
     total base output energy (the fixed denominator shared with the local penalty)."""
-    lins = [lin for _, lin in patched_linears(model) if isinstance(lin.parametrizations.weight[0], FSAParam)]
+    selected = set(mods)
+    lins = [(lin, next(pm for pm in lin.parametrizations.weight if pm in selected))
+            for _, lin in patched_linears(model) if any(pm in selected for pm in lin.parametrizations.weight)]
     acc, den, hooks = {}, [0.0], []
-    for lin in progress(lins, 'e2e_fsa:collect_col_energy'):
-        pm = lin.parametrizations.weight[0]
+    for lin, pm in progress(lins, 'e2e_fsa:collect_col_energy'):
         acc[pm] = torch.zeros(lin.in_features, device=pm.M.device)
 
         def f(mod, inp, out, pm=pm):
@@ -1490,13 +1498,16 @@ def collect_col_energy(model, mods, windows):
             acc[pm] += x.pow(2).sum(0)
             den[0] += float(out.float().pow(2).sum())
         hooks.append(lin.register_forward_hook(f))
+    enabled = FSAParam.enabled, LoRAParam.enabled
     set_enabled(False)
-    with torch.no_grad():
-        for i in progress(range(windows.shape[0]), 'e2e_fsa:collect_col_energy'):
-            logits_of(model, windows[i:i + 1])
-    set_enabled(True)
-    for h in progress(hooks, 'e2e_fsa:collect_col_energy'):
-        h.remove()
+    try:
+        with torch.no_grad():
+            for i in progress(range(windows.shape[0]), 'e2e_fsa:collect_col_energy'):
+                logits_of(model, windows[i:i + 1])
+    finally:
+        FSAParam.enabled, LoRAParam.enabled = enabled
+        for h in progress(hooks, 'e2e_fsa:collect_col_energy'):
+            h.remove()
     for pm, v in progress(acc.items(), 'e2e_fsa:collect_col_energy'):
         pm.col_energy = v
     return den[0]
@@ -2909,7 +2920,7 @@ def tf_eval(model, items, dev, bs=16, arities=None, per_fact=False):
 
 
 @torch.no_grad()
-def greedy_generate(model, prompts, dev, max_new, bs=16, eos=EOS_IDS):
+def greedy_generate(model, prompts, dev, max_new, bs=16, eos=EOS_IDS, prepare=None):
     """Greedy continuation of every prompt (right-padded batches, full re-forward per token). Stops early once
     every row of a batch has emitted an EOS id."""
     outs = []
@@ -2928,6 +2939,8 @@ def greedy_generate(model, prompts, dev, max_new, bs=16, eos=EOS_IDS):
         cur, fin, gen = lens.clone(), torch.zeros(len(ch), dtype=torch.bool, device=dev), []
         for _ in range(max_new):
             heartbeat('generation_tokens', _, max_new)
+            if prepare is not None:
+                prepare(x[:, :int(cur.max())])
             lg = logits_of(model, x[:, :int(cur.max())])
             nxt = lg[rows, cur - 1, :VOCAB].float().argmax(-1)
             gen.append(nxt)
@@ -3937,7 +3950,7 @@ def training_recipe(a):
         recipe.update(unit_burst=a.unit_burst, unit_burst_thr=a.unit_burst_thr,
                       unit_burst_random=a.unit_burst_random,
                       unit_burst_replay=str(a.unit_burst_replay) if a.unit_burst_replay else None)
-    for key in ('master_clip', 'anchor_bs', 'anchor', 'calib_set', 'rehearsal_set', 'pair_birth',
+    for key in ('master_clip', 'anchor_bs', 'anchor', 'anchor_len', 'calib_set', 'rehearsal_set', 'pair_birth',
                 'pair_project', 'grad_clip', 'route_kl', 'route_kl_set', 'keep_live', 'cost_rel'):
         if hasattr(a,key):
             recipe[key] = getattr(a,key)
@@ -6165,8 +6178,7 @@ def build_parser():
     ap.add_argument("--resume", choices=("auto",), help="continue matching resume.pt; reject config/input changes; mechanically exact state restore on GPU; GPU kernels nondeterministic")
     ap.add_argument("--patch-dir", default=None, help="where patches are written (default: <out stem>_patches/)")
     ap.add_argument("--bop-tau-abs", type=float, default=0.0,
-                    help="absolute Bop threshold (skips calibration; e.g. to fine-tune a loaded patch with its "
-                         "original threshold)")
+                    help="absolute threshold for an initial Bop run; continued Bop patches restore their saved threshold")
     ap.add_argument("--sparse-state", action="store_true",
                     help="keep FSA training state (masters, grads, EMA, score) on the free slots only (~6x less "
                          "memory; needed for many layers)")
@@ -6195,7 +6207,7 @@ def build_parser():
                     help="Bop maturity: no death within N Bop updates of birth (= steps unless --bop-accum)")
     ap.add_argument("--death-tau-mult", type=float, default=1.0, help="Bop death threshold = mult x birth tau")
     ap.add_argument("--no-churn", action="store_true", help="skip the per-slot int8 churn counters (memory)")
-    ap.add_argument("--load-patch", default=None, help="load a saved patch after attach (use with --steps 0)")
+    ap.add_argument("--load-patch", default=None, help="load for evaluation (--steps 0) or continue with saved Bop calibration/support")
     ap.add_argument("--address-ceiling", action="store_true",
                     help="C26 eval-only global-patch ceiling (requires --load-patch --steps 0)")
     ap.add_argument("--fast-moe", choices=("off", "exact", "batched"), default="off",
@@ -7600,11 +7612,56 @@ def main(argv=None):
             return
     address_gradient_hooks = center_address_gradients(model, general_stats) if a.address_center else []
     den_total, cost_lambda, tau_stats = None, None, None
-    if (support_mode == "netcost" or a.bop_tau_scale == "energy" or a.unit_burst) and mods:
+    continue_cal = None
+    continue_initial_nnz = None
+    if a.load_patch and a.optim == 'bop' and (a.steps or a.repair_steps) and not a.transplant:
+        named_mods = {name: lin.parametrizations.weight[0] for name, lin in patched_linears(model)
+                      if isinstance(lin.parametrizations.weight[0], FSAParam)}
+        saved_continue = st_.get('continue_state', st_.get('joint_state'))
+        if saved_continue is None:
+            saved_continue = C59.legacy_state(st_, a.load_patch, named_mods)
+        if saved_continue is not None:
+            C59.restore(named_mods, saved_continue)
+            recorded = dict(st_, continue_state=saved_continue)
+            continue_cal = C59.calibration(recorded, a.load_patch)
+        elif (st_['meta'].get('step') == 0
+              and st_['meta'].get('training_recipe', {}).get('optim') != 'bop'
+              and not st_['meta'].get('bop_calibration')
+              and ('rank1' in st_['meta'] or a.bop_tau_abs > 0)):
+            # S2 begins its FIRST Bop run from an analytic solve. It has no
+            # original Bop calibration; its existing initial calibration is valid.
+            pass
+        else:
+            continue_cal = C59.calibration(st_, a.load_patch)
+        if continue_cal is not None:
+            if '--budget' in a._explicit_flags and a.budget != continue_cal['budget']:
+                raise ValueError('C59 --budget differs from saved continuation budget')
+            a.budget = continue_cal['budget']
+            meta['budget'] = a.budget
+            C59.prepare(named_mods, continue_cal, exact_support=saved_continue is not None,
+                        E=sys.modules[__name__], model=model, meta=st_['meta'], path=a.load_patch)
+            bop_tau = continue_cal['tau']
+            a.bop_tau_abs = bop_tau
+            a.bop_tau_scale = continue_cal['bop_tau_scale']
+            a.bop_gamma = continue_cal['gamma']
+            a.bop_gamma_late = a.bop_gamma_switch = None
+            a.tau_anneal = 1.
+            a.death_grace = continue_cal['death_grace']
+            a.death_tau_mult = continue_cal['death_tau_mult']
+            a.keep_ema = continue_cal['keep_ema']
+            support_mode = continue_cal['support_score']
+            den_total, cost_lambda = continue_cal.get('den_total'), continue_cal.get('cost_lambda')
+            print('C59-CALIBRATION '+json.dumps(continue_cal), flush=True)
+        else:
+            for m in named_mods.values():
+                m.support = (m._quant(m.M.detach()) != 0) & m.mask
+        a.budget_freeze = -1
+        continue_initial_nnz = C59.nnz(mods)
+    if continue_cal is None and (support_mode == "netcost" or a.bop_tau_scale == "energy" or a.unit_burst) and mods:
         den_total = collect_col_energy(model, mods, anchor[:32])
         assert math.isfinite(den_total) and den_total > 0
         print(f"col-energy stats on 32 anchor windows, base output energy {den_total:.3e}", flush=True)
-    if a.bop_tau_scale == "energy" and mods:
+    if continue_cal is None and a.bop_tau_scale == "energy" and mods:
         tau_stats = set_energy_tau_scale(mods, a.tau_power, a.tau_lo, a.tau_hi)
         print("TAU-SCALE", json.dumps(tau_stats), flush=True)
     pool_info, initial_refresh = None, None
@@ -7685,6 +7742,13 @@ def main(argv=None):
                     allocation_fact_forwards=len(training_facts) if a.units_per_fact else 0)
 
     def checkpoint_meta(update, exposures=None):
+        if a.optim == 'bop' and bop_tau is not None:
+            mult = 1.+(a.tau_anneal-1.)*min(max(update-1, 0), max(a.steps-1, 1))/max(a.steps-1, 1)
+            meta['bop_calibration'] = dict(tau=bop_tau*mult, gamma=bop_gamma_at(a, update),
+                budget=a.budget, budget_freeze=a.budget_freeze, cost_lambda=cost_lambda, den_total=den_total,
+                death_grace=a.death_grace, death_tau_mult=a.death_tau_mult, keep_ema=a.keep_ema,
+                bop_tau_scale=continue_cal['bop_tau_scale'] if continue_cal else a.bop_tau_scale,
+                support_score=continue_cal['support_score'] if continue_cal else support_mode)
         if preservation_kl is not None:
             meta['c50'] = preservation_kl.report()
         if a.transplant:
@@ -8100,7 +8164,7 @@ def main(argv=None):
                 if unit_bursts is not None:
                     unit_bursts.cost_lambda = cost_lambda or 0.
                     bop_options['unit_burst'] = unit_bursts
-                nb, nd = (bop_step(mods, bop_gamma_at(a, step + 1), bop_tau * tmul, bool(a.budget), allow_birth=not repair or a.transplant,
+                nb, nd = (bop_step(mods, bop_gamma_at(a, step + 1), bop_tau * tmul, bool(a.budget) or continue_initial_nnz is not None, allow_birth=not repair or a.transplant,
                                    grace=a.death_grace, death_mult=a.death_tau_mult, churn=churn,
                                    keep_ema=a.keep_ema, **bop_options)
                           if bop_tau is not None else (0, 0))
@@ -8172,6 +8236,8 @@ def main(argv=None):
                 else:
                     refresh_events.append(refresh_support_event(mods, step + 1, a.budget, None, opt, churn=churn,
                                     keep_live=a.keep_live or a.retain_evicted, **swap_options, **promotion_options))
+            if continue_initial_nnz is not None:
+                C59.check_growth(continue_initial_nnz, C59.nnz(mods), step+1, f'--load-patch {a.load_patch}')
             advance_step_age(mods)
             if a.patch_dropout or a.slot_dropout or a.trit_corrupt:
                 clear_patch_dropout(mods)

@@ -30,7 +30,8 @@ def states(budget=20, fraction=1.):
         meta = dict(method='fsa_forced',fmt='ternary',seed=0,layers=[0,1],projs=['up_proj','down_proj'],
             slot_partition=3,slot_part=person,train_person=person,budget=budget,sparse_state=True,
             slot_frac=fraction,people=3,facts_per_person=2,shared_attrs=2,values='disjoint',
-            relation_world=True,export=str(E.EXPORT),export_step=E.EXPORT_STEP,step=4)
+            relation_world=True,export=str(E.EXPORT),export_step=E.EXPORT_STEP,step=4,
+            training_recipe=dict(optim='bop',bop_tau_abs=.007,bop_gamma=.05))
         result.append(E.export_patch(model,meta))
     return result
 
